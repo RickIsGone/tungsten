@@ -3,9 +3,12 @@ module;
 
 export module Tungsten.parser;
 
-export class Parser {
-public:
-   void parse();
-};
+export namespace tungsten {
+   class Parser {
+   public:
+      void parse();
+   };
 
-//  ========================================== implementation ==========================================
+   //  ========================================== implementation ==========================================
+
+} // namespace tungsten
