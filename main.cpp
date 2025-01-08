@@ -17,6 +17,7 @@ int main(int argc, char** argv) {
       if (fs::exists(argv[i])) {
          lexer.setTargetFile(argv[i]);
          std::vector<tungsten::Token> tokens = lexer.tokenize();
+         std::cout << tokens << '\n';
          // parser.parse(tokens);
       } else
          utils::error("no such file or directory: '{}'", argv[i]);

@@ -13,6 +13,8 @@ namespace fs = std::filesystem;
 export namespace tungsten {
 
    enum class TokenType {
+      INVALID,
+
       ENTRY_POINT,
 
       RETURN,
@@ -29,6 +31,7 @@ export namespace tungsten {
    };
 
    std::unordered_map<TokenType, std::string> tokenTypeNames = {
+       {TokenType::INVALID, "INVALID"},
        {TokenType::ENTRY_POINT, "ENTRY_POINT"},
        {TokenType::RETURN, "RETURN"},
        {TokenType::EXIT, "EXIT"},
@@ -53,7 +56,7 @@ export namespace tungsten {
       void setTargetFile(const fs::path& path);
 
    private:
-      std::optional<char> _Peek(size_t offset);
+      std::optional<char> _Peek(size_t offset = 1);
       void _Consume() { ++_Index; }
 
       size_t _Index{0};
@@ -81,12 +84,40 @@ export namespace tungsten {
    std::vector<Token> Lexer::tokenize() {
       std::ifstream inputFile{_Path};
       std::stringstream ss;
-      std::vector<Token> tokens{{TokenType::RETURN}, {TokenType::INT_LITERAL, 0}};
+      std::vector<Token> tokens{};
       ss << inputFile.rdbuf();
       _FileContents = ss.str();
 
       std::cout << _FileContents << '\n';
-      std::cout << tokens << '\n';
+      while (_Peek().has_value()) {
+         std::string buffer;
+         if (std::isspace(_Peek().value())) {
+            _Consume();
+
+         } else if (std::isalpha(_Peek().value())) {
+            do {
+               buffer.push_back(_Peek().value());
+               _Consume();
+            } while (std::isalpha(_Peek().value()));
+            if (buffer == "return") tokens.push_back({TokenType::RETURN});
+            else
+               tokens.push_back({TokenType::INVALID});
+            buffer.clear();
+
+         } else if (std::isdigit(_Peek().value())) {
+            do {
+               buffer.push_back(_Peek().value());
+               _Consume();
+            } while (std::isdigit(_Peek().value()));
+            tokens.push_back({TokenType::INT_LITERAL, std::stoi(buffer)});
+            buffer.clear();
+
+         } else if (_Peek().value() == ';') {
+            _Consume();
+            tokens.push_back({TokenType::SEMICOLON});
+         }
+      }
+
       return tokens;
    }
 
