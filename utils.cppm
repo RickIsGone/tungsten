@@ -1,9 +1,11 @@
-#pragma once
+module;
 
 #include <format>
 #include <string_view>
 #include <iostream>
-#include <string>
+#include <sstream>
+
+export module Tungsten.utils;
 
 namespace Colors {
    inline constexpr const char* Red = "\x1B[91m";
@@ -11,14 +13,16 @@ namespace Colors {
    inline constexpr const char* Reset = "\x1B[0m";
 } // namespace Colors
 
-namespace utils {
-   inline std::stringstream errors{};
+inline std::stringstream errors{};
+
+export namespace tungsten::utils {
+
    template <typename... Args>
    void pushError(std::string_view message, Args&&... args) {
       errors << "tungsten: " << Colors::Red << "error: " << Colors::White << std::vformat(message, std::make_format_args(args...)) << Colors::Reset << '\n';
    }
-   inline void printErrors() {
+   void printErrors() {
       std::cerr << errors.str();
    }
 
-} // namespace utils
+} // namespace tungsten::utils
