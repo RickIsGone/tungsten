@@ -43,8 +43,8 @@ export namespace tungsten {
    };
 
    struct Token {
-      TokenType type;
-      std::optional<int> value;
+      TokenType type{TokenType::INVALID};
+      std::optional<std::string> value{};
    };
 
    class Lexer {
@@ -53,7 +53,7 @@ export namespace tungsten {
       ~Lexer() = default;
 
       std::vector<Token> tokenize();
-      void setTargetFile(const fs::path& path);
+      void setFileTarget(const fs::path& path);
 
    private:
       std::optional<char> _Peek(size_t offset = 1);
@@ -70,10 +70,8 @@ export namespace tungsten {
    std::ostream& operator<<(std::ostream& out, const std::vector<Token>& tokens) {
       out << "Tokens: {";
       for (int i = 1; const Token& token : tokens) {
-         out << "{"
-             << tokenTypeNames.at(token.type)
-             << ", "
-             << (token.value.has_value() ? std::to_string(token.value.value()) : "std::nullopt")
+         out << "{" << tokenTypeNames.at(token.type) << ", "
+             << (token.value.has_value() ? token.value.value() : "std::nullopt")
              << (i < tokens.size() ? "}, " : "}");
          ++i;
       }
@@ -101,10 +99,9 @@ export namespace tungsten {
                buffer.push_back(_Peek().value());
                _Consume();
             } while (std::isalpha(_Peek().value()));
-            if (buffer == "return") tokens.push_back({TokenType::RETURN});
+            if (buffer == "return") tokens.push_back(Token{TokenType::RETURN});
             else {
-                 std::cout << "invalid token: [" << buffer << "]\n";
-                 tokens.push_back({TokenType::INVALID});
+                 tokens.push_back(Token{TokenType::INVALID, buffer});
                }
             buffer.clear();
 
@@ -113,13 +110,16 @@ export namespace tungsten {
                buffer.push_back(_Peek().value());
                _Consume();
             } while (std::isdigit(_Peek().value()));
-            tokens.push_back({TokenType::INT_LITERAL, std::stoi(buffer)});
+            tokens.push_back(Token{TokenType::INT_LITERAL,buffer});
             buffer.clear();
 
          } else if (_Peek().value() == ';') {
             _Consume();
-            tokens.push_back({TokenType::SEMICOLON});
+            tokens.push_back(Token{TokenType::SEMICOLON});
+         } else {
+            _Consume();
          }
+
       }
 
       return tokens;
@@ -132,7 +132,7 @@ export namespace tungsten {
       return std::nullopt;
    }
 
-   void Lexer::setTargetFile(const fs::path& path) {
+   void Lexer::setFileTarget(const fs::path& path) {
       _Path = path;
       _Index = 0;
    }

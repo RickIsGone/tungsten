@@ -3,6 +3,7 @@
 #include <format>
 #include <string_view>
 #include <iostream>
+#include <string>
 
 namespace Colors {
    inline constexpr const char* Red = "\x1B[91m";
@@ -11,11 +12,13 @@ namespace Colors {
 } // namespace Colors
 
 namespace utils {
-
+   inline std::stringstream errors{};
    template <typename... Args>
-   void error(std::string_view message, Args&&... args) {
-      std::cerr << "tungsten: " << Colors::Red << "error: " << Colors::White << std::vformat(message, std::make_format_args(args...)) << Colors::Reset << '\n';
-      exit(EXIT_FAILURE);
+   void pushError(std::string_view message, Args&&... args) {
+      errors << "tungsten: " << Colors::Red << "error: " << Colors::White << std::vformat(message, std::make_format_args(args...)) << Colors::Reset << '\n';
+   }
+   inline void printErrors() {
+      std::cerr << errors.str();
    }
 
 } // namespace utils
