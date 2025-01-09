@@ -18,7 +18,7 @@ namespace tungsten {
 
    //  ========================================== implementation ==========================================
 
-   inline std::unordered_map<TokenType, std::string> tokenTypeNames = {
+   export inline std::unordered_map<TokenType, std::string> tokenTypeNames = {
        {TokenType::INVALID, "INVALID"},
        {TokenType::ENTRY_POINT, "ENTRY_POINT"},
        {TokenType::KEYWORD, "KEYWORD"},
