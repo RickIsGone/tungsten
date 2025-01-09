@@ -4,7 +4,6 @@ module;
 #include <filesystem>
 #include <iostream>
 #include <optional>
-#include <unordered_map>
 #include <vector>
 
 export module Tungsten.lexer;
@@ -30,17 +29,6 @@ namespace tungsten {
       SEMICOLON,
    };
 
-   inline std::unordered_map<TokenType, std::string> tokenTypeNames = {
-       {TokenType::INVALID, "INVALID"},
-       {TokenType::ENTRY_POINT, "ENTRY_POINT"},
-       {TokenType::KEYWORD, "KEYWORD"},
-       {TokenType::OPERATOR, "OPERATOR"},
-       {TokenType::PRIMITIVE_TYPE, "PRIMITIVE_TYPE"},
-       {TokenType::CLASS_TYPE, "CLASS_TYPE"},
-       {TokenType::INT_LITERAL, "INT_LITERAL"},
-       {TokenType::STRING_LITERAL, "STRING_LITERAL"},
-       {TokenType::SEMICOLON, "SEMICOLON"},
-   };
 
    export struct Token {
       TokenType type{TokenType::INVALID};
