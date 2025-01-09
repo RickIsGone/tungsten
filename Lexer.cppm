@@ -26,6 +26,8 @@ namespace tungsten {
       INT_LITERAL,
       STRING_LITERAL,
 
+      IDENTIFIER,
+
       SEMICOLON,
    };
 
@@ -74,7 +76,7 @@ namespace tungsten {
             do {
                buffer.push_back(_Peek().value());
                _Consume();
-            } while (std::isalpha(_Peek().value()));
+            } while (std::isalnum(_Peek().value()) || _Peek().value() == '_');
             if (buffer == "return" || buffer == "exit")
                tokens.push_back(Token{TokenType::KEYWORD, buffer});
 
@@ -82,7 +84,7 @@ namespace tungsten {
                tokens.push_back(Token{TokenType::PRIMITIVE_TYPE, buffer});
 
             else {
-               tokens.push_back(Token{TokenType::INVALID, buffer});
+               tokens.push_back(Token{TokenType::IDENTIFIER, buffer});
             }
             buffer.clear();
 

@@ -27,6 +27,7 @@ namespace tungsten {
        {TokenType::CLASS_TYPE, "CLASS_TYPE"},
        {TokenType::INT_LITERAL, "INT_LITERAL"},
        {TokenType::STRING_LITERAL, "STRING_LITERAL"},
+       {TokenType::IDENTIFIER, "IDENTIFIER"},
        {TokenType::SEMICOLON, "SEMICOLON"},
    };
 
