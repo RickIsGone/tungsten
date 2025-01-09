@@ -126,8 +126,8 @@ export namespace tungsten {
    }
 
    std::optional<char> Lexer::_Peek(size_t offset) {
-      if (_Index + offset < _FileContents.size())
-         return _FileContents[_Index + offset];
+      if (_Index + offset <= _FileContents.size())
+         return _FileContents.at(_Index + offset -1);
 
       return std::nullopt;
    }
