@@ -13,7 +13,7 @@ namespace Colors {
    inline constexpr const char* Reset = "\x1B[0m";
 } // namespace Colors
 
-inline std::stringstream errors{};
+export inline std::stringstream errors{};
 
 export namespace tungsten::utils {
 

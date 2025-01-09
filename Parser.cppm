@@ -3,6 +3,9 @@ module;
 #include <vector>
 #include <iostream>
 #include <unordered_map>
+#include <string>
+#include <optional>
+#include <ostream>
 
 export module Tungsten.parser;
 import Tungsten.lexer;
@@ -32,13 +35,11 @@ namespace tungsten {
       for (int i = 1; const Token& token : tokens) {
          out << "{" << tokenTypeNames.at(token.type) << ", "
              << (token.value.has_value() ? token.value.value() : "std::nullopt")
-             << (i < tokens.size() ? "}, " : "}");
-         ++i;
+             << (i++ < tokens.size() ? "}, " : "}");
       }
       out << "}\n";
       return out;
    }
-
    void Parser::parse(const std::vector<Token>& tokens) {
       std::cout << tokens << '\n';
    }

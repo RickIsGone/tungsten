@@ -54,7 +54,6 @@ namespace tungsten {
 
    /*  ========================================== implementation ==========================================  */
 
-
    std::vector<Token> Lexer::tokenize() {
       std::ifstream inputFile{_Path};
       std::stringstream ss{};
@@ -76,7 +75,12 @@ namespace tungsten {
                buffer.push_back(_Peek().value());
                _Consume();
             } while (std::isalpha(_Peek().value()));
-            if (buffer == "return" || buffer == "exit") tokens.push_back(Token{TokenType::KEYWORD, buffer});
+            if (buffer == "return" || buffer == "exit")
+               tokens.push_back(Token{TokenType::KEYWORD, buffer});
+
+            else if (buffer == "int" || buffer == "float" || buffer == "double" || buffer == "bool" || buffer == "char" || buffer == "string")
+               tokens.push_back(Token{TokenType::PRIMITIVE_TYPE, buffer});
+
             else {
                tokens.push_back(Token{TokenType::INVALID, buffer});
             }
@@ -164,6 +168,28 @@ namespace tungsten {
                   }
                   break;
 
+               case '"':
+                  // STRING LITERALS
+                  if (_Peek(1).has_value()) {
+                     if (_Peek(1).value() == '"') {
+                        _Consume(2);
+                        tokens.push_back(Token{TokenType::STRING_LITERAL, ""});
+                     } else {
+                        _Consume();
+                        while (_Peek().has_value() && _Peek().value() != '"' && _Peek().value() != '\n') {
+                           buffer.push_back(_Peek().value());
+                           _Consume();
+                        }
+                        _Consume();
+                        if (_Peek().has_value() && _Peek().value() == '"') {
+                           _Consume();
+                           tokens.push_back(Token{TokenType::STRING_LITERAL, buffer});
+                           buffer.clear();
+                        }
+                     }
+                  } else
+                     _Consume();
+
                default:
                   _Consume();
             }
@@ -184,4 +210,5 @@ namespace tungsten {
       _Path = path;
       _Index = 0;
    }
+
 } // namespace tungsten
