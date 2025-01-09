@@ -83,7 +83,7 @@ export namespace tungsten {
 
    std::vector<Token> Lexer::tokenize() {
       std::ifstream inputFile{_Path};
-      std::stringstream ss;
+      std::stringstream ss{};
       std::vector<Token> tokens{};
       ss << inputFile.rdbuf();
       _FileContents = ss.str();
@@ -92,7 +92,9 @@ export namespace tungsten {
       while (_Peek().has_value()) {
          std::string buffer;
          if (std::isspace(_Peek().value())) {
-            _Consume();
+           do {
+               _Consume();
+           } while(std::isspace(_Peek().value()));
 
          } else if (std::isalpha(_Peek().value())) {
             do {
@@ -100,8 +102,10 @@ export namespace tungsten {
                _Consume();
             } while (std::isalpha(_Peek().value()));
             if (buffer == "return") tokens.push_back({TokenType::RETURN});
-            else
-               tokens.push_back({TokenType::INVALID});
+            else {
+                 std::cout << "invalid token: [" << buffer << "]\n";
+                 tokens.push_back({TokenType::INVALID});
+               }
             buffer.clear();
 
          } else if (std::isdigit(_Peek().value())) {
@@ -122,7 +126,7 @@ export namespace tungsten {
    }
 
    std::optional<char> Lexer::_Peek(size_t offset) {
-      if (_FileContents.size() <= _Index + offset)
+      if (_Index + offset < _FileContents.size())
          return _FileContents[_Index + offset];
 
       return std::nullopt;
