@@ -73,6 +73,7 @@ namespace tungsten {
             } while (std::isspace(_Peek().value()));
 
          } else if (std::isalpha(_Peek().value())) {
+            // KEYWORDS, TYPES AND IDENTIFIERS
             do {
                buffer.push_back(_Peek().value());
                _Consume();
@@ -104,6 +105,21 @@ namespace tungsten {
                   break;
 
                // OPERATORS
+               case '=':
+                  if (_Peek(1).has_value()) {
+                     if (_Peek(1).value() == '=') {
+                        _Consume(2);
+                        tokens.push_back(Token{TokenType::OPERATOR, "=="});
+                     } else {
+                        _Consume();
+                        tokens.push_back(Token{TokenType::OPERATOR, "="});
+                     }
+                  } else {
+                     tokens.push_back(Token{TokenType::OPERATOR, "="});
+                     _Consume();
+                  }
+                  break;
+
                case '+':
                   if (_Peek(1).has_value()) {
                      if (_Peek(1).value() == '+') {
