@@ -17,8 +17,7 @@ export namespace tungsten {
 
       ENTRY_POINT,
 
-      RETURN,
-      EXIT,
+      KEYWORD,
 
       PRIMITIVE_TYPE,
       CLASS_TYPE,
@@ -33,8 +32,7 @@ export namespace tungsten {
    std::unordered_map<TokenType, std::string> tokenTypeNames = {
        {TokenType::INVALID, "INVALID"},
        {TokenType::ENTRY_POINT, "ENTRY_POINT"},
-       {TokenType::RETURN, "RETURN"},
-       {TokenType::EXIT, "EXIT"},
+       {TokenType::KEYWORD, "KEYWORD"},
        {TokenType::PRIMITIVE_TYPE, "PRIMITIVE_TYPE"},
        {TokenType::CLASS_TYPE, "CLASS_TYPE"},
        {TokenType::INT_LITERAL, "INT_LITERAL"},
@@ -92,6 +90,7 @@ export namespace tungsten {
          if (std::isspace(_Peek().value())) {
            do {
                _Consume();
+              if (!_Peek().has_value()) break;
            } while(std::isspace(_Peek().value()));
 
          } else if (std::isalpha(_Peek().value())) {
@@ -99,7 +98,7 @@ export namespace tungsten {
                buffer.push_back(_Peek().value());
                _Consume();
             } while (std::isalpha(_Peek().value()));
-            if (buffer == "return") tokens.push_back(Token{TokenType::RETURN});
+            if (buffer == "return") tokens.push_back(Token{TokenType::KEYWORD, buffer});
             else {
                  tokens.push_back(Token{TokenType::INVALID, buffer});
                }
@@ -117,7 +116,22 @@ export namespace tungsten {
             _Consume();
             tokens.push_back(Token{TokenType::SEMICOLON});
          } else {
-            _Consume();
+            if (_Peek().value() == '/' && _Peek(2).has_value()) {
+               if ( _Peek(2).value() == '/')
+                  while (_Peek().has_value() && _Peek().value() != '\n')
+                     _Consume();
+               else if (_Peek(2).value() == '*') {
+                  while (_Peek().has_value()) {
+                     if (_Peek().value() == '*' && _Peek(2).has_value() && _Peek(2).value() == '/') {
+                        _Consume();
+                        _Consume();
+                        break;
+                     }
+                     _Consume();
+                  }
+               }
+            } else
+               _Consume();
          }
 
       }
