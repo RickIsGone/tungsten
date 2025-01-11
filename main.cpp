@@ -1,5 +1,6 @@
 #include <filesystem>
 #include <cstdlib>
+#include <vector>
 namespace fs = std::filesystem;
 import Tungsten.lexer;
 import Tungsten.parser;

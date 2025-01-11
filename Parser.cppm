@@ -28,6 +28,12 @@ namespace tungsten {
        {TokenType::INT_LITERAL, "INT_LITERAL"},
        {TokenType::STRING_LITERAL, "STRING_LITERAL"},
        {TokenType::IDENTIFIER, "IDENTIFIER"},
+       {TokenType::OPEN_PAREN, "OPEN_PAREN"},
+       {TokenType::CLOSE_PAREN, "CLOSE_PAREN"},
+       {TokenType::OPEN_BRACE, "OPEN_BRACE"},
+       {TokenType::CLOSE_BRACE, "CLOSE_BRACE"},
+       {TokenType::OPEN_BRACKET, "OPEN_BRACKET"},
+       {TokenType::CLOSE_BRACKET, "CLOSE_BRACKET"},
        {TokenType::SEMICOLON, "SEMICOLON"},
    };
 
