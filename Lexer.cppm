@@ -34,6 +34,7 @@ namespace tungsten {
       CLOSE_BRACE,
       OPEN_BRACKET,
       CLOSE_BRACKET,
+
       SEMICOLON,
    };
 
@@ -62,6 +63,13 @@ namespace tungsten {
 
    /*  ========================================== implementation ==========================================  */
 
+   bool isPrimitiveType(const std::string& type) {
+      return type == "Int" || type == "Float" || type == "Double" || type == "Bool" || type == "Char" || type == "String" || type == "Void" || type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64";
+   }
+   bool isKeyword(const std::string& keyword) {
+      return keyword == "return" || keyword == "exit" || keyword == "new" || keyword == "free";
+   }
+
    std::vector<Token> Lexer::tokenize() {
       std::ifstream inputFile{_Path};
       std::stringstream ss{};
@@ -84,10 +92,10 @@ namespace tungsten {
                buffer.push_back(_Peek().value());
                _Consume();
             } while (std::isalnum(_Peek().value()) || _Peek().value() == '_');
-            if (buffer == "return" || buffer == "exit")
+            if (isKeyword(buffer))
                tokens.push_back({TokenType::KEYWORD, buffer});
 
-            else if (buffer == "int" || buffer == "float" || buffer == "double" || buffer == "bool" || buffer == "char" || buffer == "string")
+            else if (isPrimitiveType(buffer))
                tokens.push_back({TokenType::PRIMITIVE_TYPE, buffer});
 
             else {
