@@ -71,11 +71,28 @@ namespace tungsten {
       return _Tokens[_Index + offset];
    }
 
+   // using int8_t because the register used for the exit value (rdi) is an 8 bit register so anything bigger than 8 bit will just wrap around
+   void generateExit(const int8_t exitCode) {
+      std::cout << "   mov rax, 60\n"
+                << "   mov rdi, " << static_cast<int>(exitCode) << "\n"
+                << "   syscall\n";
+   }
+
+
+   void generateEntryPoint() {
+      std::cout << "section .text\n"
+                << "   global _start:\n\n"
+                << "_start:\n";
+   }
+
    void Parser::parse() {
       std::cout << _Tokens << '\n';
-      // while (_Peek().type != TokenType::END_OF_FILE) {
-      //    // TODO
-      // }
+
+      while (_Peek().type != TokenType::END_OF_FILE) {
+         // TODO
+      }
+
+      // generateExit(EXIT_SUCCESS);
    }
 
 } // namespace tungsten

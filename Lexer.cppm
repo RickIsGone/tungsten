@@ -40,8 +40,8 @@ namespace tungsten {
 
 
    export struct Token {
-      const TokenType type{TokenType::INVALID};
-      const std::optional<std::string> value{};
+      TokenType type{TokenType::INVALID};
+      std::optional<std::string> value{};
    };
 
    export class Lexer {
