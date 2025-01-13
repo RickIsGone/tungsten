@@ -89,8 +89,8 @@ namespace tungsten {
 
       while (_Peek().type != TokenType::END_OF_FILE) {
          // TODO
+         _Consume();
       }
-
       // generateExit(EXIT_SUCCESS);
    }
 
