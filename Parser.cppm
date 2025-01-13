@@ -13,14 +13,26 @@ import Tungsten.lexer;
 namespace tungsten {
    export class Parser {
    public:
-      void parse(const std::vector<Token>& tokens);
+      Parser() = default;
+      ~Parser() = default;
+      Parser(const Parser&) = delete;
+      Parser operator=(const Parser&) = delete;
+      void parse();
+
+      void setTarget(const std::vector<Token>& tokens);
+
+   private:
+      _NODISCARD Token _Peek(size_t offset = 0) const;
+      void _Consume(const size_t amount = 1) { _Index += amount; }
+
+      size_t _Index{0};
+      std::vector<Token> _Tokens;
    };
 
    //  ========================================== implementation ==========================================
 
    export inline std::unordered_map<TokenType, std::string> tokenTypeNames = {
        {TokenType::INVALID, "INVALID"},
-       {TokenType::ENTRY_POINT, "ENTRY_POINT"},
        {TokenType::KEYWORD, "KEYWORD"},
        {TokenType::OPERATOR, "OPERATOR"},
        {TokenType::PRIMITIVE_TYPE, "PRIMITIVE_TYPE"},
@@ -49,6 +61,18 @@ namespace tungsten {
    }
    void Parser::parse(const std::vector<Token>& tokens) {
       std::cout << tokens << '\n';
+
+   void Parser::setTarget(const std::vector<Token>& tokens) {
+      _Tokens = tokens;
+      _Index = 0;
+   }
+
+   Token Parser::_Peek(const size_t offset) const {
+      return _Tokens[_Index + offset];
+   }
+
+   void Parser::parse() {
+      std::cout << _Tokens << '\n';
    }
 
 } // namespace tungsten

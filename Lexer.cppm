@@ -14,8 +14,6 @@ namespace tungsten {
    export enum class TokenType {
       INVALID,
 
-      ENTRY_POINT,
-
       KEYWORD,
 
       OPERATOR,
@@ -46,25 +44,28 @@ namespace tungsten {
 
    export class Lexer {
    public:
+      explicit Lexer(const fs::path& path) : _Path(path) {}
       Lexer() = default;
       ~Lexer() = default;
+      Lexer(const Lexer&) = delete;
+      Lexer operator=(const Lexer&) = delete;
 
-      std::vector<Token> tokenize();
+      _NODISCARD std::vector<Token> tokenize();
       void setFileTarget(const fs::path& path);
 
    private:
-      std::optional<char> _Peek(size_t offset = 0);
+      _NODISCARD std::optional<char> _Peek(size_t offset = 0) const;
       void _Consume(const size_t amount = 1) { _Index += amount; }
 
       size_t _Index{0};
-      fs::path _Path;
-      std::string _FileContents;
+      fs::path _Path{};
+      std::string _FileContents{};
    };
 
    /*  ========================================== implementation ==========================================  */
 
    bool isPrimitiveType(const std::string& type) {
-      return type == "Int" || type == "Float" || type == "Double" || type == "Bool" || type == "Char" || type == "String" || type == "Void" || type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64";
+      return type == "Int" || type == "Float" || type == "Double" || type == "Bool" || type == "Char" || type == "String" || type == "Void" || type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64" || type == "Int8" || type == "Int16" || type == "Int32" || type == "Int64";
    }
    bool isKeyword(const std::string& keyword) {
       return keyword == "return" || keyword == "exit" || keyword == "new" || keyword == "free";
@@ -92,15 +93,16 @@ namespace tungsten {
                buffer.push_back(_Peek().value());
                _Consume();
             } while (std::isalnum(_Peek().value()) || _Peek().value() == '_');
+
             if (isKeyword(buffer))
                tokens.push_back({TokenType::KEYWORD, buffer});
 
             else if (isPrimitiveType(buffer))
                tokens.push_back({TokenType::PRIMITIVE_TYPE, buffer});
 
-            else {
+            else
                tokens.push_back({TokenType::IDENTIFIER, buffer});
-            }
+
             buffer.clear();
 
          } else if (std::isdigit(_Peek().value())) {
@@ -115,19 +117,19 @@ namespace tungsten {
          } else {
             switch (_Peek().value()) {
                case ';':
-                  _Consume();
                   tokens.push_back({TokenType::SEMICOLON});
+                  _Consume();
                   break;
 
                // OPERATORS
                case '=':
                   if (_Peek(1).has_value()) {
                      if (_Peek(1).value() == '=') {
-                        _Consume(2);
                         tokens.push_back({TokenType::OPERATOR, "=="});
+                        _Consume(2);
                      } else {
-                        _Consume();
                         tokens.push_back({TokenType::OPERATOR, "="});
+                        _Consume();
                      }
                   } else {
                      tokens.push_back({TokenType::OPERATOR, "="});
@@ -138,14 +140,14 @@ namespace tungsten {
                case '+':
                   if (_Peek(1).has_value()) {
                      if (_Peek(1).value() == '+') {
-                        _Consume(2);
                         tokens.push_back({TokenType::OPERATOR, "++"});
-                     } else if (_Peek(1).value() == '=') {
                         _Consume(2);
+                     } else if (_Peek(1).value() == '=') {
                         tokens.push_back({TokenType::OPERATOR, "+="});
+                        _Consume(2);
                      } else {
-                        _Consume();
                         tokens.push_back({TokenType::OPERATOR, "+"});
+                        _Consume();
                      }
                   } else {
                      tokens.push_back({TokenType::OPERATOR, "+"});
@@ -156,15 +158,15 @@ namespace tungsten {
                case '-':
                   if (_Peek(1).has_value()) {
                      if (_Peek(1).value() == '-') {
-                        _Consume(2);
                         tokens.push_back({TokenType::OPERATOR, "--"});
+                        _Consume(2);
 
                      } else if (_Peek(1).value() == '=') {
-                        _Consume(2);
                         tokens.push_back({TokenType::OPERATOR, "-="});
+                        _Consume(2);
                      } else {
-                        _Consume();
                         tokens.push_back({TokenType::OPERATOR, "-"});
+                        _Consume();
                      }
                   } else {
                      tokens.push_back({TokenType::OPERATOR, "-"});
@@ -189,15 +191,15 @@ namespace tungsten {
                         }
                         // OPERATORS
                      } else if (_Peek(1).value() == '=') {
-                        _Consume(2);
                         tokens.push_back({TokenType::OPERATOR, "/="});
+                        _Consume(2);
                      } else {
-                        _Consume();
                         tokens.push_back({TokenType::OPERATOR, "/"});
+                        _Consume();
                      }
                   } else {
-                     _Consume();
                      tokens.push_back({TokenType::OPERATOR, "/"});
+                     _Consume();
                   }
                   break;
 
@@ -205,8 +207,8 @@ namespace tungsten {
                   // STRING LITERALS
                   if (_Peek(1).has_value()) {
                      if (_Peek(1).value() == '"') {
-                        _Consume(2);
                         tokens.push_back({TokenType::STRING_LITERAL, ""});
+                        _Consume(2);
                      } else {
                         _Consume();
                         while (_Peek().has_value() && _Peek().value() != '"' && _Peek().value() != '\n') {
@@ -215,8 +217,8 @@ namespace tungsten {
                         }
                         _Consume();
                         if (_Peek().has_value() && _Peek().value() == '"') {
-                           _Consume();
                            tokens.push_back({TokenType::STRING_LITERAL, buffer});
+                           _Consume();
                            buffer.clear();
                         }
                      }
@@ -262,7 +264,7 @@ namespace tungsten {
       return tokens;
    }
 
-   std::optional<char> Lexer::_Peek(const size_t offset) {
+   std::optional<char> Lexer::_Peek(const size_t offset) const {
       if (_Index + offset + 1 <= _FileContents.size())
          return _FileContents.at(_Index + offset);
 
