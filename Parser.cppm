@@ -47,7 +47,7 @@ namespace tungsten {
        {TokenType::OPEN_BRACKET, "OPEN_BRACKET"},
        {TokenType::CLOSE_BRACKET, "CLOSE_BRACKET"},
        {TokenType::SEMICOLON, "SEMICOLON"},
-   };
+       {TokenType::END_OF_FILE, "END_OF_FILE"}};
 
    std::ostream& operator<<(std::ostream& out, const std::vector<Token>& tokens) {
       out << "Tokens: {";
@@ -73,6 +73,9 @@ namespace tungsten {
 
    void Parser::parse() {
       std::cout << _Tokens << '\n';
+      // while (_Peek().type != TokenType::END_OF_FILE) {
+      //    // TODO
+      // }
    }
 
 } // namespace tungsten

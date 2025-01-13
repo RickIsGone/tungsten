@@ -34,6 +34,8 @@ namespace tungsten {
       CLOSE_BRACKET,
 
       SEMICOLON,
+
+      END_OF_FILE
    };
 
 
@@ -65,7 +67,7 @@ namespace tungsten {
    /*  ========================================== implementation ==========================================  */
 
    bool isPrimitiveType(const std::string& type) {
-      return type == "Int" || type == "Float" || type == "Double" || type == "Bool" || type == "Char" || type == "String" || type == "Void" || type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64" || type == "Int8" || type == "Int16" || type == "Int32" || type == "Int64";
+      return type == "Int" || type == "Float" || type == "Double" || type == "Bool" || type == "Char" || type == "String" || type == "Void" || type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64" || type == "Int8" || type == "Int16" || type == "Int64";
    }
    bool isKeyword(const std::string& keyword) {
       return keyword == "return" || keyword == "exit" || keyword == "new" || keyword == "free";
@@ -260,7 +262,7 @@ namespace tungsten {
             }
          }
       }
-
+      tokens.push_back({TokenType::END_OF_FILE});
       return tokens;
    }
 

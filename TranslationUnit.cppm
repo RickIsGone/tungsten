@@ -11,7 +11,7 @@ export namespace tungsten {
    class TranslationUnit {
    public:
       explicit TranslationUnit(const fs::path& path) : _Lexer{path} {}
-      explicit TranslationUnit() = default;
+      TranslationUnit() = default;
       ~TranslationUnit() = default;
       TranslationUnit(const TranslationUnit&) = delete;
       TranslationUnit operator=(const TranslationUnit&) = delete;
