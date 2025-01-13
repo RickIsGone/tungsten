@@ -59,7 +59,7 @@ Types follow the ***CamelCase*** convention, they are:
 | `Int`    | 4                 |
 | `Float`  | 4                 |
 | `Double` | 8                 |
-| `Wchar`  | 2                 |
+| `Char`   | 2                 |
 | `Bool`   | 1                 |
 | `String` | N/A               |
 | `Uint8`  | 1                 |
