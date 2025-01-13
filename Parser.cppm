@@ -6,6 +6,7 @@ module;
 #include <string>
 #include <optional>
 #include <ostream>
+#include <cstdlib>
 
 export module Tungsten.parser;
 import Tungsten.lexer;
@@ -59,8 +60,6 @@ namespace tungsten {
       out << "}\n";
       return out;
    }
-   void Parser::parse(const std::vector<Token>& tokens) {
-      std::cout << tokens << '\n';
 
    void Parser::setTarget(const std::vector<Token>& tokens) {
       _Tokens = tokens;
