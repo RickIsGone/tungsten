@@ -70,7 +70,7 @@ namespace tungsten {
       return type == "Int" || type == "Float" || type == "Double" || type == "Bool" || type == "Char" || type == "String" || type == "Void" || type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64" || type == "Int8" || type == "Int16" || type == "Int64";
    }
    bool isKeyword(const std::string& keyword) {
-      return keyword == "return" || keyword == "exit" || keyword == "new" || keyword == "free";
+      return keyword == "return" || keyword == "exit" || keyword == "new" || keyword == "free" || keyword == "extern";
    }
 
    std::vector<Token> Lexer::tokenize() {
@@ -80,7 +80,6 @@ namespace tungsten {
       ss << inputFile.rdbuf();
       _FileContents = ss.str();
 
-      std::cout << _FileContents << '\n';
       while (_Peek().has_value()) {
          std::string buffer;
          if (std::isspace(_Peek().value())) {
@@ -258,6 +257,7 @@ namespace tungsten {
                   break;
 
                default:
+                  tokens.push_back({TokenType::INVALID});
                   _Consume();
             }
          }

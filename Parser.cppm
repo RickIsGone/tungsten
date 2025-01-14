@@ -18,8 +18,8 @@ namespace tungsten {
       ~Parser() = default;
       Parser(const Parser&) = delete;
       Parser operator=(const Parser&) = delete;
-      void parse();
 
+      void parse();
       void setTarget(const std::vector<Token>& tokens);
 
    private:
@@ -70,14 +70,16 @@ namespace tungsten {
       return _Tokens[_Index + offset];
    }
 
-   // using int8_t because the register used for the exit value (rdi) is an 8 bit register so anything bigger than 8 bit will just wrap around
    void generateExit(const int8_t exitCode) {
       std::cout << "   mov rax, 60\n"
                 << "   mov rdi, " << static_cast<int>(exitCode) << "\n"
+      std::cout << "\n   mov rax, 60\n"
+                << (exitCode == 0 ? "   xor rdi, rdi" : "   mov rdi, " + static_cast<int>(exitCode)) << "\n"
                 << "   syscall\n";
    }
 
-
+   // rdi -> argc
+   // rsi -> argv
    void generateEntryPoint() {
       std::cout << "section .text\n"
                 << "   global _start:\n\n"
@@ -92,6 +94,10 @@ namespace tungsten {
          _Consume();
       }
       // generateExit(EXIT_SUCCESS);
+      std::cout << "assembly file:\n"
+                << "--------------------------------------\n";
+      generateEntryPoint();
+      generateExit(EXIT_SUCCESS);
    }
 
 } // namespace tungsten
