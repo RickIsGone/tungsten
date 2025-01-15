@@ -33,23 +33,9 @@ namespace tungsten {
 
    //  ========================================== implementation ==========================================
 
+   // will be removed when the llvm backend is implemented
    export inline std::unordered_map<TokenType, std::string> tokenTypeNames = {
        {TokenType::INVALID, "INVALID"},
-       {TokenType::INT, "INT"},
-       {TokenType::FLOAT, "FLOAT"},
-       {TokenType::DOUBLE, "DOUBLE"},
-       {TokenType::BOOL, "BOOL"},
-       {TokenType::CHAR, "CHAR"},
-       {TokenType::STRING, "STRING"},
-       {TokenType::VOID, "VOID"},
-       {TokenType::UINT, "UINT"},
-       {TokenType::UINT8, "UINT8"},
-       {TokenType::UINT16, "UINT16"},
-       {TokenType::UINT32, "UINT32"},
-       {TokenType::UINT64, "UINT64"},
-       {TokenType::INT8, "INT8"},
-       {TokenType::INT16, "INT16"},
-       {TokenType::INT64, "INT64"},
 
        {TokenType::RETURN, "RETURN"},
        {TokenType::EXIT, "EXIT"},
@@ -65,6 +51,24 @@ namespace tungsten {
        {TokenType::MINUS_MINUS, "MINUS_MINUS"},
        {TokenType::EQUAL, "EQUAL"},
        {TokenType::EQUAL_EQUAL, "EQUAL_EQUAL"},
+       {TokenType::DIVIDE, "DIVIDE"},
+       {TokenType::DIVIDE_EQUAL, "DIVIDE_EQUAL"},
+
+       {TokenType::INT, "INT"},
+       {TokenType::FLOAT, "FLOAT"},
+       {TokenType::DOUBLE, "DOUBLE"},
+       {TokenType::BOOL, "BOOL"},
+       {TokenType::CHAR, "CHAR"},
+       {TokenType::STRING, "STRING"},
+       {TokenType::VOID, "VOID"},
+       {TokenType::UINT, "UINT"},
+       {TokenType::UINT8, "UINT8"},
+       {TokenType::UINT16, "UINT16"},
+       {TokenType::UINT32, "UINT32"},
+       {TokenType::UINT64, "UINT64"},
+       {TokenType::INT8, "INT8"},
+       {TokenType::INT16, "INT16"},
+       {TokenType::INT64, "INT64"},
 
        {TokenType::INT_LITERAL, "INT_LITERAL"},
        {TokenType::STRING_LITERAL, "STRING_LITERAL"},

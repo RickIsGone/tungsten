@@ -271,7 +271,6 @@ namespace tungsten {
                            buffer.push_back(_Peek().value());
                            _Consume();
                         }
-                        _Consume();
                         if (_Peek().has_value() && _Peek().value() == '"') {
                            tokens.push_back({TokenType::STRING_LITERAL, buffer});
                            _Consume();
