@@ -4,6 +4,7 @@ module;
 #include <filesystem>
 #include <iostream>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
@@ -14,32 +15,88 @@ namespace fs = std::filesystem;
 namespace tungsten {
 
    export enum class TokenType {
-      INVALID,
+      INVALID = -1,
 
-      KEYWORD,
+      // keywords
+      RETURN = -2,
+      EXIT = -3,
+      NEW = -4,
+      FREE = -5,
+      EXTERN = -6,
 
-      OPERATOR,
+      // operators
+      PLUS = -7,
+      PLUS_EQUAL = -8,
+      PLUS_PLUS = -9,
+      MINUS = -10,
+      MINUS_EQUAL = -11,
+      MINUS_MINUS = -12,
+      EQUAL = -13,
+      EQUAL_EQUAL = -14,
+      DIVIDE = -15,
+      DIVIDE_EQUAL = -16,
 
-      PRIMITIVE_TYPE,
-      CLASS_TYPE,
+      // types
+      INT = -17,
+      FLOAT = -18,
+      DOUBLE = -19,
+      BOOL = -20,
+      CHAR = -21,
+      STRING = -22,
+      VOID = -23,
+      UINT = -24,
+      UINT8 = -25,
+      UINT16 = -26,
+      UINT32 = -27,
+      UINT64 = -28,
+      INT8 = -29,
+      INT16 = -30,
+      INT64 = -31,
 
-      INT_LITERAL,
-      STRING_LITERAL,
+      // literals
+      INT_LITERAL = -32,
+      STRING_LITERAL = -33,
+      IDENTIFIER = -34,
 
-      IDENTIFIER,
+      OPEN_PAREN = -35,
+      CLOSE_PAREN = -36,
+      OPEN_BRACE = -37,
+      CLOSE_BRACE = -38,
+      OPEN_BRACKET = -39,
+      CLOSE_BRACKET = -40,
 
-      OPEN_PAREN,
-      CLOSE_PAREN,
-      OPEN_BRACE,
-      CLOSE_BRACE,
-      OPEN_BRACKET,
-      CLOSE_BRACKET,
 
-      SEMICOLON,
+      SEMICOLON = -41,
 
-      END_OF_FILE
+      END_OF_FILE = -42
    };
 
+   export inline std::unordered_map<std::string, TokenType> tokensMap = {
+       // keywords
+       {"return", TokenType::RETURN},
+       {"exit", TokenType::EXIT},
+       {"new", TokenType::NEW},
+       {"free", TokenType::FREE},
+       {"extern", TokenType::EXTERN},
+
+       // types
+       {"Int", TokenType::INT},
+       {"Float", TokenType::FLOAT},
+       {"Double", TokenType::DOUBLE},
+       {"Bool", TokenType::BOOL},
+       {"Char", TokenType::CHAR},
+       {"String", TokenType::STRING},
+       {"Void", TokenType::VOID},
+       {"Uint", TokenType::UINT},
+       {"Uint8", TokenType::UINT8},
+       {"Uint16", TokenType::UINT16},
+       {"Uint32", TokenType::UINT32},
+       {"Uint64", TokenType::UINT64},
+       {"Int8", TokenType::INT8},
+       {"Int16", TokenType::INT16},
+       {"Int64", TokenType::INT64},
+
+   };
 
    export struct Token {
       TokenType type{TokenType::INVALID};
@@ -98,10 +155,10 @@ namespace tungsten {
             } while (std::isalnum(_Peek().value()) || _Peek().value() == '_');
 
             if (isKeyword(buffer))
-               tokens.push_back({TokenType::KEYWORD, buffer});
+               tokens.push_back({tokensMap.at(buffer)});
 
             else if (isPrimitiveType(buffer))
-               tokens.push_back({TokenType::PRIMITIVE_TYPE, buffer});
+               tokens.push_back({tokensMap.at(buffer)});
 
             else
                tokens.push_back({TokenType::IDENTIFIER, buffer});
@@ -128,14 +185,14 @@ namespace tungsten {
                case '=':
                   if (_Peek(1).has_value()) {
                      if (_Peek(1).value() == '=') {
-                        tokens.push_back({TokenType::OPERATOR, "=="});
+                        tokens.push_back({TokenType::EQUAL_EQUAL});
                         _Consume(2);
                      } else {
-                        tokens.push_back({TokenType::OPERATOR, "="});
+                        tokens.push_back({TokenType::EQUAL});
                         _Consume();
                      }
                   } else {
-                     tokens.push_back({TokenType::OPERATOR, "="});
+                     tokens.push_back({TokenType::EQUAL});
                      _Consume();
                   }
                   break;
@@ -143,17 +200,17 @@ namespace tungsten {
                case '+':
                   if (_Peek(1).has_value()) {
                      if (_Peek(1).value() == '+') {
-                        tokens.push_back({TokenType::OPERATOR, "++"});
+                        tokens.push_back({TokenType::PLUS_PLUS});
                         _Consume(2);
                      } else if (_Peek(1).value() == '=') {
-                        tokens.push_back({TokenType::OPERATOR, "+="});
+                        tokens.push_back({TokenType::PLUS_EQUAL});
                         _Consume(2);
                      } else {
-                        tokens.push_back({TokenType::OPERATOR, "+"});
+                        tokens.push_back({TokenType::PLUS});
                         _Consume();
                      }
                   } else {
-                     tokens.push_back({TokenType::OPERATOR, "+"});
+                     tokens.push_back({TokenType::PLUS});
                      _Consume();
                   }
                   break;
@@ -161,18 +218,18 @@ namespace tungsten {
                case '-':
                   if (_Peek(1).has_value()) {
                      if (_Peek(1).value() == '-') {
-                        tokens.push_back({TokenType::OPERATOR, "--"});
+                        tokens.push_back({TokenType::MINUS_MINUS});
                         _Consume(2);
 
                      } else if (_Peek(1).value() == '=') {
-                        tokens.push_back({TokenType::OPERATOR, "-="});
+                        tokens.push_back({TokenType::MINUS_EQUAL});
                         _Consume(2);
                      } else {
-                        tokens.push_back({TokenType::OPERATOR, "-"});
+                        tokens.push_back({TokenType::MINUS});
                         _Consume();
                      }
                   } else {
-                     tokens.push_back({TokenType::OPERATOR, "-"});
+                     tokens.push_back({TokenType::MINUS});
                      _Consume();
                   }
                   break;
@@ -194,14 +251,14 @@ namespace tungsten {
                         }
                         // OPERATORS
                      } else if (_Peek(1).value() == '=') {
-                        tokens.push_back({TokenType::OPERATOR, "/="});
+                        tokens.push_back({TokenType::DIVIDE_EQUAL});
                         _Consume(2);
                      } else {
-                        tokens.push_back({TokenType::OPERATOR, "/"});
+                        tokens.push_back({TokenType::DIVIDE});
                         _Consume();
                      }
                   } else {
-                     tokens.push_back({TokenType::OPERATOR, "/"});
+                     tokens.push_back({TokenType::DIVIDE});
                      _Consume();
                   }
                   break;
@@ -227,6 +284,7 @@ namespace tungsten {
                      }
                   } else
                      _Consume();
+                  break;
 
                case '(':
                   tokens.push_back({TokenType::OPEN_PAREN});
@@ -261,6 +319,7 @@ namespace tungsten {
                default:
                   tokens.push_back({TokenType::INVALID});
                   _Consume();
+                  break;
             }
          }
       }
