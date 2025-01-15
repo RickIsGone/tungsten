@@ -65,7 +65,6 @@ namespace tungsten {
       OPEN_BRACKET = -39,
       CLOSE_BRACKET = -40,
 
-
       SEMICOLON = -41,
 
       END_OF_FILE = -42
@@ -94,9 +93,7 @@ namespace tungsten {
        {"Uint64", TokenType::UINT64},
        {"Int8", TokenType::INT8},
        {"Int16", TokenType::INT16},
-       {"Int64", TokenType::INT64},
-
-   };
+       {"Int64", TokenType::INT64}};
 
    export struct Token {
       TokenType type{TokenType::INVALID};
@@ -125,12 +122,14 @@ namespace tungsten {
 
    /*  ========================================== implementation ==========================================  */
 
-   bool isPrimitiveType(const std::string& type) {
-      return type == "Int" || type == "Float" || type == "Double" || type == "Bool" || type == "Char" || type == "String" || type == "Void" || type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64" || type == "Int8" || type == "Int16" || type == "Int64";
-   }
-   bool isKeyword(const std::string& keyword) {
-      return keyword == "return" || keyword == "exit" || keyword == "new" || keyword == "free" || keyword == "extern";
-   }
+   /**
+    * bool isPrimitiveType(const std::string& type) {
+    *    return type == "Int" || type == "Float" || type == "Double" || type == "Bool" || type == "Char" || type == "String" || type == "Void" || type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64" || type == "Int8" || type == "Int16" || type == "Int64";
+    * }
+    * bool isKeyword(const std::string& keyword) {
+    *    return keyword == "return" || keyword == "exit" || keyword == "new" || keyword == "free" || keyword == "extern";
+    * }
+    */
 
    std::vector<Token> Lexer::tokenize() {
       std::ifstream inputFile{_Path};
@@ -141,18 +140,18 @@ namespace tungsten {
 
       while (_Peek().has_value()) {
          std::string buffer;
-         if (std::isspace(_Peek().value())) {
+         if (std::isspace(static_cast<unsigned char>(_Peek().value()))) {
             do {
                _Consume();
                if (!_Peek().has_value()) break;
-            } while (std::isspace(_Peek().value()));
+            } while (std::isspace(static_cast<unsigned char>(_Peek().value())));
 
-         } else if (std::isalpha(_Peek().value())) {
+         } else if (std::isalpha(static_cast<unsigned char>(_Peek().value()))) {
             // KEYWORDS, TYPES AND IDENTIFIERS
             do {
                buffer.push_back(_Peek().value());
                _Consume();
-            } while (std::isalnum(_Peek().value()) || _Peek().value() == '_');
+            } while (std::isalnum(static_cast<unsigned char>(_Peek().value())) || _Peek().value() == '_');
 
             if (tokensMap.contains(buffer))
                tokens.push_back({tokensMap.at(buffer)});
@@ -162,12 +161,12 @@ namespace tungsten {
 
             buffer.clear();
 
-         } else if (std::isdigit(_Peek().value())) {
+         } else if (std::isdigit(static_cast<unsigned char>(_Peek().value()))) {
             // INT LITERALS
             do {
                buffer.push_back(_Peek().value());
                _Consume();
-            } while (std::isdigit(_Peek().value()));
+            } while (std::isdigit(static_cast<unsigned char>(_Peek().value())));
             tokens.push_back({TokenType::INT_LITERAL, buffer});
             buffer.clear();
 
