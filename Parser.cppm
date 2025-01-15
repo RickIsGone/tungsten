@@ -80,13 +80,14 @@ namespace tungsten {
        {TokenType::SEMICOLON, "SEMICOLON"},
 
        {TokenType::END_OF_FILE, "END_OF_FILE"}};
+
    std::ostream& operator<<(std::ostream& out, const std::vector<Token>& tokens) {
       out << "Tokens: {";
 
       for (int i = 1; const Token& token : tokens) {
          out << "{" << tokenTypeNames.at(token.type)
              << (token.value.has_value() ? ", " + token.value.value() : "")
-             << (i++ < tokens.size() ? "},\n\t\t " : "}");
+             << (i++ < tokens.size() ? "},\n\t " : "}");
       }
       out << "}\n";
       return out;

@@ -154,10 +154,7 @@ namespace tungsten {
                _Consume();
             } while (std::isalnum(_Peek().value()) || _Peek().value() == '_');
 
-            if (isKeyword(buffer))
-               tokens.push_back({tokensMap.at(buffer)});
-
-            else if (isPrimitiveType(buffer))
+            if (tokensMap.contains(buffer))
                tokens.push_back({tokensMap.at(buffer)});
 
             else
