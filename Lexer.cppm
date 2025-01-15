@@ -5,7 +5,9 @@ module;
 #include <iostream>
 #include <optional>
 #include <vector>
-
+#ifndef _NODISCARD
+#define _NODISCARD [[nodiscard]]
+#endif
 export module Tungsten.lexer;
 namespace fs = std::filesystem;
 

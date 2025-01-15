@@ -6,7 +6,9 @@ module;
 #include <string>
 #include <optional>
 #include <ostream>
-#include <cstdlib>
+#ifndef _NODISCARD
+#define _NODISCARD [[nodiscard]]
+#endif
 
 export module Tungsten.parser;
 import Tungsten.lexer;
@@ -52,7 +54,7 @@ namespace tungsten {
 
    std::ostream& operator<<(std::ostream& out, const std::vector<Token>& tokens) {
       out << "Tokens: {";
-      for (int i = 1; const Token& token : tokens) {
+      for (int i = 1; const Token&token : tokens) {
          out << "{" << tokenTypeNames.at(token.type) << ", "
              << (token.value.has_value() ? token.value.value() : "std::nullopt")
              << (i++ < tokens.size() ? "}, " : "}");
