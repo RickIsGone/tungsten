@@ -51,23 +51,24 @@ namespace tungsten {
       UINT64 = -28,
       INT8 = -29,
       INT16 = -30,
-      INT64 = -31,
+      INT32 = -31,
+      INT64 = -32,
 
       // literals
-      INT_LITERAL = -32,
-      STRING_LITERAL = -33,
-      IDENTIFIER = -34,
+      INT_LITERAL = -33,
+      STRING_LITERAL = -34,
+      IDENTIFIER = -35,
 
-      OPEN_PAREN = -35,
-      CLOSE_PAREN = -36,
-      OPEN_BRACE = -37,
-      CLOSE_BRACE = -38,
-      OPEN_BRACKET = -39,
-      CLOSE_BRACKET = -40,
+      OPEN_PAREN = -36,
+      CLOSE_PAREN = -37,
+      OPEN_BRACE = -38,
+      CLOSE_BRACE = -39,
+      OPEN_BRACKET = -40,
+      CLOSE_BRACKET = -41,
 
-      SEMICOLON = -41,
+      SEMICOLON = -42,
 
-      END_OF_FILE = -42
+      END_OF_FILE = -43
    };
 
    export inline std::unordered_map<std::string, TokenType> tokensMap = {
@@ -93,6 +94,7 @@ namespace tungsten {
        {"Uint64", TokenType::UINT64},
        {"Int8", TokenType::INT8},
        {"Int16", TokenType::INT16},
+       {"Int32", TokenType::INT32},
        {"Int64", TokenType::INT64}};
 
    export struct Token {
@@ -153,7 +155,7 @@ namespace tungsten {
                _Consume();
             } while (std::isalnum(static_cast<unsigned char>(_Peek().value())) || _Peek().value() == '_');
 
-            if (tokensMap.contains(buffer))
+            if (tokensMap.contains(buffer)) // looking for known keywords/types
                tokens.push_back({tokensMap.at(buffer)});
 
             else

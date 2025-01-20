@@ -68,6 +68,7 @@ namespace tungsten {
        {TokenType::UINT64, "UINT64"},
        {TokenType::INT8, "INT8"},
        {TokenType::INT16, "INT16"},
+       {TokenType::INT32, "INT32"},
        {TokenType::INT64, "INT64"},
 
        {TokenType::INT_LITERAL, "INT_LITERAL"},
