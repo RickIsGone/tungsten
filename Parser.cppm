@@ -24,11 +24,11 @@ namespace tungsten {
       void setTarget(const std::vector<Token>& tokens);
 
    private:
-      _NODISCARD Token _Peek(size_t offset = 0) const;
-      void _Consume(const size_t amount = 1) { _Index += amount; }
+      _NODISCARD Token _peek(size_t offset = 0) const;
+      void _consume(const size_t amount = 1) { _index += amount; }
 
-      size_t _Index{0};
-      std::vector<Token> _Tokens{};
+      size_t _index{0};
+      std::vector<Token> _tokens{};
    };
 
    //  ========================================== implementation ==========================================
@@ -91,7 +91,7 @@ namespace tungsten {
 
       for (int i = 1; const Token& token : tokens) {
          out << "{" << tokenTypeNames.at(token.type)
-             << (token.value.has_value() ? ", " + token.value.value() : "")
+             << (token.value.has_value() ? ", " + (token.type == TokenType::STRING_LITERAL ? '"' + token.value.value() + '"' : token.value.value()) : "")
              << (i++ < tokens.size() ? "},\n\t " : "}");
       }
       out << "}\n";
@@ -99,20 +99,20 @@ namespace tungsten {
    }
 
    void Parser::setTarget(const std::vector<Token>& tokens) {
-      _Tokens = tokens;
-      _Index = 0;
+      _tokens = tokens;
+      _index = 0;
    }
 
-   Token Parser::_Peek(const size_t offset) const {
-      return _Tokens[_Index + offset];
+   Token Parser::_peek(const size_t offset) const {
+      return _tokens[_index + offset];
    }
 
    void Parser::parse() {
-      std::cout << _Tokens << '\n';
+      std::cout << _tokens << '\n';
 
-      while (_Peek().type != TokenType::END_OF_FILE) {
+      while (_peek().type != TokenType::END_OF_FILE) {
          // TODO
-         _Consume();
+         _consume();
       }
    }
 

@@ -104,7 +104,7 @@ namespace tungsten {
 
    export class Lexer {
    public:
-      explicit Lexer(const fs::path& path) : _Path(path) {}
+      explicit Lexer(const fs::path& path) : _path(path) {}
       Lexer() = default;
       ~Lexer() = default;
       Lexer(const Lexer&) = delete;
@@ -114,12 +114,12 @@ namespace tungsten {
       void setFileTarget(const fs::path& path);
 
    private:
-      _NODISCARD std::optional<char> _Peek(size_t offset = 0) const;
-      void _Consume(const size_t amount = 1) { _Index += amount; }
+      _NODISCARD std::optional<char> _peek(size_t offset = 0) const;
+      void _consume(const size_t amount = 1) { _index += amount; }
 
-      size_t _Index{0};
-      fs::path _Path{};
-      std::string _FileContents{};
+      size_t _index{0};
+      fs::path _path{};
+      std::string _fileContents{};
    };
 
    /*  ========================================== implementation ==========================================  */
@@ -134,26 +134,26 @@ namespace tungsten {
     */
 
    std::vector<Token> Lexer::tokenize() {
-      std::ifstream inputFile{_Path};
+      std::ifstream inputFile{_path};
       std::stringstream ss{};
       std::vector<Token> tokens{};
       ss << inputFile.rdbuf();
-      _FileContents = ss.str();
+      _fileContents = ss.str();
 
-      while (_Peek().has_value()) {
+      while (_peek().has_value()) {
          std::string buffer;
-         if (std::isspace(static_cast<unsigned char>(_Peek().value()))) {
+         if (std::isspace(static_cast<unsigned char>(_peek().value()))) {
             do {
-               _Consume();
-               if (!_Peek().has_value()) break;
-            } while (std::isspace(static_cast<unsigned char>(_Peek().value())));
+               _consume();
+               if (!_peek().has_value()) break;
+            } while (std::isspace(static_cast<unsigned char>(_peek().value())));
 
-         } else if (std::isalpha(static_cast<unsigned char>(_Peek().value()))) {
+         } else if (std::isalpha(static_cast<unsigned char>(_peek().value()))) {
             // KEYWORDS, TYPES AND IDENTIFIERS
             do {
-               buffer.push_back(_Peek().value());
-               _Consume();
-            } while (std::isalnum(static_cast<unsigned char>(_Peek().value())) || _Peek().value() == '_');
+               buffer.push_back(_peek().value());
+               _consume();
+            } while (std::isalnum(static_cast<unsigned char>(_peek().value())) || _peek().value() == '_');
 
             if (tokensMap.contains(buffer)) // looking for known keywords/types
                tokens.push_back({tokensMap.at(buffer)});
@@ -163,159 +163,159 @@ namespace tungsten {
 
             buffer.clear();
 
-         } else if (std::isdigit(static_cast<unsigned char>(_Peek().value()))) {
+         } else if (std::isdigit(static_cast<unsigned char>(_peek().value()))) {
             // INT LITERALS
             do {
-               buffer.push_back(_Peek().value());
-               _Consume();
-            } while (std::isdigit(static_cast<unsigned char>(_Peek().value())));
+               buffer.push_back(_peek().value());
+               _consume();
+            } while (std::isdigit(static_cast<unsigned char>(_peek().value())));
             tokens.push_back({TokenType::INT_LITERAL, buffer});
             buffer.clear();
 
          } else {
-            switch (_Peek().value()) {
+            switch (_peek().value()) {
                case ';':
                   tokens.push_back({TokenType::SEMICOLON});
-                  _Consume();
+                  _consume();
                   break;
 
                // OPERATORS
                case '=':
-                  if (_Peek(1).has_value()) {
-                     if (_Peek(1).value() == '=') {
+                  if (_peek(1).has_value()) {
+                     if (_peek(1).value() == '=') {
                         tokens.push_back({TokenType::EQUAL_EQUAL});
-                        _Consume(2);
+                        _consume(2);
                      } else {
                         tokens.push_back({TokenType::EQUAL});
-                        _Consume();
+                        _consume();
                      }
                   } else {
                      tokens.push_back({TokenType::EQUAL});
-                     _Consume();
+                     _consume();
                   }
                   break;
 
                case '+':
-                  if (_Peek(1).has_value()) {
-                     if (_Peek(1).value() == '+') {
+                  if (_peek(1).has_value()) {
+                     if (_peek(1).value() == '+') {
                         tokens.push_back({TokenType::PLUS_PLUS});
-                        _Consume(2);
-                     } else if (_Peek(1).value() == '=') {
+                        _consume(2);
+                     } else if (_peek(1).value() == '=') {
                         tokens.push_back({TokenType::PLUS_EQUAL});
-                        _Consume(2);
+                        _consume(2);
                      } else {
                         tokens.push_back({TokenType::PLUS});
-                        _Consume();
+                        _consume();
                      }
                   } else {
                      tokens.push_back({TokenType::PLUS});
-                     _Consume();
+                     _consume();
                   }
                   break;
 
                case '-':
-                  if (_Peek(1).has_value()) {
-                     if (_Peek(1).value() == '-') {
+                  if (_peek(1).has_value()) {
+                     if (_peek(1).value() == '-') {
                         tokens.push_back({TokenType::MINUS_MINUS});
-                        _Consume(2);
+                        _consume(2);
 
-                     } else if (_Peek(1).value() == '=') {
+                     } else if (_peek(1).value() == '=') {
                         tokens.push_back({TokenType::MINUS_EQUAL});
-                        _Consume(2);
+                        _consume(2);
                      } else {
                         tokens.push_back({TokenType::MINUS});
-                        _Consume();
+                        _consume();
                      }
                   } else {
                      tokens.push_back({TokenType::MINUS});
-                     _Consume();
+                     _consume();
                   }
                   break;
 
 
                case '/':
                   // COMMENTS
-                  if (_Peek(1).has_value()) {
-                     if (_Peek(1).value() == '/')
-                        while (_Peek().has_value() && _Peek().value() != '\n')
-                           _Consume();
-                     else if (_Peek(1).value() == '*') {
-                        while (_Peek().has_value()) {
-                           if (_Peek().value() == '*' && _Peek(1).has_value() && _Peek(1).value() == '/') {
-                              _Consume(2);
+                  if (_peek(1).has_value()) {
+                     if (_peek(1).value() == '/')
+                        while (_peek().has_value() && _peek().value() != '\n')
+                           _consume();
+                     else if (_peek(1).value() == '*') {
+                        while (_peek().has_value()) {
+                           if (_peek().value() == '*' && _peek(1).has_value() && _peek(1).value() == '/') {
+                              _consume(2);
                               break;
                            }
-                           _Consume();
+                           _consume();
                         }
                         // OPERATORS
-                     } else if (_Peek(1).value() == '=') {
+                     } else if (_peek(1).value() == '=') {
                         tokens.push_back({TokenType::DIVIDE_EQUAL});
-                        _Consume(2);
+                        _consume(2);
                      } else {
                         tokens.push_back({TokenType::DIVIDE});
-                        _Consume();
+                        _consume();
                      }
                   } else {
                      tokens.push_back({TokenType::DIVIDE});
-                     _Consume();
+                     _consume();
                   }
                   break;
 
                case '"':
                   // STRING LITERALS
-                  if (_Peek(1).has_value()) {
-                     if (_Peek(1).value() == '"') {
+                  if (_peek(1).has_value()) {
+                     if (_peek(1).value() == '"') {
                         tokens.push_back({TokenType::STRING_LITERAL, ""});
-                        _Consume(2);
+                        _consume(2);
                      } else {
-                        _Consume();
-                        while (_Peek().has_value() && _Peek().value() != '"' && _Peek().value() != '\n') {
-                           buffer.push_back(_Peek().value());
-                           _Consume();
+                        _consume();
+                        while (_peek().has_value() && _peek().value() != '"' && _peek().value() != '\n') {
+                           buffer.push_back(_peek().value());
+                           _consume();
                         }
-                        if (_Peek().has_value() && _Peek().value() == '"') {
+                        if (_peek().has_value() && _peek().value() == '"') {
                            tokens.push_back({TokenType::STRING_LITERAL, buffer});
-                           _Consume();
+                           _consume();
                            buffer.clear();
                         }
                      }
                   } else
-                     _Consume();
+                     _consume();
                   break;
 
                case '(':
                   tokens.push_back({TokenType::OPEN_PAREN});
-                  _Consume();
+                  _consume();
                   break;
 
                case ')':
                   tokens.push_back({TokenType::CLOSE_PAREN});
-                  _Consume();
+                  _consume();
                   break;
 
                case '{':
                   tokens.push_back({TokenType::OPEN_BRACE});
-                  _Consume();
+                  _consume();
                   break;
 
                case '}':
                   tokens.push_back({TokenType::CLOSE_BRACE});
-                  _Consume();
+                  _consume();
                   break;
 
                case '[':
                   tokens.push_back({TokenType::OPEN_BRACKET});
-                  _Consume();
+                  _consume();
                   break;
 
                case ']':
                   tokens.push_back({TokenType::CLOSE_BRACKET});
-                  _Consume();
+                  _consume();
                   break;
 
                default:
                   tokens.push_back({TokenType::INVALID});
-                  _Consume();
+                  _consume();
                   break;
             }
          }
@@ -324,16 +324,16 @@ namespace tungsten {
       return tokens;
    }
 
-   std::optional<char> Lexer::_Peek(const size_t offset) const {
-      if (_Index + offset + 1 <= _FileContents.size())
-         return _FileContents.at(_Index + offset);
+   std::optional<char> Lexer::_peek(const size_t offset) const {
+      if (_index + offset + 1 <= _fileContents.size())
+         return _fileContents.at(_index + offset);
 
       return std::nullopt;
    }
 
    void Lexer::setFileTarget(const fs::path& path) {
-      _Path = path;
-      _Index = 0;
+      _path = path;
+      _index = 0;
    }
 
 } // namespace tungsten
