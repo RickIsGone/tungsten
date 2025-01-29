@@ -83,6 +83,9 @@ namespace tungsten {
        {TokenType::CLOSE_BRACKET, "CLOSE_BRACKET"},
 
        {TokenType::SEMICOLON, "SEMICOLON"},
+       {TokenType::DOT, "DOT"},
+       {TokenType::COMMA, "COMMA"},
+
 
        {TokenType::END_OF_FILE, "END_OF_FILE"}};
 

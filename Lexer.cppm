@@ -67,8 +67,10 @@ namespace tungsten {
       CLOSE_BRACKET = -41,
 
       SEMICOLON = -42,
+      DOT = -43,
+      COMMA = -44,
 
-      END_OF_FILE = -43
+      END_OF_FILE = -45
    };
 
    export inline std::unordered_map<std::string, TokenType> tokensMap = {
@@ -99,7 +101,8 @@ namespace tungsten {
 
    export struct Token {
       TokenType type{TokenType::INVALID};
-      std::optional<std::string> value{};
+      size_t length{1};
+      size_t position{};
    };
 
    export class Lexer {
@@ -115,6 +118,7 @@ namespace tungsten {
 
    private:
       _NODISCARD std::optional<char> _peek(size_t offset = 0) const;
+      _NODISCARD TokenType _determineTokenType(std::string_view token) const;
       void _consume(const size_t amount = 1) { _index += amount; }
 
       size_t _index{0};
@@ -313,6 +317,16 @@ namespace tungsten {
                   _consume();
                   break;
 
+               case '.':
+                  tokens.push_back({TokenType::DOT});
+                  _consume();
+                  break;
+
+               case ',':
+                  tokens.push_back({TokenType::COMMA});
+                  _consume();
+                  break;
+
                default:
                   tokens.push_back({TokenType::INVALID});
                   _consume();
@@ -324,6 +338,73 @@ namespace tungsten {
       return tokens;
    }
 
+   TokenType Lexer::_determineTokenType(std::string_view token) const {
+      using enum TokenType;
+
+      switch (token[0]) {
+         case ';':
+            return SEMICOLON;
+         case '.':
+            return DOT;
+         case ',':
+            return COMMA;
+
+         case '0':
+         case '1':
+         case '2':
+         case '3':
+         case '4':
+         case '5':
+         case '6':
+         case '7':
+         case '8':
+         case '9':
+            return INT_LITERAL;
+
+         case '(':
+            return OPEN_PAREN;
+         case ')':
+            return CLOSE_PAREN;
+         case '[':
+            return OPEN_BRACKET;
+         case ']':
+            return CLOSE_BRACKET;
+         case '{':
+            return OPEN_BRACE;
+         case '}':
+            return CLOSE_BRACE;
+
+         case '+':
+            if (token.length() > 1) {
+               if (token[1] == '+')
+                  return PLUS_PLUS;
+               if (token[1] == '=')
+                  return PLUS_EQUAL;
+            }
+            return PLUS;
+         case '-':
+            if (token.length() > 1) {
+               if (token[1] == '-')
+                  return MINUS_MINUS;
+               if (token[1] == '=')
+                  return MINUS_EQUAL;
+            }
+            return MINUS;
+         case '/':
+            if (token.length() > 1)
+               if (token[1] == '=')
+                  return DIVIDE_EQUAL;
+            return DIVIDE;
+         case '=':
+            if (token.length() > 1)
+               if (token[1] == '=')
+                  return EQUAL_EQUAL;
+            return EQUAL;
+
+         default:
+            return INVALID;
+      }
+   }
    std::optional<char> Lexer::_peek(const size_t offset) const {
       if (_index + offset + 1 <= _fileContents.size())
          return _fileContents.at(_index + offset);
