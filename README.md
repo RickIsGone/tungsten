@@ -1,6 +1,6 @@
 # Tungsten
 
-A statically typed compiled language inspired by C++ and Java
+Tungsten is a statically typed compiled language inspired by C++ and Java
 > [!WARNING]  
 > the language is still under development and everything is subject to change
 

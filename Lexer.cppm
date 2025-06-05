@@ -9,6 +9,7 @@ module;
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
 #endif
+
 export module Tungsten.lexer;
 namespace fs = std::filesystem;
 
@@ -23,56 +24,73 @@ namespace tungsten {
       NEW = -4,
       FREE = -5,
       EXTERN = -6,
+      MODULE = -7,
+      EXPORT = -8,
+      IMPORT = -9,
 
       // operators
-      PLUS = -7,
-      PLUS_EQUAL = -8,
-      PLUS_PLUS = -9,
-      MINUS = -10,
-      MINUS_EQUAL = -11,
-      MINUS_MINUS = -12,
-      EQUAL = -13,
-      EQUAL_EQUAL = -14,
-      DIVIDE = -15,
-      DIVIDE_EQUAL = -16,
+      PLUS = -10,
+      PLUS_EQUAL = -11,
+      PLUS_PLUS = -12,
+      MINUS = -13,
+      MINUS_EQUAL = -14,
+      MINUS_MINUS = -15,
+      EQUAL = -16,
+      EQUAL_EQUAL = -17,
+      MULTIPLY = -18,
+      MULTIPLY_EQUAL = -19,
+      DIVIDE = -20,
+      DIVIDE_EQUAL = -21,
+      MODULE_OPERATOR = -22,
+      MODULE_EQUAL = -23,
+      LOGICAL_AND = -24,
+      BITWISE_AND = -25,
+      AND_EQUAL = -26,
+      LOGICAL_OR = -27,
+      BITWISE_OR = -28,
+      OR_EQUAL = -29,
+      BITWISE_XOR = -30,
+      XOR_EQUAL = -31,
+      LOGICAL_NOT = -32,
+      NOT_EQUAL = -33,
 
       // types
-      INT = -17,
-      FLOAT = -18,
-      DOUBLE = -19,
-      BOOL = -20,
-      CHAR = -21,
-      STRING = -22,
-      VOID = -23,
-      UINT = -24,
-      UINT8 = -25,
-      UINT16 = -26,
-      UINT32 = -27,
-      UINT64 = -28,
-      INT8 = -29,
-      INT16 = -30,
-      INT32 = -31,
-      INT64 = -32,
+      INT = -34,
+      FLOAT = -35,
+      DOUBLE = -36,
+      BOOL = -37,
+      CHAR = -38,
+      STRING = -39,
+      VOID = -40,
+      UINT = -41,
+      UINT8 = -42,
+      UINT16 = -43,
+      UINT32 = -44,
+      UINT64 = -45,
+      INT8 = -46,
+      INT16 = -47,
+      INT32 = -48,
+      INT64 = -49,
 
       // literals
-      INT_LITERAL = -33,
-      STRING_LITERAL = -34,
-      IDENTIFIER = -35,
+      INT_LITERAL = -50,
+      STRING_LITERAL = -51,
+      IDENTIFIER = -52,
 
-      OPEN_PAREN = -36,
-      CLOSE_PAREN = -37,
-      OPEN_BRACE = -38,
-      CLOSE_BRACE = -39,
-      OPEN_BRACKET = -40,
-      CLOSE_BRACKET = -41,
+      OPEN_PAREN = -53,
+      CLOSE_PAREN = -54,
+      OPEN_BRACE = -55,
+      CLOSE_BRACE = -56,
+      OPEN_BRACKET = -57,
+      CLOSE_BRACKET = -58,
 
-      SEMICOLON = -42,
-      DOT = -43,
-      COMMA = -44,
+      SEMICOLON = -59,
+      DOT = -60,
+      COMMA = -61,
+      COLON = -62,
 
-      END_OF_FILE = -45
+      END_OF_FILE = -63
    };
-
    export inline std::unordered_map<std::string, TokenType> tokensMap = {
        // keywords
        {"return", TokenType::RETURN},
@@ -80,6 +98,9 @@ namespace tungsten {
        {"new", TokenType::NEW},
        {"free", TokenType::FREE},
        {"extern", TokenType::EXTERN},
+       {"module", TokenType::MODULE},
+       {"export", TokenType::EXPORT},
+       {"import", TokenType::IMPORT},
 
        // types
        {"Int", TokenType::INT},
@@ -101,8 +122,8 @@ namespace tungsten {
 
    export struct Token {
       TokenType type{TokenType::INVALID};
-      size_t length{1};
       size_t position{};
+      size_t length{1};
    };
 
    export class Lexer {
@@ -115,19 +136,19 @@ namespace tungsten {
 
       _NODISCARD std::vector<Token> tokenize();
       void setFileTarget(const fs::path& path);
+      static std::string _fileContents;
 
    private:
       _NODISCARD std::optional<char> _peek(size_t offset = 0) const;
-      _NODISCARD TokenType _determineTokenType(std::string_view token) const;
+      _NODISCARD std::optional<TokenType> _determineFixedSizeTokenType(std::string_view token) const;
       void _consume(const size_t amount = 1) { _index += amount; }
 
       size_t _index{0};
       fs::path _path{};
-      std::string _fileContents{};
    };
 
    /*  ========================================== implementation ==========================================  */
-
+   std::string Lexer::_fileContents{};
    /**
     * bool isPrimitiveType(const std::string& type) {
     *    return type == "Int" || type == "Float" || type == "Double" || type == "Bool" || type == "Char" || type == "String" || type == "Void" || type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64" || type == "Int8" || type == "Int16" || type == "Int64";
@@ -142,9 +163,10 @@ namespace tungsten {
       std::stringstream ss{};
       std::vector<Token> tokens{};
       ss << inputFile.rdbuf();
-      _fileContents = ss.str();
+      Lexer::_fileContents = ss.str();
 
       while (_peek().has_value()) {
+         size_t startingIndex = _index;
          std::string buffer;
          if (std::isspace(static_cast<unsigned char>(_peek().value()))) {
             do {
@@ -152,7 +174,7 @@ namespace tungsten {
                if (!_peek().has_value()) break;
             } while (std::isspace(static_cast<unsigned char>(_peek().value())));
 
-         } else if (std::isalpha(static_cast<unsigned char>(_peek().value()))) {
+         } else if (std::isalpha(static_cast<unsigned char>(_peek().value())) || _peek().value() == '_') {
             // KEYWORDS, TYPES AND IDENTIFIERS
             do {
                buffer.push_back(_peek().value());
@@ -160,10 +182,10 @@ namespace tungsten {
             } while (std::isalnum(static_cast<unsigned char>(_peek().value())) || _peek().value() == '_');
 
             if (tokensMap.contains(buffer)) // looking for known keywords/types
-               tokens.push_back({tokensMap.at(buffer)});
+               tokens.push_back({tokensMap.at(buffer), startingIndex, buffer.length()});
 
             else
-               tokens.push_back({TokenType::IDENTIFIER, buffer});
+               tokens.push_back({TokenType::IDENTIFIER, startingIndex, buffer.length()});
 
             buffer.clear();
 
@@ -173,70 +195,11 @@ namespace tungsten {
                buffer.push_back(_peek().value());
                _consume();
             } while (std::isdigit(static_cast<unsigned char>(_peek().value())));
-            tokens.push_back({TokenType::INT_LITERAL, buffer});
+            tokens.push_back({TokenType::INT_LITERAL, startingIndex, buffer.length()});
             buffer.clear();
 
          } else {
             switch (_peek().value()) {
-               case ';':
-                  tokens.push_back({TokenType::SEMICOLON});
-                  _consume();
-                  break;
-
-               // OPERATORS
-               case '=':
-                  if (_peek(1).has_value()) {
-                     if (_peek(1).value() == '=') {
-                        tokens.push_back({TokenType::EQUAL_EQUAL});
-                        _consume(2);
-                     } else {
-                        tokens.push_back({TokenType::EQUAL});
-                        _consume();
-                     }
-                  } else {
-                     tokens.push_back({TokenType::EQUAL});
-                     _consume();
-                  }
-                  break;
-
-               case '+':
-                  if (_peek(1).has_value()) {
-                     if (_peek(1).value() == '+') {
-                        tokens.push_back({TokenType::PLUS_PLUS});
-                        _consume(2);
-                     } else if (_peek(1).value() == '=') {
-                        tokens.push_back({TokenType::PLUS_EQUAL});
-                        _consume(2);
-                     } else {
-                        tokens.push_back({TokenType::PLUS});
-                        _consume();
-                     }
-                  } else {
-                     tokens.push_back({TokenType::PLUS});
-                     _consume();
-                  }
-                  break;
-
-               case '-':
-                  if (_peek(1).has_value()) {
-                     if (_peek(1).value() == '-') {
-                        tokens.push_back({TokenType::MINUS_MINUS});
-                        _consume(2);
-
-                     } else if (_peek(1).value() == '=') {
-                        tokens.push_back({TokenType::MINUS_EQUAL});
-                        _consume(2);
-                     } else {
-                        tokens.push_back({TokenType::MINUS});
-                        _consume();
-                     }
-                  } else {
-                     tokens.push_back({TokenType::MINUS});
-                     _consume();
-                  }
-                  break;
-
-
                case '/':
                   // COMMENTS
                   if (_peek(1).has_value()) {
@@ -269,7 +232,7 @@ namespace tungsten {
                   // STRING LITERALS
                   if (_peek(1).has_value()) {
                      if (_peek(1).value() == '"') {
-                        tokens.push_back({TokenType::STRING_LITERAL, ""});
+                        tokens.push_back({TokenType::STRING_LITERAL, startingIndex, 2});
                         _consume(2);
                      } else {
                         _consume();
@@ -278,7 +241,7 @@ namespace tungsten {
                            _consume();
                         }
                         if (_peek().has_value() && _peek().value() == '"') {
-                           tokens.push_back({TokenType::STRING_LITERAL, buffer});
+                           tokens.push_back({TokenType::STRING_LITERAL, startingIndex, buffer.length() + 2});
                            _consume();
                            buffer.clear();
                         }
@@ -287,49 +250,21 @@ namespace tungsten {
                      _consume();
                   break;
 
-               case '(':
-                  tokens.push_back({TokenType::OPEN_PAREN});
-                  _consume();
-                  break;
-
-               case ')':
-                  tokens.push_back({TokenType::CLOSE_PAREN});
-                  _consume();
-                  break;
-
-               case '{':
-                  tokens.push_back({TokenType::OPEN_BRACE});
-                  _consume();
-                  break;
-
-               case '}':
-                  tokens.push_back({TokenType::CLOSE_BRACE});
-                  _consume();
-                  break;
-
-               case '[':
-                  tokens.push_back({TokenType::OPEN_BRACKET});
-                  _consume();
-                  break;
-
-               case ']':
-                  tokens.push_back({TokenType::CLOSE_BRACKET});
-                  _consume();
-                  break;
-
-               case '.':
-                  tokens.push_back({TokenType::DOT});
-                  _consume();
-                  break;
-
-               case ',':
-                  tokens.push_back({TokenType::COMMA});
-                  _consume();
-                  break;
-
                default:
-                  tokens.push_back({TokenType::INVALID});
-                  _consume();
+                  TokenType lastValidType = TokenType::INVALID;
+                  for (size_t i = 0; _peek(i).has_value() && !std::isspace(static_cast<unsigned char>(_peek(i).value())) && _peek(i).value() != '\n' && !std::isalnum(static_cast<unsigned char>(_peek(i).value())); ++i) {
+                     buffer.push_back(_peek(i).value());
+                     if (_determineFixedSizeTokenType(buffer).has_value() && _determineFixedSizeTokenType(buffer).value() != TokenType::INVALID) {
+                        lastValidType = _determineFixedSizeTokenType(buffer).value();
+                     } else {
+                        buffer.pop_back();
+                        break;
+                     }
+                  }
+
+                  _consume(buffer.length());
+                  tokens.push_back({lastValidType, startingIndex, buffer.length()});
+
                   break;
             }
          }
@@ -338,41 +273,34 @@ namespace tungsten {
       return tokens;
    }
 
-   TokenType Lexer::_determineTokenType(std::string_view token) const {
+   std::optional<TokenType> Lexer::_determineFixedSizeTokenType(std::string_view token) const {
       using enum TokenType;
+
+      if (token.length() > 2)
+         return std::nullopt;
 
       switch (token[0]) {
          case ';':
-            return SEMICOLON;
+            return token.length() == 1 ? SEMICOLON : INVALID;
          case '.':
-            return DOT;
+            return token.length() == 1 ? DOT : INVALID;
          case ',':
-            return COMMA;
-
-         case '0':
-         case '1':
-         case '2':
-         case '3':
-         case '4':
-         case '5':
-         case '6':
-         case '7':
-         case '8':
-         case '9':
-            return INT_LITERAL;
+            return token.length() == 1 ? COMMA : INVALID;
+         case ':':
+            return token.length() == 1 ? COLON : INVALID;
 
          case '(':
-            return OPEN_PAREN;
+            return token.length() == 1 ? OPEN_PAREN : INVALID;
          case ')':
-            return CLOSE_PAREN;
+            return token.length() == 1 ? CLOSE_PAREN : INVALID;
          case '[':
-            return OPEN_BRACKET;
+            return token.length() == 1 ? OPEN_BRACKET : INVALID;
          case ']':
-            return CLOSE_BRACKET;
+            return token.length() == 1 ? CLOSE_BRACKET : INVALID;
          case '{':
-            return OPEN_BRACE;
+            return token.length() == 1 ? OPEN_BRACE : INVALID;
          case '}':
-            return CLOSE_BRACE;
+            return token.length() == 1 ? CLOSE_BRACE : INVALID;
 
          case '+':
             if (token.length() > 1) {
@@ -390,7 +318,14 @@ namespace tungsten {
                   return MINUS_EQUAL;
             }
             return MINUS;
+         case '*':
+            if (token.length() > 1) {
+               if (token[1] == '=')
+                  return MULTIPLY_EQUAL;
+            }
+            return MULTIPLY;
          case '/':
+            // already handled comments elsewhere
             if (token.length() > 1)
                if (token[1] == '=')
                   return DIVIDE_EQUAL;
@@ -400,14 +335,41 @@ namespace tungsten {
                if (token[1] == '=')
                   return EQUAL_EQUAL;
             return EQUAL;
+         case '^':
+            if (token.length() > 1)
+               if (token[1] == '=')
+                  return XOR_EQUAL;
+            return BITWISE_XOR;
+         case '|':
+            if (token.length() > 1) {
+               if (token[1] == '=')
+                  return OR_EQUAL;
+               if (token[1] == '|')
+                  return LOGICAL_OR;
+            }
+            return BITWISE_OR;
+         case '&':
+            if (token.length() > 1) {
+               if (token[1] == '=')
+                  return AND_EQUAL;
+               if (token[1] == '&')
+                  return LOGICAL_AND;
+            }
+            return BITWISE_AND;
+         case '!':
+            if (token.length() > 1)
+               if (token[1] == '=')
+                  return NOT_EQUAL;
+            return LOGICAL_NOT;
 
          default:
-            return INVALID;
+            return std::nullopt;
       }
    }
+
    std::optional<char> Lexer::_peek(const size_t offset) const {
-      if (_index + offset + 1 <= _fileContents.size())
-         return _fileContents.at(_index + offset);
+      if (_index + offset + 1 <= Lexer::_fileContents.size())
+         return Lexer::_fileContents.at(_index + offset);
 
       return std::nullopt;
    }
