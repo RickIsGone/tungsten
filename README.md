@@ -51,7 +51,7 @@ Ninja in the example below*
 
 ## Variables declaration
 
-Types follow the ***CamelCase*** convention, they are:
+Types follow the ***PascalCase*** convention, they are:
 
 | Type     | Alignment (Bytes) |
 |----------|-------------------|
