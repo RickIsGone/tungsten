@@ -1,8 +1,6 @@
 module;
 
 #include <vector>
-#include <unordered_map>
-#include <string>
 #include <optional>
 #include <ostream>
 #include <iostream>
@@ -12,6 +10,8 @@ module;
 
 export module Tungsten.parser;
 import Tungsten.token;
+import Tungsten.ast;
+
 namespace tungsten {
    export class Parser {
    public:
@@ -32,9 +32,6 @@ namespace tungsten {
    };
 
    //  ========================================== implementation ==========================================
-
-   // will be removed when the llvm backend is implemented
-
 
    void Parser::setTarget(const std::vector<Token>& tokens) {
       _tokens = tokens;

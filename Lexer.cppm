@@ -4,7 +4,6 @@ module;
 #include <filesystem>
 #include <iostream>
 #include <optional>
-#include <unordered_map>
 #include <vector>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
