@@ -11,120 +11,9 @@ module;
 #endif
 
 export module Tungsten.lexer;
+import Tungsten.token;
 namespace fs = std::filesystem;
-
 namespace tungsten {
-
-   export enum class TokenType {
-      INVALID = -1,
-
-      // keywords
-      RETURN = -2,
-      EXIT = -3,
-      NEW = -4,
-      FREE = -5,
-      EXTERN = -6,
-      MODULE = -7,
-      EXPORT = -8,
-      IMPORT = -9,
-
-      // operators
-      PLUS = -10,
-      PLUS_EQUAL = -11,
-      PLUS_PLUS = -12,
-      MINUS = -13,
-      MINUS_EQUAL = -14,
-      MINUS_MINUS = -15,
-      EQUAL = -16,
-      EQUAL_EQUAL = -17,
-      MULTIPLY = -18,
-      MULTIPLY_EQUAL = -19,
-      DIVIDE = -20,
-      DIVIDE_EQUAL = -21,
-      MODULE_OPERATOR = -22,
-      MODULE_EQUAL = -23,
-      LOGICAL_AND = -24,
-      BITWISE_AND = -25,
-      AND_EQUAL = -26,
-      LOGICAL_OR = -27,
-      BITWISE_OR = -28,
-      OR_EQUAL = -29,
-      BITWISE_XOR = -30,
-      XOR_EQUAL = -31,
-      LOGICAL_NOT = -32,
-      NOT_EQUAL = -33,
-
-      // types
-      INT = -34,
-      FLOAT = -35,
-      DOUBLE = -36,
-      BOOL = -37,
-      CHAR = -38,
-      STRING = -39,
-      VOID = -40,
-      UINT = -41,
-      UINT8 = -42,
-      UINT16 = -43,
-      UINT32 = -44,
-      UINT64 = -45,
-      INT8 = -46,
-      INT16 = -47,
-      INT32 = -48,
-      INT64 = -49,
-
-      // literals
-      INT_LITERAL = -50,
-      STRING_LITERAL = -51,
-      IDENTIFIER = -52,
-
-      OPEN_PAREN = -53,
-      CLOSE_PAREN = -54,
-      OPEN_BRACE = -55,
-      CLOSE_BRACE = -56,
-      OPEN_BRACKET = -57,
-      CLOSE_BRACKET = -58,
-
-      SEMICOLON = -59,
-      DOT = -60,
-      COMMA = -61,
-      COLON = -62,
-
-      END_OF_FILE = -63
-   };
-   export inline std::unordered_map<std::string, TokenType> tokensMap = {
-       // keywords
-       {"return", TokenType::RETURN},
-       {"exit", TokenType::EXIT},
-       {"new", TokenType::NEW},
-       {"free", TokenType::FREE},
-       {"extern", TokenType::EXTERN},
-       {"module", TokenType::MODULE},
-       {"export", TokenType::EXPORT},
-       {"import", TokenType::IMPORT},
-
-       // types
-       {"Int", TokenType::INT},
-       {"Float", TokenType::FLOAT},
-       {"Double", TokenType::DOUBLE},
-       {"Bool", TokenType::BOOL},
-       {"Char", TokenType::CHAR},
-       {"String", TokenType::STRING},
-       {"Void", TokenType::VOID},
-       {"Uint", TokenType::UINT},
-       {"Uint8", TokenType::UINT8},
-       {"Uint16", TokenType::UINT16},
-       {"Uint32", TokenType::UINT32},
-       {"Uint64", TokenType::UINT64},
-       {"Int8", TokenType::INT8},
-       {"Int16", TokenType::INT16},
-       {"Int32", TokenType::INT32},
-       {"Int64", TokenType::INT64}};
-
-   export struct Token {
-      TokenType type{TokenType::INVALID};
-      size_t position{};
-      size_t length{1};
-   };
 
    export class Lexer {
    public:
@@ -136,7 +25,6 @@ namespace tungsten {
 
       _NODISCARD std::vector<Token> tokenize();
       void setFileTarget(const fs::path& path);
-      static std::string _fileContents;
 
    private:
       _NODISCARD std::optional<char> _peek(size_t offset = 0) const;
@@ -148,22 +36,13 @@ namespace tungsten {
    };
 
    /*  ========================================== implementation ==========================================  */
-   std::string Lexer::_fileContents{};
-   /**
-    * bool isPrimitiveType(const std::string& type) {
-    *    return type == "Int" || type == "Float" || type == "Double" || type == "Bool" || type == "Char" || type == "String" || type == "Void" || type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64" || type == "Int8" || type == "Int16" || type == "Int64";
-    * }
-    * bool isKeyword(const std::string& keyword) {
-    *    return keyword == "return" || keyword == "exit" || keyword == "new" || keyword == "free" || keyword == "extern";
-    * }
-    */
 
    std::vector<Token> Lexer::tokenize() {
       std::ifstream inputFile{_path};
       std::stringstream ss{};
       std::vector<Token> tokens{};
       ss << inputFile.rdbuf();
-      Lexer::_fileContents = ss.str();
+      _fileContents = ss.str();
 
       while (_peek().has_value()) {
          size_t startingIndex = _index;
@@ -301,6 +180,8 @@ namespace tungsten {
             return token.length() == 1 ? OPEN_BRACE : INVALID;
          case '}':
             return token.length() == 1 ? CLOSE_BRACE : INVALID;
+         case '?':
+            return token.length() == 1 ? TERNARY : INVALID;
 
          case '+':
             if (token.length() > 1) {
@@ -361,15 +242,20 @@ namespace tungsten {
                if (token[1] == '=')
                   return NOT_EQUAL;
             return LOGICAL_NOT;
-
+         case '%':
+            if (token.length() > 1) {
+               if (token[1] == '=')
+                  return MODULE_EQUAL;
+            }
+            return MODULE_OPERATOR;
          default:
             return std::nullopt;
       }
    }
 
    std::optional<char> Lexer::_peek(const size_t offset) const {
-      if (_index + offset + 1 <= Lexer::_fileContents.size())
-         return Lexer::_fileContents.at(_index + offset);
+      if (_index + offset + 1 <= _fileContents.size())
+         return _fileContents.at(_index + offset);
 
       return std::nullopt;
    }

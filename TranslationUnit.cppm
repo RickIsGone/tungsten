@@ -31,5 +31,4 @@ export namespace tungsten {
       _parser.parse();
    }
 
-
 } // namespace tungsten
