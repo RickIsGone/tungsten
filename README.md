@@ -45,8 +45,7 @@ after doing this follow the instruction for the targeted OS
 <ins> **2. Compiling the project:** </ins>
 
 ```bash
-mkdir build
-cmake -S . -B build
+cmake -S . -B build 
 cmake --build build --config Release
 ```
 
@@ -60,7 +59,6 @@ cmake --build build --config Release
 Ninja in the example below*
 
 ```bash
-mkdir build
 cmake -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++
 cmake --build build --config Release
 ```
@@ -154,8 +152,7 @@ Or you can use a C++ like approach and use a pointer:
 Int* myFunction() {
     Int* array = new Int[3]{2, 4, 7};
     return array;
-}
-```
+}```
 
 ### Main Function
 
