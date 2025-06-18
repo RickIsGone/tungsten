@@ -59,6 +59,7 @@ namespace tungsten {
 
    void Parser::parse() {
       std::cout << "Tokens: {";
+
       for (int i = 1; const Token& token : _tokens) {
          std::cout << "{" << tokenTypeNames.at(token.type);
          if (token.type == TokenType::INT_LITERAL || token.type == TokenType::STRING_LITERAL || token.type == TokenType::IDENTIFIER || token.type == TokenType::INVALID)

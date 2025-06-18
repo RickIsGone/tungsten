@@ -8,9 +8,9 @@ module;
 export module Tungsten.utils;
 
 namespace Colors {
-   constexpr const char* Red = "\x1B[91m";
-   constexpr const char* White = "\x1B[97m";
-   constexpr const char* Reset = "\x1B[0m";
+   inline constexpr const char* Red = "\x1B[91m";
+   inline constexpr const char* White = "\x1B[97m";
+   inline constexpr const char* Reset = "\x1B[0m";
 } // namespace Colors
 
 export inline std::stringstream errors{};
