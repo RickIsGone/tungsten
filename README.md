@@ -1,26 +1,28 @@
 # Tungsten
 
 Tungsten is a statically typed compiled language inspired by C++ and Java
-> [!WARNING]  
-> the language is still under development and everything is subject to change
 
-> [!EXAMPLE]  
-> This is an example of how a program which prints the fibbonacci sequence up to a given number is made:
->
-> ```java
-> imoprt stdio;
-> Void fibbonacci(Uint32 num) {
->    if (n <= 1) return n;
->    return fibonacci(n - 1) + fibonacci(n - 2);
-> }
-> 
-> Int main(String[] args) {
->    for (Uint8 i = 0; i < 10; ++i) {
->       print("${}, ", fibonacci(i));
->    }
->    return 0;
-> }
-> ```
+## Example
+
+Below is a snippet of code which shows some of the basic functionalities of tungsten
+
+```java
+import stdio;
+Void fibbonacci(Uint32 num) {
+    if (num <= 1) return num;
+    return fibonacci(num - 1) + fibonacci(num - 2);
+}
+
+Int main(String[] args) {
+    for (Uint8 i = 0; i < 10; ++i) {
+        print("${}, ", fibonacci(i));
+    }
+    return 0;
+}
+```
+
+> [!WARNING]
+> the language is still under development, and everything is subject to change
 
 # Building
 
@@ -29,41 +31,41 @@ Tungsten is a statically typed compiled language inspired by C++ and Java
 - cmake 3.28 or newer
 - git
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > this project uses C++ modules, which are currently not supported by all compilers and CMake generators, so make sure
-> to use both a compiler and a CMake generator that support modules
+> to use both a compiler and a CMake generator that supports modules
 
 <ins> **1. Cloning the repo:** </ins>
 
-Start by cloning the repo with `git clone https://github.com/rickisgone/tungsten`  
+Start by cloning the repo with `git clone https://github.com/rickisgone/tungsten`
 after doing this follow the instruction for the targeted OS
 
 <details><summary><big>WINDOWS</big></summary><p>
 
-  <ins> **2. Compiling the project:** </ins>  
+<ins> **2. Compiling the project:** </ins>
 
-  ```bash
-  mkdir build
-  cmake -S . -B build
-  cmake --build build --config Release
-  ```
+```bash
+mkdir build
+cmake -S . -B build
+cmake --build build --config Release
+```
 
 </details>
 
-<details><summary><big>LINUX</big></summary><p>  
+<details><summary><big>LINUX</big></summary><p>
 
-   <ins> **2. Compiling the project:** </ins>
+<ins> **2. Compiling the project:** </ins>
 
 *the default compiler and CMake generator on linux (gcc and Make) don't support modules, so I'll be using Clang and
 Ninja in the example below*
 
-  ```bash
-  mkdir build
-  cmake -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++
-  cmake --build build --config Release
-  ```
+```bash
+mkdir build
+cmake -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++
+cmake --build build --config Release
+```
 
-</details><p>  
+</details><p>
 
 # Syntax
 
@@ -98,7 +100,7 @@ Int myVariable = 247;
 ### Heap allocation
 
 ```c++
-Int* myPointer = new Int{247}; 
+Int* myPointer = new Int{247};
 ```
 
 To free the pointer:
@@ -137,7 +139,7 @@ Int myFunction() {
 }
 ```
 
-Like in java you can return arrays by doing:
+Like in Java, you can return arrays by doing:
 
 ```c++
 Int[] myfunction() {
@@ -157,7 +159,7 @@ Int* myFunction() {
 
 ### Main Function
 
-The `main` function can return either `Void` or `Int`. Command line arguments are passed as a `String` array.  
+The `main` function can return either `Void` or `Int`. Command line arguments are passed as a `String` array.
 If the function is declared as `Int` and no return value is provided, `0` will be returned by default.
 
 ```c++
@@ -179,3 +181,4 @@ Int main() {
     return 0;
 }
 ```
+

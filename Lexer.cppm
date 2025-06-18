@@ -23,7 +23,7 @@ namespace tungsten {
       Lexer operator=(const Lexer&) = delete;
 
       _NODISCARD std::vector<Token> tokenize();
-      _NODISCARD const std::string& getRaw() const { return _raw; }
+      _NODISCARD const std::string& raw() const { return _raw; }
       void setFileTarget(const fs::path& path);
 
    private:
