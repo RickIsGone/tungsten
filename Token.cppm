@@ -7,7 +7,6 @@ export module Tungsten.token;
 
 
 namespace tungsten {
-   export std::string _fileContents{};
 
    export enum class TokenType {
       INVALID = -1,
@@ -193,19 +192,5 @@ namespace tungsten {
        {TokenType::COLON, "COLON"},
 
        {TokenType::END_OF_FILE, "END_OF_FILE"}};
-
-   export std::ostream& operator<<(std::ostream& out, const std::vector<Token>& tokens) {
-      out << "Tokens: {";
-
-      for (int i = 1; const Token& token : tokens) {
-         out << "{" << tokenTypeNames.at(token.type);
-         if (token.type == TokenType::INT_LITERAL || token.type == TokenType::STRING_LITERAL || token.type == TokenType::IDENTIFIER || token.type == TokenType::INVALID)
-            out << ", " << _fileContents.substr(token.position, token.length);
-
-         out << (i++ < tokens.size() ? "},\n\t " : "}");
-      }
-      out << "}\n";
-      return out;
-   }
 
 } // namespace tungsten

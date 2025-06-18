@@ -18,13 +18,12 @@ export namespace tungsten {
    };
 
    // expression for numbers
-   template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T>>>
    class NumberExpressionAST : public ExpressionAST {
    public:
-      NumberExpressionAST(T value) : _value{value} {}
+      NumberExpressionAST(double value) : _value{value} {}
 
    private:
-      T _value{};
+      double _value{};
    };
 
    // expression for variables
@@ -75,12 +74,13 @@ export namespace tungsten {
    //  prototype for function declarations
    class FunctionPrototypeAST {
    public:
-      FunctionPrototypeAST(const std::string& name, std::vector<std::unique_ptr<ExpressionAST>> args)
-          : _name{name}, _args{std::move(args)} {}
+      FunctionPrototypeAST(const std::string& type, const std::string& name, std::vector<std::unique_ptr<ExpressionAST>> args)
+          : _type{type}, _name{name}, _args{std::move(args)} {}
 
       _NODISCARD const std::string& name() const { return _name; }
 
    private:
+      std::string _type;
       std::string _name;
       std::vector<std::unique_ptr<ExpressionAST>> _args;
    };

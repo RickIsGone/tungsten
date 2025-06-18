@@ -4,6 +4,24 @@ Tungsten is a statically typed compiled language inspired by C++ and Java
 > [!WARNING]  
 > the language is still under development and everything is subject to change
 
+> [!EXAMPLE]  
+> This is an example of how a program which prints the fibbonacci sequence up to a given number is made:
+>
+> ```java
+> imoprt stdio;
+> Void fibbonacci(Uint32 num) {
+>    if (n <= 1) return n;
+>    return fibonacci(n - 1) + fibonacci(n - 2);
+> }
+> 
+> Int main(String[] args) {
+>    for (Uint8 i = 0; i < 10; ++i) {
+>       print("${}, ", fibonacci(i));
+>    }
+>    return 0;
+> }
+> ```
+
 # Building
 
 ## Prerequisites

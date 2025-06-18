@@ -23,6 +23,7 @@ namespace tungsten {
       Lexer operator=(const Lexer&) = delete;
 
       _NODISCARD std::vector<Token> tokenize();
+      _NODISCARD const std::string& getRaw() const { return _raw; }
       void setFileTarget(const fs::path& path);
 
    private:
@@ -32,6 +33,7 @@ namespace tungsten {
 
       size_t _index{0};
       fs::path _path{};
+      std::string _raw{};
    };
 
    /*  ========================================== implementation ==========================================  */
@@ -41,7 +43,7 @@ namespace tungsten {
       std::stringstream ss{};
       std::vector<Token> tokens{};
       ss << inputFile.rdbuf();
-      _fileContents = ss.str();
+      _raw = ss.str();
 
       while (_peek().has_value()) {
          size_t startingIndex = _index;
@@ -130,11 +132,14 @@ namespace tungsten {
 
                default:
                   TokenType lastValidType = TokenType::INVALID;
-                  for (size_t i = 0; _peek(i).has_value() && !std::isspace(static_cast<unsigned char>(_peek(i).value())) && _peek(i).value() != '\n' && !std::isalnum(static_cast<unsigned char>(_peek(i).value())); ++i) {
+                  for (size_t i = 0; _peek(i).has_value() && !std::isspace(static_cast<unsigned char>(_peek(i).value())) && _peek(i).value() != '\n' && !std::isalnum(static_cast<unsigned char>(_peek(i).value())) && _peek(i).value() != '_'; ++i) {
                      buffer.push_back(_peek(i).value());
                      if (_determineFixedSizeTokenType(buffer).has_value() && _determineFixedSizeTokenType(buffer).value() != TokenType::INVALID) {
                         lastValidType = _determineFixedSizeTokenType(buffer).value();
                      } else {
+                        if (buffer.length() == 1) {
+                           break;
+                        }
                         buffer.pop_back();
                         break;
                      }
@@ -253,8 +258,8 @@ namespace tungsten {
    }
 
    std::optional<char> Lexer::_peek(const size_t offset) const {
-      if (_index + offset + 1 <= _fileContents.size())
-         return _fileContents.at(_index + offset);
+      if (_index + offset + 1 <= _raw.size())
+         return _raw.at(_index + offset);
 
       return std::nullopt;
    }
