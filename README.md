@@ -1,6 +1,7 @@
-# Tungsten
+# Tungsten programming language
 
-Tungsten is a statically typed compiled language inspired by C++ and Java
+## Introduction
+*Tungsten* is a statically-typed multi-paradigm compiled language made with the LLVM framework and inspired by C++ and Java
 
 ## Example
 
