@@ -159,7 +159,7 @@ namespace tungsten {
    std::optional<TokenType> Lexer::_determineFixedSizeTokenType(std::string_view token) const {
       using enum TokenType;
 
-      if (token.length() > 2)
+      if (token.length() > 2 && token[0] != '<' && token[0] != '>')
          return std::nullopt;
 
       switch (token[0]) {
@@ -187,12 +187,39 @@ namespace tungsten {
          case '?':
             return token.length() == 1 ? TERNARY : INVALID;
 
+         case '>':
+            if (token.length() > 1) {
+               if (token[1] == '=')
+                  return GREATER_EQUAL;
+               if (token[1] == '>') {
+                  if (token.size() == 3 && token[2] == '=')
+                     return SHIFT_RIGHT_EQUAL;
+                  if (token.size() == 2)
+                     return SHIFT_RIGHT;
+               }
+               return INVALID;
+            }
+            return GREATER;
+         case '<':
+            if (token.length() > 1) {
+               if (token[1] == '=')
+                  return LESS_EQUAL;
+               if (token[1] == '>') {
+                  if (token.size() == 3 && token[2] == '=')
+                     return SHIFT_LEFT_EQUAL;
+                  if (token.size() == 2)
+                     return SHIFT_LEFT;
+               }
+               return INVALID;
+            }
+            return LESS;
          case '+':
             if (token.length() > 1) {
                if (token[1] == '+')
                   return PLUS_PLUS;
                if (token[1] == '=')
                   return PLUS_EQUAL;
+               return INVALID;
             }
             return PLUS;
          case '-':
@@ -201,29 +228,37 @@ namespace tungsten {
                   return MINUS_MINUS;
                if (token[1] == '=')
                   return MINUS_EQUAL;
+               return INVALID;
             }
             return MINUS;
          case '*':
             if (token.length() > 1) {
                if (token[1] == '=')
                   return MULTIPLY_EQUAL;
+               return INVALID;
             }
             return MULTIPLY;
          case '/':
             // already handled comments elsewhere
-            if (token.length() > 1)
+            if (token.length() > 1) {
                if (token[1] == '=')
                   return DIVIDE_EQUAL;
+               return INVALID;
+            }
             return DIVIDE;
          case '=':
-            if (token.length() > 1)
+            if (token.length() > 1) {
                if (token[1] == '=')
                   return EQUAL_EQUAL;
+               return INVALID;
+            }
             return EQUAL;
          case '^':
-            if (token.length() > 1)
+            if (token.length() > 1) {
                if (token[1] == '=')
                   return XOR_EQUAL;
+               return INVALID;
+            }
             return BITWISE_XOR;
          case '|':
             if (token.length() > 1) {
@@ -231,6 +266,7 @@ namespace tungsten {
                   return OR_EQUAL;
                if (token[1] == '|')
                   return LOGICAL_OR;
+               return INVALID;
             }
             return BITWISE_OR;
          case '&':
@@ -239,17 +275,21 @@ namespace tungsten {
                   return AND_EQUAL;
                if (token[1] == '&')
                   return LOGICAL_AND;
+               return INVALID;
             }
             return BITWISE_AND;
          case '!':
-            if (token.length() > 1)
+            if (token.length() > 1) {
                if (token[1] == '=')
                   return NOT_EQUAL;
+               return INVALID;
+            }
             return LOGICAL_NOT;
          case '%':
             if (token.length() > 1) {
                if (token[1] == '=')
                   return MODULE_EQUAL;
+               return INVALID;
             }
             return MODULE_OPERATOR;
          default:

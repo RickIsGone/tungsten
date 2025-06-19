@@ -8,7 +8,7 @@ Below is a snippet of code which shows some of the basic functionalities of tung
 
 ```java
 import stdio;
-Void fibbonacci(Uint32 num) {
+Void fibbonacci(Uint8 num) {
     if (num <= 1) return num;
     return fibonacci(num - 1) + fibonacci(num - 2);
 }
@@ -71,23 +71,24 @@ cmake --build build --config Release
 
 Types follow the ***PascalCase*** convention, they are:
 
-| Type     | Alignment (Bytes) |
-|----------|-------------------|
-| `Void`   | N/A               |
-| `Int`    | 4                 |
-| `Float`  | 4                 |
-| `Double` | 8                 |
-| `Char`   | 2                 |
-| `Bool`   | 1                 |
-| `String` | N/A               |
-| `Int8`   | 1                 |
-| `Int16`  | 2                 |
-| `Int32`  | 4                 |
-| `Int64`  | 8                 |
-| `Uint8`  | 1                 |
-| `Uint16` | 2                 |
-| `Uint32` | 4                 |
-| `Uint64` | 8                 |
+| Type      | Alignment (Bytes) |
+|-----------|-------------------|
+| `Void`    | N/A               |
+| `Int`     | 4                 |
+| `Uint`    | 4                 |
+| `Float`   | 4                 |
+| `Double`  | 8                 |
+| `Char`    | 2                 |
+| `Bool`    | 1                 |
+| `String`  | N/A               |
+| `Int8`    | 1                 |
+| `Int16`   | 2                 |
+| `Int32`   | 4                 |
+| `Int64`   | 8                 |
+| `Uint8`   | 1                 |
+| `Uint16`  | 2                 |
+| `Uint32`  | 4                 |
+| `Uint64`  | 8                 |
 
 ### Stack allocation
 
