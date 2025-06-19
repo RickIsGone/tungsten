@@ -9,7 +9,7 @@ Below is a snippet of code which shows some of the basic functionalities of tung
 
 ```java
 import stdio;
-Uint32 fibonacci(Uint32 num) {
+Uint fibonacci(Uint num) {
     if (num <= 1) return num;
     return fibonacci(num - 1) + fibonacci(num - 2);
 }
