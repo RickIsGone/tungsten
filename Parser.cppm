@@ -62,14 +62,14 @@ namespace tungsten {
       std::cout << "Tokens: {";
       for (int i = 1; const Token& token : _tokens) {
          std::cout << "{" << tokenTypeNames.at(token.type);
-         if (token.type == TokenType::INT_LITERAL || token.type == TokenType::STRING_LITERAL || token.type == TokenType::IDENTIFIER || token.type == TokenType::INVALID)
+         if (token.type == TokenType::IntLiteral || token.type == TokenType::StringLiteral || token.type == TokenType::Identifier || token.type == TokenType::Invalid)
             std::cout << ", " << _fileContents.substr(token.position, token.length);
 
          std::cout << (i++ < _tokens.size() ? "},\n\t " : "}");
       }
       std::cout << "}\n";
 
-      while (_peek().type != TokenType::END_OF_FILE) {
+      while (_peek().type != TokenType::EndOFFile) {
          // TODO
          _consume();
       }
@@ -89,9 +89,9 @@ namespace tungsten {
    }
    std::unique_ptr<ExpressionAST> Parser::_parsePrimaryExpression() {
       switch (_peek().type) {
-         case TokenType::IDENTIFIER:
+         case TokenType::Identifier:
             return _parseIdentifierExpression();
-         case TokenType::INT_LITERAL:
+         case TokenType::IntLiteral:
             return _parseNumberExpression();
          default:
             return LogError("unknown token when expecting an expression");

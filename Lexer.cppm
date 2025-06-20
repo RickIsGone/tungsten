@@ -65,7 +65,7 @@ namespace tungsten {
                tokens.push_back({tokensMap.at(buffer), startingIndex, buffer.length()});
 
             else
-               tokens.push_back({TokenType::IDENTIFIER, startingIndex, buffer.length()});
+               tokens.push_back({TokenType::Identifier, startingIndex, buffer.length()});
 
             buffer.clear();
 
@@ -75,7 +75,7 @@ namespace tungsten {
                buffer.push_back(_peek().value());
                _consume();
             } while (std::isdigit(static_cast<unsigned char>(_peek().value())));
-            tokens.push_back({TokenType::INT_LITERAL, startingIndex, buffer.length()});
+            tokens.push_back({TokenType::IntLiteral, startingIndex, buffer.length()});
             buffer.clear();
 
          } else {
@@ -96,14 +96,14 @@ namespace tungsten {
                         }
                         // OPERATORS
                      } else if (_peek(1).value() == '=') {
-                        tokens.push_back({TokenType::DIVIDE_EQUAL});
+                        tokens.push_back({TokenType::DivideEqual});
                         _consume(2);
                      } else {
-                        tokens.push_back({TokenType::DIVIDE});
+                        tokens.push_back({TokenType::Divide});
                         _consume();
                      }
                   } else {
-                     tokens.push_back({TokenType::DIVIDE});
+                     tokens.push_back({TokenType::Divide});
                      _consume();
                   }
                   break;
@@ -112,7 +112,7 @@ namespace tungsten {
                   // STRING LITERALS
                   if (_peek(1).has_value()) {
                      if (_peek(1).value() == '"') {
-                        tokens.push_back({TokenType::STRING_LITERAL, startingIndex, 2});
+                        tokens.push_back({TokenType::StringLiteral, startingIndex, 2});
                         _consume(2);
                      } else {
                         _consume();
@@ -121,7 +121,7 @@ namespace tungsten {
                            _consume();
                         }
                         if (_peek().has_value() && _peek().value() == '"') {
-                           tokens.push_back({TokenType::STRING_LITERAL, startingIndex, buffer.length() + 2});
+                           tokens.push_back({TokenType::StringLiteral, startingIndex, buffer.length() + 2});
                            _consume();
                            buffer.clear();
                         }
@@ -131,10 +131,10 @@ namespace tungsten {
                   break;
 
                default:
-                  TokenType lastValidType = TokenType::INVALID;
+                  TokenType lastValidType = TokenType::Invalid;
                   for (size_t i = 0; _peek(i).has_value() && !std::isspace(static_cast<unsigned char>(_peek(i).value())) && _peek(i).value() != '\n' && !std::isalnum(static_cast<unsigned char>(_peek(i).value())) && _peek(i).value() != '_'; ++i) {
                      buffer.push_back(_peek(i).value());
-                     if (_determineFixedSizeTokenType(buffer).has_value() && _determineFixedSizeTokenType(buffer).value() != TokenType::INVALID) {
+                     if (_determineFixedSizeTokenType(buffer).has_value() && _determineFixedSizeTokenType(buffer).value() != TokenType::Invalid) {
                         lastValidType = _determineFixedSizeTokenType(buffer).value();
                      } else {
                         if (buffer.length() == 1) {
@@ -152,7 +152,7 @@ namespace tungsten {
             }
          }
       }
-      tokens.push_back({TokenType::END_OF_FILE});
+      tokens.push_back({TokenType::EndOFFile});
       return tokens;
    }
 
@@ -164,134 +164,134 @@ namespace tungsten {
 
       switch (token[0]) {
          case ';':
-            return token.length() == 1 ? SEMICOLON : INVALID;
+            return token.length() == 1 ? Semicolon : Invalid;
          case '.':
-            return token.length() == 1 ? DOT : INVALID;
+            return token.length() == 1 ? Dot : Invalid;
          case ',':
-            return token.length() == 1 ? COMMA : INVALID;
+            return token.length() == 1 ? Comma : Invalid;
          case ':':
-            return token.length() == 1 ? COLON : INVALID;
+            return token.length() == 1 ? Colon : Invalid;
 
          case '(':
-            return token.length() == 1 ? OPEN_PAREN : INVALID;
+            return token.length() == 1 ? OpenParen : Invalid;
          case ')':
-            return token.length() == 1 ? CLOSE_PAREN : INVALID;
+            return token.length() == 1 ? CloseParen : Invalid;
          case '[':
-            return token.length() == 1 ? OPEN_BRACKET : INVALID;
+            return token.length() == 1 ? OpenBracket : Invalid;
          case ']':
-            return token.length() == 1 ? CLOSE_BRACKET : INVALID;
+            return token.length() == 1 ? CloseBracket : Invalid;
          case '{':
-            return token.length() == 1 ? OPEN_BRACE : INVALID;
+            return token.length() == 1 ? OpenBrace : Invalid;
          case '}':
-            return token.length() == 1 ? CLOSE_BRACE : INVALID;
+            return token.length() == 1 ? CloseBrace : Invalid;
          case '?':
-            return token.length() == 1 ? TERNARY : INVALID;
+            return token.length() == 1 ? Ternary : Invalid;
 
          case '>':
             if (token.length() > 1) {
                if (token[1] == '=')
-                  return GREATER_EQUAL;
+                  return GreaterEqual;
                if (token[1] == '>') {
                   if (token.size() == 3 && token[2] == '=')
-                     return SHIFT_RIGHT_EQUAL;
+                     return ShiftRightEqual;
                   if (token.size() == 2)
-                     return SHIFT_RIGHT;
+                     return ShiftRight;
                }
-               return INVALID;
+               return Invalid;
             }
-            return GREATER;
+            return Greater;
          case '<':
             if (token.length() > 1) {
                if (token[1] == '=')
-                  return LESS_EQUAL;
+                  return LessEqual;
                if (token[1] == '>') {
                   if (token.size() == 3 && token[2] == '=')
-                     return SHIFT_LEFT_EQUAL;
+                     return ShiftLeftEqual;
                   if (token.size() == 2)
-                     return SHIFT_LEFT;
+                     return ShiftLeft;
                }
-               return INVALID;
+               return Invalid;
             }
-            return LESS;
+            return Less;
          case '+':
             if (token.length() > 1) {
                if (token[1] == '+')
-                  return PLUS_PLUS;
+                  return PlusPlus;
                if (token[1] == '=')
-                  return PLUS_EQUAL;
-               return INVALID;
+                  return PlusEqual;
+               return Invalid;
             }
-            return PLUS;
+            return Plus;
          case '-':
             if (token.length() > 1) {
                if (token[1] == '-')
-                  return MINUS_MINUS;
+                  return MinusMinus;
                if (token[1] == '=')
-                  return MINUS_EQUAL;
-               return INVALID;
+                  return MinusEqual;
+               return Invalid;
             }
-            return MINUS;
+            return Minus;
          case '*':
             if (token.length() > 1) {
                if (token[1] == '=')
-                  return MULTIPLY_EQUAL;
-               return INVALID;
+                  return MultiplyEqual;
+               return Invalid;
             }
-            return MULTIPLY;
+            return Multiply;
          case '/':
             // already handled comments elsewhere
             if (token.length() > 1) {
                if (token[1] == '=')
-                  return DIVIDE_EQUAL;
-               return INVALID;
+                  return DivideEqual;
+               return Invalid;
             }
-            return DIVIDE;
+            return Divide;
          case '=':
             if (token.length() > 1) {
                if (token[1] == '=')
-                  return EQUAL_EQUAL;
-               return INVALID;
+                  return EqualEqual;
+               return Invalid;
             }
-            return EQUAL;
+            return Equal;
          case '^':
             if (token.length() > 1) {
                if (token[1] == '=')
-                  return XOR_EQUAL;
-               return INVALID;
+                  return XorEqual;
+               return Invalid;
             }
-            return BITWISE_XOR;
+            return BitwiseXor;
          case '|':
             if (token.length() > 1) {
                if (token[1] == '=')
-                  return OR_EQUAL;
+                  return OrEqual;
                if (token[1] == '|')
-                  return LOGICAL_OR;
-               return INVALID;
+                  return LogicalOr;
+               return Invalid;
             }
-            return BITWISE_OR;
+            return BitwiseOr;
          case '&':
             if (token.length() > 1) {
                if (token[1] == '=')
-                  return AND_EQUAL;
+                  return AndEqual;
                if (token[1] == '&')
-                  return LOGICAL_AND;
-               return INVALID;
+                  return LogicalAnd;
+               return Invalid;
             }
-            return BITWISE_AND;
+            return BitwiseAnd;
          case '!':
             if (token.length() > 1) {
                if (token[1] == '=')
-                  return NOT_EQUAL;
-               return INVALID;
+                  return NotEqual;
+               return Invalid;
             }
-            return LOGICAL_NOT;
+            return LogicalNot;
          case '%':
             if (token.length() > 1) {
                if (token[1] == '=')
-                  return MODULE_EQUAL;
-               return INVALID;
+                  return ModuleEqual;
+               return Invalid;
             }
-            return MODULE_OPERATOR;
+            return ModuleOperator;
          default:
             return std::nullopt;
       }
