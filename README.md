@@ -1,7 +1,9 @@
 # Tungsten programming language
 
 ## Introduction
-*Tungsten* is a statically-typed multi-paradigm compiled language made with the LLVM framework and inspired by C++ and Java
+
+*Tungsten* is a statically-typed multi-paradigm compiled language made with the LLVM framework and inspired by C++ and
+Java
 
 ## Example
 
@@ -24,6 +26,11 @@ Int main(String[] args) {
 
 > [!WARNING]
 > the language is still under development, and everything is subject to change
+
+# Trying the language
+
+if you want to try *Tungsten* before installing the compiler feel free to do so on
+the [online tungsten compiler](https://rickisgone.github.io/tungsten-sandbox/)
 
 # Building
 
@@ -72,24 +79,24 @@ cmake --build build --config Release
 
 Types follow the ***PascalCase*** convention, they are:
 
-| Type      | Alignment (Bytes) |
-|-----------|-------------------|
-| `Void`    | N/A               |
-| `Int`     | 4                 |
-| `Uint`    | 4                 |
-| `Float`   | 4                 |
-| `Double`  | 8                 |
-| `Char`    | 2                 |
-| `Bool`    | 1                 |
-| `String`  | N/A               |
-| `Int8`    | 1                 |
-| `Int16`   | 2                 |
-| `Int32`   | 4                 |
-| `Int64`   | 8                 |
-| `Uint8`   | 1                 |
-| `Uint16`  | 2                 |
-| `Uint32`  | 4                 |
-| `Uint64`  | 8                 |
+| Type     | Alignment (Bytes) |
+|----------|-------------------|
+| `Void`   | N/A               |
+| `Int`    | 4                 |
+| `Uint`   | 4                 |
+| `Float`  | 4                 |
+| `Double` | 8                 |
+| `Char`   | 2                 |
+| `Bool`   | 1                 |
+| `String` | N/A               |
+| `Int8`   | 1                 |
+| `Int16`  | 2                 |
+| `Int32`  | 4                 |
+| `Int64`  | 8                 |
+| `Uint8`  | 1                 |
+| `Uint16` | 2                 |
+| `Uint32` | 4                 |
+| `Uint64` | 8                 |
 
 ### Stack allocation
 
@@ -181,4 +188,8 @@ Int main() {
     return 0;
 }
 ```
+
+# License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
 

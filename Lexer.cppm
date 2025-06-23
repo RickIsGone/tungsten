@@ -5,6 +5,7 @@ module;
 #include <iostream>
 #include <optional>
 #include <vector>
+#include <sstream>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
 #endif
