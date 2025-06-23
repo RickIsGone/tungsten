@@ -53,14 +53,14 @@ namespace tungsten {
             do {
                _consume();
                if (!_peek().has_value()) break;
-            } while (std::isspace(static_cast<unsigned char>(_peek().value())));
+            } while (_peek().has_value() && std::isspace(static_cast<unsigned char>(_peek().value())));
 
          } else if (std::isalpha(static_cast<unsigned char>(_peek().value())) || _peek().value() == '_') {
             // KEYWORDS, TYPES AND IDENTIFIERS
             do {
                buffer.push_back(_peek().value());
                _consume();
-            } while (std::isalnum(static_cast<unsigned char>(_peek().value())) || _peek().value() == '_');
+            } while (_peek().has_value() && (std::isalnum(static_cast<unsigned char>(_peek().value())) || _peek().value() == '_'));
 
             if (tokensMap.contains(buffer)) // looking for known keywords/types
                tokens.push_back({tokensMap.at(buffer), startingIndex, buffer.length()});
@@ -75,7 +75,7 @@ namespace tungsten {
             do {
                buffer.push_back(_peek().value());
                _consume();
-            } while (std::isdigit(static_cast<unsigned char>(_peek().value())));
+            } while (_peek().has_value() && std::isdigit(static_cast<unsigned char>(_peek().value())));
             tokens.push_back({TokenType::IntLiteral, startingIndex, buffer.length()});
             buffer.clear();
 

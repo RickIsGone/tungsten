@@ -5,7 +5,6 @@ module;
 
 export module Tungsten.token;
 
-
 namespace tungsten {
 
    export enum class TokenType {
@@ -22,6 +21,16 @@ namespace tungsten {
       Import,
       True,
       False,
+      If,
+      Else,
+      For,
+      While,
+      Do,
+      Switch,
+      Case,
+      Default,
+      Break,
+      Continue,
 
       // operators
       Plus,
@@ -96,6 +105,7 @@ namespace tungsten {
 
       EndOFFile
    };
+
    export inline std::unordered_map<std::string, TokenType> tokensMap = {
        // keywords
        {"return", TokenType::Return},
@@ -108,6 +118,16 @@ namespace tungsten {
        {"import", TokenType::Import},
        {"true", TokenType::True},
        {"false", TokenType::False},
+       {"if", TokenType::If},
+       {"else", TokenType::Else},
+       {"for", TokenType::For},
+       {"while", TokenType::While},
+       {"do", TokenType::Do},
+       {"switch", TokenType::Switch},
+       {"case", TokenType::Case},
+       {"default", TokenType::Default},
+       {"break", TokenType::Break},
+       {"continue", TokenType::Continue},
 
        // types
        {"Auto", TokenType::Auto},
@@ -137,6 +157,7 @@ namespace tungsten {
    export inline std::unordered_map<TokenType, std::string> tokenTypeNames = {
        {TokenType::Invalid, "Invalid"},
 
+       // keywords
        {TokenType::Return, "Return"},
        {TokenType::Exit, "Exit"},
        {TokenType::New, "New"},
@@ -145,7 +166,20 @@ namespace tungsten {
        {TokenType::Module, "Module"},
        {TokenType::Export, "Export"},
        {TokenType::Import, "Import"},
+       {TokenType::True, "True"},
+       {TokenType::False, "False"},
+       {TokenType::If, "If"},
+       {TokenType::Else, "Else"},
+       {TokenType::For, "For"},
+       {TokenType::While, "While"},
+       {TokenType::Do, "Do"},
+       {TokenType::Switch, "Switch"},
+       {TokenType::Case, "Case"},
+       {TokenType::Default, "Default"},
+       {TokenType::Break, "Break"},
+       {TokenType::Continue, "Continue"},
 
+       // operators
        {TokenType::Plus, "Plus"},
        {TokenType::PlusEqual, "PlusEqual"},
        {TokenType::PlusPlus, "PlusPlus"},
@@ -158,7 +192,7 @@ namespace tungsten {
        {TokenType::MultiplyEqual, "MultiplyEqual"},
        {TokenType::Divide, "Divide"},
        {TokenType::DivideEqual, "DivideEqual"},
-       {TokenType::Module, "Module"},
+       {TokenType::ModuleOperator, "ModuleOperator"},
        {TokenType::ModuleEqual, "ModuleEqual"},
        {TokenType::LogicalAnd, "LogicalAnd"},
        {TokenType::BitwiseAnd, "BitwiseAnd"},
@@ -180,15 +214,16 @@ namespace tungsten {
        {TokenType::ShiftRight, "ShiftRight"},
        {TokenType::ShiftRightEqual, "ShiftRightEqual"},
 
+       // types
        {TokenType::Auto, "Auto"},
        {TokenType::Int, "Int"},
+       {TokenType::Uint, "Uint"},
        {TokenType::Float, "Float"},
        {TokenType::Double, "Double"},
        {TokenType::Bool, "Bool"},
        {TokenType::Char, "Char"},
        {TokenType::String, "String"},
        {TokenType::Void, "Void"},
-       {TokenType::Uint, "Uint"},
        {TokenType::Uint8, "Uint8"},
        {TokenType::Uint16, "Uint16"},
        {TokenType::Uint32, "Uint32"},
@@ -198,6 +233,7 @@ namespace tungsten {
        {TokenType::Int32, "Int32"},
        {TokenType::Int64, "Int64"},
 
+       // literals
        {TokenType::IntLiteral, "IntLiteral"},
        {TokenType::StringLiteral, "StringLiteral"},
        {TokenType::Identifier, "Identifier"},
