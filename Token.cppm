@@ -91,6 +91,13 @@ namespace tungsten {
       StringLiteral,
       Identifier,
 
+      // constants
+      Null,
+      Nullptr,
+      Nan,
+      CodeSuccess,
+      CodeFailure,
+
       OpenParen,
       CloseParen,
       OpenBrace,
@@ -146,7 +153,15 @@ namespace tungsten {
        {"Int8", TokenType::Int8},
        {"Int16", TokenType::Int16},
        {"Int32", TokenType::Int32},
-       {"Int64", TokenType::Int64}};
+       {"Int64", TokenType::Int64},
+
+      // constants
+      {"null", TokenType::Null},
+      {"nullptr", TokenType::Nullptr},
+      {"NaN", TokenType::Nan},
+      {"CodeSuccess", TokenType::CodeSuccess},
+      {"CodeFailure", TokenType::CodeFailure}
+   };
 
    export struct Token {
       TokenType type{TokenType::Invalid};
@@ -237,6 +252,13 @@ namespace tungsten {
        {TokenType::IntLiteral, "IntLiteral"},
        {TokenType::StringLiteral, "StringLiteral"},
        {TokenType::Identifier, "Identifier"},
+
+       // constants
+      {TokenType::Null, "Null"},
+      {TokenType::Nullptr, "Nullptr"},
+      {TokenType::Nan, "Nan"},
+      {TokenType::CodeSuccess, "CodeSuccess"},
+      {TokenType::CodeFailure, "CodeFailure"},
 
        {TokenType::OpenParen, "OpenParen"},
        {TokenType::CloseParen, "CloseParen"},
