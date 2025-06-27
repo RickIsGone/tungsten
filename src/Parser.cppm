@@ -36,7 +36,7 @@ namespace tungsten {
       _NODISCARD Token _peek(size_t offset = 0) const;
       void _consume(const size_t amount = 1) { _index += amount; }
       std::string _lexme(Token token) { return _fileContents.substr(token.position, token.length); }
-      std::unique_ptr<ExpressionAST> _parseNumberExpression();
+      //std::unique_ptr<ExpressionAST> _parseNumberExpression();
       std::unique_ptr<ExpressionAST> _parseIdentifierExpression();
       std::unique_ptr<ExpressionAST> _parsePrimaryExpression();
       std::string _parseType();
@@ -104,15 +104,20 @@ namespace tungsten {
             case TokenType::Char:
             case TokenType::String:
             case TokenType::Void:
-            case TokenType::Identifier: {
+               if (_peek(2).type == TokenType::OpenParen)
+                  _parseFunctionDeclaration();
+               else _parseVariableDeclaration();
+               break;
+            case TokenType::Identifier:
                if (_symbolTable.contains(_lexme(_peek()))) {
                   if (_peek(2).type == TokenType::OpenParen)
                      _parseFunctionDeclaration();
-                   _parseVariableDeclaration();
-               } else
-                  LogError(_lexme(_peek()) + "is not a known type or class");
+                  else _parseVariableDeclaration();
+               } else {
+                  LogError(_lexme(_peek()) + " is not a known type or class");
+                  _consume();
+               }
                break;
-            }
             default:
                LogError("Invalid token: " + _lexme(_peek()));
                _consume();
@@ -121,18 +126,17 @@ namespace tungsten {
       }
    }
 
-   std::unique_ptr<ExpressionAST> Parser::_parseNumberExpression() {
-      Number number = _lexme(_peek()); // TODO: fix
-      auto expr = std::make_unique<NumberExpressionAST>(number);
-      _consume();
-      return std::move(expr);
-   }
+   //std::unique_ptr<ExpressionAST> Parser::_parseNumberExpression() {
+   //   Number number = _lexme(_peek()); // TODO: fix
+   //   auto expr = std::make_unique<NumberExpressionAST>(number);
+   //   _consume();
+   //   return std::move(expr);
+   //}
 
    std::unique_ptr<ExpressionAST> Parser::_parseIdentifierExpression() {
       std::string identifier = _lexme(_peek());
-      auto expr = std::make_unique<VariableExpressionAST>(identifier);
       _consume();
-      return std::move(expr);
+      return std::make_unique<VariableExpressionAST>(identifier);
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parsePrimaryExpression() {
@@ -140,7 +144,7 @@ namespace tungsten {
          case TokenType::Identifier:
             return _parseIdentifierExpression();
          case TokenType::IntLiteral:
-            return _parseNumberExpression();
+            //return _parseNumberExpression();
          default:
             return LogError("unknown token when expecting an expression");
       }
@@ -159,10 +163,13 @@ namespace tungsten {
       _consume();
       std::string name = _lexme(_peek());
       _consume();
-      if (_symbolTable.contains(_lexme(_peek())))
-         return LogError("Identifier'" + name + "' exists already");
-
+      if (_peek().type != TokenType::Semicolon)
+         return LogError("Expected a semicolon");
+      _consume();
+      if (_symbolTable.contains(name))
+         return LogError("redefinition of '" + name + "'");
       _symbolTable.insert({name, SymbolType::Variable});
+
       return std::make_unique<VariableDeclarationAST>(type, name);
    }
 
@@ -180,14 +187,14 @@ namespace tungsten {
          args.push_back(_parseVariableDeclaration());
       }
       _consume(); // consumes )
-      return std::make_unique<FunctionPrototypeAST>(type, name, args);
+      return std::make_unique<FunctionPrototypeAST>(type, name, std::move(args));
    }
 
    std::unique_ptr<FunctionAST> Parser::_parseFunctionDeclaration() {
       std::unique_ptr<FunctionPrototypeAST> proto = _parseFunctionPrototype();
 
       _symbolTable.insert({proto->name(), SymbolType::Function});
-      std::unique_ptr<BlockStatementAST> body = _parseBlockStatement();
+      std::unique_ptr<BlockStatementAST> body = nullptr;
 
       return std::make_unique<FunctionAST>(std::move(proto), std::move(body));
    }
