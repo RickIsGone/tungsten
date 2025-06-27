@@ -50,13 +50,13 @@ export namespace tungsten {
 
    class VariableDeclarationAST : public ExpressionAST {
    public:
-      VariableDeclarationAST(const std::string& type, const std::string& name, std::unique_ptr<ExpressionAST> init)
-         : _type{type}, _name{name}, _init{std::move(init)} {}
+      VariableDeclarationAST(const std::string& type, const std::string& name/*, std::unique_ptr<ExpressionAST> init*/)
+         : _type{type}, _name{name}/*, _init{std::move(init)}*/ {}
 
    private:
       std::string _type;
       std::string _name;
-      std::unique_ptr<ExpressionAST> _init;
+      //std::unique_ptr<ExpressionAST> _init;
    };
 
    // expression for function calls

@@ -1,11 +1,11 @@
 module;
 
 #include <vector>
-#include <optional>
 #include <ostream>
 #include <iostream>
 #include <string>
 #include <memory>
+#include <unordered_map>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
 #endif
@@ -15,6 +15,12 @@ import Tungsten.token;
 import Tungsten.ast;
 
 namespace tungsten {
+   enum class SymbolType {
+      Function,
+      Variable,
+      Class,
+      NoType
+   };
    export class Parser {
    public:
       Parser() = default;
@@ -29,23 +35,28 @@ namespace tungsten {
    private:
       _NODISCARD Token _peek(size_t offset = 0) const;
       void _consume(const size_t amount = 1) { _index += amount; }
-
+      std::string _lexme(Token token) { return _fileContents.substr(token.position, token.length); }
       std::unique_ptr<ExpressionAST> _parseNumberExpression();
       std::unique_ptr<ExpressionAST> _parseIdentifierExpression();
       std::unique_ptr<ExpressionAST> _parsePrimaryExpression();
+      std::string _parseType();
+      std::unique_ptr<ExpressionAST> _parseVariableDeclaration();
+      std::unique_ptr<FunctionPrototypeAST> _parseFunctionPrototype();
+      std::unique_ptr<FunctionAST> _parseFunctionDeclaration();
 
+      std::unordered_map<std::string, SymbolType> _symbolTable{};
       size_t _index{0};
       std::vector<Token> _tokens{};
       std::string _fileContents{};
    };
 
    //  ========================================== implementation ==========================================
-   std::unique_ptr<ExpressionAST> LogError(const char* Str) {
-      fprintf(stderr, "Error: %s\n", Str);
+   std::unique_ptr<ExpressionAST> LogError(const std::string& str) {
+      std::cerr << "Error: " << str << "\n";
       return nullptr;
    }
-   std::unique_ptr<FunctionPrototypeAST> LogErrorP(const char* Str) {
-      LogError(Str);
+   std::unique_ptr<FunctionPrototypeAST> LogErrorP(const std::string& str) {
+      LogError(str);
       return nullptr;
    }
 
@@ -55,7 +66,7 @@ namespace tungsten {
    }
 
    Token Parser::_peek(const size_t offset) const {
-      return _tokens[_index + offset];
+      return _tokens.at(_index + offset);
    }
 
    void Parser::parse() {
@@ -63,30 +74,67 @@ namespace tungsten {
       for (int i = 1; const Token& token : _tokens) {
          std::cout << "{" << tokenTypeNames.at(token.type);
          if (token.type == TokenType::IntLiteral || token.type == TokenType::StringLiteral || token.type == TokenType::Identifier || token.type == TokenType::Invalid)
-            std::cout << ", " << _fileContents.substr(token.position, token.length);
+            std::cout << ", " << _lexme(token);
 
          std::cout << (i++ < _tokens.size() ? "},\n\t " : "}");
       }
       std::cout << "}\n";
 
       while (_peek().type != TokenType::EndOFFile) {
-         // TODO
-         _consume();
+         switch (_peek().type) {
+            //case TokenType::Module:
+            //   _parseModule();
+            //   break;
+            //case TokenType::Import:
+            //   _parseImport();
+            //   break;
+            case TokenType::Int:
+            case TokenType::Int8:
+            case TokenType::Int16:
+            case TokenType::Int32:
+            case TokenType::Int64:
+            case TokenType::Uint:
+            case TokenType::Uint8:
+            case TokenType::Uint16:
+            case TokenType::Uint32:
+            case TokenType::Uint64:
+            case TokenType::Float:
+            case TokenType::Double:
+            case TokenType::Bool:
+            case TokenType::Char:
+            case TokenType::String:
+            case TokenType::Void:
+            case TokenType::Identifier: {
+               if (_symbolTable.contains(_lexme(_peek()))) {
+                  if (_peek(2).type == TokenType::OpenParen)
+                     _parseFunctionDeclaration();
+                   _parseVariableDeclaration();
+               } else
+                  LogError(_lexme(_peek()) + "is not a known type or class");
+               break;
+            }
+            default:
+               LogError("Invalid token: " + _lexme(_peek()));
+               _consume();
+               break;
+         }
       }
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseNumberExpression() {
-      double number = stod(_fileContents.substr(_peek().position, _peek().length));
+      Number number = _lexme(_peek()); // TODO: fix
       auto expr = std::make_unique<NumberExpressionAST>(number);
       _consume();
       return std::move(expr);
    }
+
    std::unique_ptr<ExpressionAST> Parser::_parseIdentifierExpression() {
-      std::string identifier = _fileContents.substr(_peek().position, _peek().length);
+      std::string identifier = _lexme(_peek());
       auto expr = std::make_unique<VariableExpressionAST>(identifier);
       _consume();
       return std::move(expr);
    }
+
    std::unique_ptr<ExpressionAST> Parser::_parsePrimaryExpression() {
       switch (_peek().type) {
          case TokenType::Identifier:
@@ -97,4 +145,51 @@ namespace tungsten {
             return LogError("unknown token when expecting an expression");
       }
    }
+
+   std::string Parser::_parseType() {
+      std::string type = _lexme(_peek());
+      if ((_peek().type >= TokenType::Auto && _peek().type <= TokenType::Int64) || _symbolTable.contains(_lexme(_peek())))
+         return type;
+      LogError("expected a type, got '" + type);
+      return "";
+   }
+
+   std::unique_ptr<ExpressionAST> Parser::_parseVariableDeclaration() {
+      std::string type = _parseType();
+      _consume();
+      std::string name = _lexme(_peek());
+      _consume();
+      if (_symbolTable.contains(_lexme(_peek())))
+         return LogError("Identifier'" + name + "' exists already");
+
+      _symbolTable.insert({name, SymbolType::Variable});
+      return std::make_unique<VariableDeclarationAST>(type, name);
+   }
+
+   std::unique_ptr<FunctionPrototypeAST> Parser::_parseFunctionPrototype() {
+      std::string type = _parseType();
+      _consume();
+      std::string name = _lexme(_peek());
+      _consume();
+      if (_symbolTable.contains(name))
+         return LogErrorP("Function '" + name + "' already exists");
+
+      std::vector<std::unique_ptr<ExpressionAST>> args;
+      _consume(); // consumes (
+      while (_peek().type != TokenType::CloseParen) {
+         args.push_back(_parseVariableDeclaration());
+      }
+      _consume(); // consumes )
+      return std::make_unique<FunctionPrototypeAST>(type, name, args);
+   }
+
+   std::unique_ptr<FunctionAST> Parser::_parseFunctionDeclaration() {
+      std::unique_ptr<FunctionPrototypeAST> proto = _parseFunctionPrototype();
+
+      _symbolTable.insert({proto->name(), SymbolType::Function});
+      std::unique_ptr<BlockStatementAST> body = _parseBlockStatement();
+
+      return std::make_unique<FunctionAST>(std::move(proto), std::move(body));
+   }
+
 } // namespace tungsten
