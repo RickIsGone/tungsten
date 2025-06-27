@@ -2,7 +2,7 @@ module;
 
 #include <string>
 #include <memory>
-#include <type_traits>
+#include <variant>
 #include <vector>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
@@ -18,12 +18,13 @@ export namespace tungsten {
    };
 
    // expression for numbers
+   using Number = std::variant<int, int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t, uint64_t, float, double>;
    class NumberExpressionAST : public ExpressionAST {
    public:
-      NumberExpressionAST(double value) : _value{value} {}
+      NumberExpressionAST(Number value) : _value{value} {}
 
    private:
-      double _value{};
+      Number _value{};
    };
 
    // expression for variables
@@ -47,6 +48,17 @@ export namespace tungsten {
       std::unique_ptr<ExpressionAST> _RHS;
    };
 
+   class VariableDeclarationAST : public ExpressionAST {
+   public:
+      VariableDeclarationAST(const std::string& type, const std::string& name, std::unique_ptr<ExpressionAST> init)
+         : _type{type}, _name{name}, _init{std::move(init)} {}
+
+   private:
+      std::string _type;
+      std::string _name;
+      std::unique_ptr<ExpressionAST> _init;
+   };
+
    // expression for function calls
    class CallExpressionAST : public ExpressionAST {
    public:
@@ -59,9 +71,9 @@ export namespace tungsten {
    };
 
    // expression for if statements
-   class IfExpressionAST : public ExpressionAST {
+   class IfStatementAST : public ExpressionAST {
    public:
-      IfExpressionAST(std::unique_ptr<ExpressionAST> condition, std::unique_ptr<ExpressionAST> thenBranch, std::unique_ptr<ExpressionAST> elseBranch = nullptr)
+      IfStatementAST(std::unique_ptr<ExpressionAST> condition, std::unique_ptr<ExpressionAST> thenBranch, std::unique_ptr<ExpressionAST> elseBranch = nullptr)
           : _condition{std::move(condition)}, _thenBranch{std::move(thenBranch)}, _elseBranch{std::move(elseBranch)} {}
 
    private:
@@ -69,7 +81,59 @@ export namespace tungsten {
       std::unique_ptr<ExpressionAST> _thenBranch;
       std::unique_ptr<ExpressionAST> _elseBranch;
    };
-   // TODO: add other conditional expressions
+
+   class WhileStatementAST : public ExpressionAST {
+   public:
+      WhileStatementAST(std::unique_ptr<ExpressionAST> condition, std::unique_ptr<ExpressionAST> body)
+            : _condition{std::move(condition)}, _body{std::move(body)} {}
+
+   private:
+      std::unique_ptr<ExpressionAST> _condition;
+      std::unique_ptr<ExpressionAST> _body;
+   };
+   class DoWhileStatementAST : public ExpressionAST {
+   public:
+      DoWhileStatementAST(std::unique_ptr<ExpressionAST> condition, std::unique_ptr<ExpressionAST> body)
+            : _condition{std::move(condition)}, _body{std::move(body)} {}
+   private:
+      std::unique_ptr<ExpressionAST> _condition;
+      std::unique_ptr<ExpressionAST> _body;
+   };
+
+   class ForStatementAST : public ExpressionAST {
+   public:
+      ForStatementAST(std::unique_ptr<ExpressionAST> init, std::unique_ptr<ExpressionAST> condition, std::unique_ptr<ExpressionAST> increment, std::unique_ptr<ExpressionAST> body)
+            : _init{std::move(init)}, _condition{std::move(condition)}, _increment{std::move(increment)}, _body{std::move(body)} {}
+
+   private:
+      std::unique_ptr<ExpressionAST> _init;
+      std::unique_ptr<ExpressionAST> _condition;
+      std::unique_ptr<ExpressionAST> _increment;
+      std::unique_ptr<ExpressionAST> _body;
+   };
+
+   class BlockStatementAST : public ExpressionAST {
+   public:
+      BlockStatementAST(std::vector<std::unique_ptr<ExpressionAST>> statements)
+            : _statements{std::move(statements)} {}
+
+   private:
+      std::vector<std::unique_ptr<ExpressionAST>> _statements;
+   };
+
+   class ReturnStatementAST : public ExpressionAST {
+   public:
+      ReturnStatementAST(std::unique_ptr<ExpressionAST> value) : _value{std::move(value)} {}
+   private:
+      std::unique_ptr<ExpressionAST> _value;
+   };
+
+   class ExitStatement : public ExpressionAST {
+   public:
+      ExitStatement(std::unique_ptr<ExpressionAST> value) : _value{std::move(value)} {}
+   private:
+      std::unique_ptr<ExpressionAST> _value;
+   };
 
    //  prototype for function declarations
    class FunctionPrototypeAST {
@@ -88,11 +152,11 @@ export namespace tungsten {
    // function definition itself
    class FunctionAST {
    public:
-      FunctionAST(std::unique_ptr<FunctionPrototypeAST> function, std::unique_ptr<ExpressionAST> body)
-          : _function{std::move(function)}, _body{std::move(body)} {}
+      FunctionAST(std::unique_ptr<FunctionPrototypeAST> prototype, std::unique_ptr<ExpressionAST> body)
+          : _prototype{std::move(prototype)}, _body{std::move(body)} {}
 
    private:
-      std::unique_ptr<FunctionPrototypeAST> _function;
+      std::unique_ptr<FunctionPrototypeAST> _prototype;
       std::unique_ptr<ExpressionAST> _body;
    };
 } // namespace tungsten
