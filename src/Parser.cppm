@@ -41,6 +41,7 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parsePrimaryExpression();
       std::string _parseType();
       std::unique_ptr<ExpressionAST> _parseVariableDeclaration();
+      std::unique_ptr<BlockStatementAST> _parseBlock();
       std::unique_ptr<FunctionPrototypeAST> _parseFunctionPrototype();
       std::unique_ptr<FunctionAST> _parseFunctionDeclaration();
 
@@ -173,19 +174,33 @@ namespace tungsten {
       return std::make_unique<VariableDeclarationAST>(type, name);
    }
 
+   std::unique_ptr<BlockStatementAST> Parser::_parseBlock() {
+      std::vector<std::unique_ptr<ExpressionAST>> statements;
+      while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile) {
+         // parse line
+      }
+      if (_peek().type == TokenType::EndOFFile) {
+         LogError("expected '}'");
+         return nullptr;
+      }
+      _consume(); // consume }
+      return std::make_unique<BlockStatementAST>(std::move(statements));
+   }
+
    std::unique_ptr<FunctionPrototypeAST> Parser::_parseFunctionPrototype() {
       std::string type = _parseType();
       _consume();
       std::string name = _lexme(_peek());
       _consume();
       if (_symbolTable.contains(name))
-         return LogErrorP("Function '" + name + "' already exists");
+         return LogErrorP("redefinition of '" + name + "'");
 
       std::vector<std::unique_ptr<ExpressionAST>> args;
       _consume(); // consumes (
       while (_peek().type != TokenType::CloseParen) {
          args.push_back(_parseVariableDeclaration());
       }
+
       _consume(); // consumes )
       return std::make_unique<FunctionPrototypeAST>(type, name, std::move(args));
    }
@@ -194,8 +209,12 @@ namespace tungsten {
       std::unique_ptr<FunctionPrototypeAST> proto = _parseFunctionPrototype();
 
       _symbolTable.insert({proto->name(), SymbolType::Function});
-      std::unique_ptr<BlockStatementAST> body = nullptr;
-
+      if (_peek().type != TokenType::OpenBrace) {
+         LogError("expected '{'");
+         return std::make_unique<FunctionAST>(std::move(proto), nullptr);
+      }
+      _consume(); // consume {
+      std::unique_ptr<BlockStatementAST> body = _parseBlock();
       return std::make_unique<FunctionAST>(std::move(proto), std::move(body));
    }
 
