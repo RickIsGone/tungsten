@@ -27,7 +27,7 @@ export namespace tungsten {
 
    void TranslationUnit::compile(const fs::path& path) {
       _lexer.setFileTarget(path);
-      _parser.setTarget(_lexer.tokenize());
+      _parser.setTarget(path, _lexer.tokenize());
       _parser.setRaw(_lexer.raw());
       _parser.parse();
    }
