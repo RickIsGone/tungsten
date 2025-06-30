@@ -18,7 +18,7 @@ export namespace tungsten {
    };
 
    // expression for numbers
-   using Number = std::variant<int, int8_t, int16_t, int32_t, int64_t, uint8_t, uint16_t, uint32_t, uint64_t, float, double>;
+   using Number = std::variant<int, int8_t, int16_t, int64_t, uint8_t, uint16_t, uint32_t, uint64_t, float, double>;
    class NumberExpressionAST : public ExpressionAST {
    public:
       NumberExpressionAST(Number value) : _value{value} {}
@@ -36,6 +36,14 @@ export namespace tungsten {
       std::string _name{};
    };
 
+   class StringExpression : public ExpressionAST {
+   public:
+      StringExpression(const std::string& value) : _value{value} {}
+
+   private:
+      std::string _value{};
+   };
+
    // expression for binary operations
    class BinaryExpressionAST : public ExpressionAST {
    public:
@@ -50,13 +58,13 @@ export namespace tungsten {
 
    class VariableDeclarationAST : public ExpressionAST {
    public:
-      VariableDeclarationAST(const std::string& type, const std::string& name/*, std::unique_ptr<ExpressionAST> init*/)
-         : _type{type}, _name{name}/*, _init{std::move(init)}*/ {}
+      VariableDeclarationAST(const std::string& type, const std::string& name /*, std::unique_ptr<ExpressionAST> init*/)
+          : _type{type}, _name{name} /*, _init{std::move(init)}*/ {}
 
    private:
       std::string _type;
       std::string _name;
-      //std::unique_ptr<ExpressionAST> _init;
+      // std::unique_ptr<ExpressionAST> _init;
    };
 
    // expression for function calls
@@ -85,7 +93,7 @@ export namespace tungsten {
    class WhileStatementAST : public ExpressionAST {
    public:
       WhileStatementAST(std::unique_ptr<ExpressionAST> condition, std::unique_ptr<ExpressionAST> body)
-            : _condition{std::move(condition)}, _body{std::move(body)} {}
+          : _condition{std::move(condition)}, _body{std::move(body)} {}
 
    private:
       std::unique_ptr<ExpressionAST> _condition;
@@ -94,7 +102,8 @@ export namespace tungsten {
    class DoWhileStatementAST : public ExpressionAST {
    public:
       DoWhileStatementAST(std::unique_ptr<ExpressionAST> condition, std::unique_ptr<ExpressionAST> body)
-            : _condition{std::move(condition)}, _body{std::move(body)} {}
+          : _condition{std::move(condition)}, _body{std::move(body)} {}
+
    private:
       std::unique_ptr<ExpressionAST> _condition;
       std::unique_ptr<ExpressionAST> _body;
@@ -103,7 +112,7 @@ export namespace tungsten {
    class ForStatementAST : public ExpressionAST {
    public:
       ForStatementAST(std::unique_ptr<ExpressionAST> init, std::unique_ptr<ExpressionAST> condition, std::unique_ptr<ExpressionAST> increment, std::unique_ptr<ExpressionAST> body)
-            : _init{std::move(init)}, _condition{std::move(condition)}, _increment{std::move(increment)}, _body{std::move(body)} {}
+          : _init{std::move(init)}, _condition{std::move(condition)}, _increment{std::move(increment)}, _body{std::move(body)} {}
 
    private:
       std::unique_ptr<ExpressionAST> _init;
@@ -115,7 +124,7 @@ export namespace tungsten {
    class BlockStatementAST : public ExpressionAST {
    public:
       BlockStatementAST(std::vector<std::unique_ptr<ExpressionAST>> statements)
-            : _statements{std::move(statements)} {}
+          : _statements{std::move(statements)} {}
 
    private:
       std::vector<std::unique_ptr<ExpressionAST>> _statements;
@@ -124,6 +133,7 @@ export namespace tungsten {
    class ReturnStatementAST : public ExpressionAST {
    public:
       ReturnStatementAST(std::unique_ptr<ExpressionAST> value) : _value{std::move(value)} {}
+
    private:
       std::unique_ptr<ExpressionAST> _value;
    };
@@ -131,6 +141,7 @@ export namespace tungsten {
    class ExitStatement : public ExpressionAST {
    public:
       ExitStatement(std::unique_ptr<ExpressionAST> value) : _value{std::move(value)} {}
+
    private:
       std::unique_ptr<ExpressionAST> _value;
    };

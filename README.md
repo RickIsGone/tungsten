@@ -36,6 +36,7 @@ the [online tungsten compiler](https://rickisgone.github.io/tungsten-sandbox/)
 
 ## Prerequisites
 
+- LLVM
 - cmake 3.28 or newer
 - git
 

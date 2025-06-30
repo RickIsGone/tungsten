@@ -14,6 +14,7 @@ module;
 export module Tungsten.parser;
 import Tungsten.token;
 import Tungsten.ast;
+import Tungsten.utils;
 
 namespace tungsten {
    enum class SymbolType {
@@ -36,18 +37,24 @@ namespace tungsten {
    private:
       _NODISCARD Token _peek(size_t offset = 0) const;
       void _consume(const size_t amount = 1) { _index += amount; }
-      std::string _lexme(Token token) { return _fileContents.substr(token.position, token.length); }
+      std::string _lexeme(Token token) { return _fileContents.substr(token.position, token.length); }
       std::string _location(Token token);
-      template<typename Ty = ExpressionAST>
+      template <typename Ty = ExpressionAST>
       std::unique_ptr<Ty> _logError(const std::string& str);
-      //std::unique_ptr<ExpressionAST> _parseNumberExpression();
+      std::unique_ptr<ExpressionAST> _parseNumberExpression();
       std::unique_ptr<ExpressionAST> _parseIdentifierExpression();
+      std::unique_ptr<ExpressionAST> _parseStringExpression();
+      std::unique_ptr<ExpressionAST> _parseFunctionCall();
+      std::unique_ptr<ExpressionAST> _parseReturnStatement();
+      std::unique_ptr<ExpressionAST> _parseExitStatement();
       std::unique_ptr<ExpressionAST> _parsePrimaryExpression();
       std::string _parseType();
       std::unique_ptr<ExpressionAST> _parseVariableDeclaration();
+      std::unique_ptr<ExpressionAST> _parseArgument();
       std::unique_ptr<BlockStatementAST> _parseBlock();
       std::unique_ptr<FunctionPrototypeAST> _parseFunctionPrototype();
       std::unique_ptr<FunctionAST> _parseFunctionDeclaration();
+      std::unique_ptr<ExpressionAST> _parseImport();
 
       std::unordered_map<std::string, SymbolType> _symbolTable{};
       size_t _index{0};
@@ -57,7 +64,7 @@ namespace tungsten {
    };
 
    //  ========================================== implementation ==========================================
-   template<typename Ty = ExpressionAST>
+   template <typename Ty = ExpressionAST>
    std::unique_ptr<Ty> Parser::_logError(const std::string& str) {
       std::cerr << _location(_peek()) << " error: " << str << "\n";
       return nullptr;
@@ -85,24 +92,35 @@ namespace tungsten {
    }
 
    void Parser::parse() {
-      std::cout << "Tokens: {";
-      for (int i = 1; const Token& token : _tokens) {
-         std::cout << "{" << tokenTypeNames.at(token.type);
-         if (token.type == TokenType::IntLiteral || token.type == TokenType::StringLiteral || token.type == TokenType::Identifier || token.type == TokenType::Invalid)
-            std::cout << ", " << _lexme(token);
-
-         std::cout << (i++ < _tokens.size() ? "},\n\t " : "}");
-      }
-      std::cout << "}\n";
+      // std::cout << "Tokens: {";
+      // for (int i = 1; const Token& token : _tokens) {
+      //    std::cout << "{" << tokenTypeNames.at(token.type);
+      //    if (token.type == TokenType::IntLiteral || token.type == TokenType::StringLiteral || token.type == TokenType::Identifier || token.type == TokenType::Invalid)
+      //       std::cout << ", " << _lexeme(token);
+      //
+      //    std::cout << (i++ < _tokens.size() ? "},\n\t " : "}");
+      // }
+      // std::cout << "}\n";
 
       while (_peek().type != TokenType::EndOFFile) {
          switch (_peek().type) {
-            //case TokenType::Module:
-            //   _parseModule();
-            //   break;
-            //case TokenType::Import:
-            //   _parseImport();
-            //   break;
+            case TokenType::Semicolon:
+               _consume();
+               break;
+            // case TokenType::Module:
+            //    _parseModule();
+            //    break;
+            case TokenType::Import:
+               _parseImport();
+               if (_peek().type != TokenType::Semicolon)
+                  _logError("expected ';' after import statement");
+               _consume(); // consume ';'
+               break;
+            // case TokenType::Extern:
+            //    _parseExtern();
+            //    if (_peek().type != TokenType::Semicolon)
+            //       _logError("expected ';' after extern statement");
+            //    _consume(); // consume ';'
             case TokenType::Int:
             case TokenType::Int8:
             case TokenType::Int16:
@@ -119,69 +137,231 @@ namespace tungsten {
             case TokenType::Char:
             case TokenType::String:
             case TokenType::Void:
-               if (_peek(2).type == TokenType::OpenParen)
+               if (_peek(2).type == TokenType::OpenParen) {
                   _parseFunctionDeclaration();
-               else _parseVariableDeclaration();
+               } else {
+                  _parseVariableDeclaration();
+                  if (_peek().type != TokenType::Semicolon)
+                     _logError("expected ';' after variable declaration");
+                  _consume(); // consume ';'
+               }
                break;
             case TokenType::Identifier:
-               if (_symbolTable.contains(_lexme(_peek()))) {
+               if (_symbolTable.contains(_lexeme(_peek())) && _symbolTable.at(_lexeme(_peek())) == SymbolType::Class) {
                   if (_peek(2).type == TokenType::OpenParen)
                      _parseFunctionDeclaration();
-                  else _parseVariableDeclaration();
+                  else {
+                     _parseVariableDeclaration();
+                     if (_peek().type != TokenType::Semicolon)
+                        _logError("expected ';' after import statement");
+                     _consume(); // consume ';'
+                  }
                } else {
-                  _logError("'" + _lexme(_peek()) + "' is not a known type or class");
+                  _logError("'" + _lexeme(_peek()) + "' is not a known type or class");
                   _consume();
                }
                break;
             default:
-               _logError("Invalid token: '" + _lexme(_peek()) + "'");
+               _logError("Invalid token: '" + _lexeme(_peek()) + "'");
                _consume();
                break;
          }
       }
+      if (!_symbolTable.contains("main") || (_symbolTable.contains("main") && _symbolTable.at("main") != SymbolType::Function)) {
+         _logError("no entry point found");
+      } else {
+         utils::debugLog("found entry point");
+      }
    }
 
-   //std::unique_ptr<ExpressionAST> Parser::_parseNumberExpression() {
-   //   Number number = _lexme(_peek()); // TODO: fix
-   //   auto expr = std::make_unique<NumberExpressionAST>(number);
-   //   _consume();
-   //   return std::move(expr);
-   //}
+   std::unique_ptr<ExpressionAST> Parser::_parseNumberExpression() {
+      auto number = _peek().type == TokenType::IntLiteral ? std::stoi(_lexeme(_peek())) : std::stof(_lexeme(_peek()));
+      _consume();
+      return std::make_unique<NumberExpressionAST>(number);
+   }
 
    std::unique_ptr<ExpressionAST> Parser::_parseIdentifierExpression() {
-      std::string identifier = _lexme(_peek());
+      std::string identifier = _lexeme(_peek());
       _consume();
+      if (!_symbolTable.contains(identifier))
+         return _logError("unknown identifier: '" + identifier + "'");
+
       return std::make_unique<VariableExpressionAST>(identifier);
+   }
+   std::unique_ptr<ExpressionAST> Parser::_parseStringExpression() {
+      std::string string = _lexeme(_peek());
+      _consume();
+      return std::make_unique<StringExpression>(string);
+   }
+
+   std::unique_ptr<ExpressionAST> Parser::_parseFunctionCall() {
+      std::string identifier = _lexeme(_peek());
+      _consume();
+      _consume(); // consume (
+      std::vector<std::unique_ptr<ExpressionAST>> args;
+      do {
+         if (_peek().type == TokenType::Identifier) {
+            if (!_symbolTable.contains(_lexeme(_peek())))
+               _logError("unknown identifier: '" + _lexeme(_peek()) + "'");
+
+            if (_peek(1).type == TokenType::OpenParen)
+               args.push_back(_parseFunctionCall());
+            else
+               args.push_back(_parseIdentifierExpression());
+         } else if (_peek().type == TokenType::IntLiteral || _peek().type == TokenType::FloatLiteral)
+            args.push_back(_parseNumberExpression());
+
+         else if (_peek().type == TokenType::StringLiteral)
+            args.push_back(_parseStringExpression());
+
+         else {
+            _consume();
+            return _logError("expected an argument in function call, got: '" + _lexeme(_peek()) + "'");
+         }
+         if (_peek().type == TokenType::Comma)
+            _consume(); // consume ,
+      } while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile);
+
+      if (_peek().type == TokenType::EndOFFile)
+         return _logError("expected ')' after function call");
+      _consume(); // consume )
+
+      utils::debugLog("function call: '{}', args number: {}", identifier, args.size());
+      if (!_symbolTable.contains(identifier))
+         return _logError("unknown function: '" + identifier + "'");
+
+      return std::make_unique<CallExpressionAST>(identifier, std::move(args));
+   }
+
+   std::unique_ptr<ExpressionAST> Parser::_parseReturnStatement() {
+      _consume(); // consume return
+      if (_peek().type == TokenType::Semicolon) {
+         return std::make_unique<ReturnStatementAST>(std::make_unique<ExpressionAST>());
+      }
+
+      auto value = _parsePrimaryExpression();
+      utils::debugLog("returning value: {}", _lexeme(_peek(-1)));
+      return std::make_unique<ReturnStatementAST>(std::move(value));
+   }
+   std::unique_ptr<ExpressionAST> Parser::_parseExitStatement() {
+      _consume(); // consume exit
+      if (_peek().type == TokenType::Semicolon)
+         return _logError("expected an expression after 'exit'");
+
+      auto value = _parsePrimaryExpression();
+
+      utils::debugLog("exiting with value: {}", _lexeme(_peek(-1)));
+      return std::make_unique<ExitStatement>(std::move(value));
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parsePrimaryExpression() {
+      std::unique_ptr<ExpressionAST> expr;
       switch (_peek().type) {
+         case TokenType::Semicolon:
+            _consume();
+            return std::make_unique<ExpressionAST>(); // empty expression
+         case TokenType::CodeSuccess:
+            _consume();
+            return std::make_unique<NumberExpressionAST>(0);
+
+         case TokenType::CodeFailure:
+            _consume();
+            return std::make_unique<NumberExpressionAST>(1);
+
          case TokenType::Identifier:
-            return _parseIdentifierExpression();
+            if (_symbolTable.contains(_lexeme(_peek())) && _symbolTable.at(_lexeme(_peek())) == SymbolType::Class) {
+               expr = _parseVariableDeclaration();
+               if (_peek().type != TokenType::Semicolon)
+                  return _logError("expected ';' after variable declaration");
+               _consume(); // consume ;
+               return std::move(expr);
+            }
+            if (_peek(1).type == TokenType::OpenParen) {
+               expr = _parseFunctionCall();
+               if (_peek().type != TokenType::Semicolon)
+                  return _logError("expected ';' after function call");
+               _consume(); // consume ;
+               return std::move(expr);
+            }
+            expr = _parseIdentifierExpression();
+            return std::move(expr);
+
          case TokenType::IntLiteral:
-            //return _parseNumberExpression();
+         case TokenType::FloatLiteral:
+            return _parseNumberExpression();
+
+         case TokenType::Return:
+            expr = _parseReturnStatement();
+            if (_peek().type != TokenType::Semicolon)
+               return _logError("expected ';' after return statement");
+            _consume(); // consume ;
+            return std::move(expr);
+
+         case TokenType::Exit:
+            expr = _parseExitStatement();
+            if (_peek().type != TokenType::Semicolon)
+               return _logError("expected ';' after exit statement");
+            _consume(); // consume ;
+            return std::move(expr);
+
+         case TokenType::Int:
+         case TokenType::Int8:
+         case TokenType::Int16:
+         case TokenType::Int32:
+         case TokenType::Int64:
+         case TokenType::Uint:
+         case TokenType::Uint8:
+         case TokenType::Uint16:
+         case TokenType::Uint32:
+         case TokenType::Uint64:
+         case TokenType::Float:
+         case TokenType::Double:
+         case TokenType::Bool:
+         case TokenType::Char:
+         case TokenType::String:
+         case TokenType::Void:
+            expr = _parseVariableDeclaration();
+            if (_peek().type != TokenType::Semicolon)
+               return _logError("expected ';' variable declaration");
+            _consume(); // consume ;
+            return std::move(expr);
+
          default:
+            _consume();
             return _logError("unknown token when expecting an expression");
       }
    }
 
    std::string Parser::_parseType() {
-      std::string type = _lexme(_peek());
-      if ((_peek().type >= TokenType::Auto && _peek().type <= TokenType::Int64) || _symbolTable.contains(_lexme(_peek())))
+      std::string type = _lexeme(_peek());
+      if ((_peek().type >= TokenType::Auto && _peek().type <= TokenType::Int64) || _symbolTable.contains(_lexeme(_peek())))
          return type;
-      _logError("expected a type, got '" + type + "'");
+      _logError<std::string>("expected a type, got '" + type + "'");
       return "";
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseVariableDeclaration() {
       std::string type = _parseType();
       _consume();
-      std::string name = _lexme(_peek());
+      if (_peek().type != TokenType::Identifier)
+         return _logError("expected an identifier after type declaration but got: '" + _lexeme(_peek()) + "'");
+      std::string name = _lexeme(_peek());
       _consume();
-      if (_peek().type != TokenType::Semicolon)
-         return _logError("Expected a semicolon");
 
+      if (_symbolTable.contains(name))
+         return _logError("redefinition of '" + name + "'");
+      _symbolTable.insert({name, SymbolType::Variable});
+
+      utils::debugLog("definition of variable '{}' with type '{}'", name, type);
+      return std::make_unique<VariableDeclarationAST>(type, name);
+   }
+
+   std::unique_ptr<ExpressionAST> Parser::_parseArgument() {
+      std::string type = _parseType();
       _consume();
+      std::string name = _lexeme(_peek());
+      _consume();
+
       if (_symbolTable.contains(name))
          return _logError("redefinition of '" + name + "'");
       _symbolTable.insert({name, SymbolType::Variable});
@@ -192,8 +372,8 @@ namespace tungsten {
    std::unique_ptr<BlockStatementAST> Parser::_parseBlock() {
       std::vector<std::unique_ptr<ExpressionAST>> statements;
       while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile) {
-         // parse line
-
+         _parsePrimaryExpression();
+         // _consume();
       }
       if (_peek().type == TokenType::EndOFFile)
          return _logError<BlockStatementAST>("expected '}'");
@@ -205,17 +385,20 @@ namespace tungsten {
    std::unique_ptr<FunctionPrototypeAST> Parser::_parseFunctionPrototype() {
       std::string type = _parseType();
       _consume();
-      std::string name = _lexme(_peek());
+      std::string name = _lexeme(_peek());
       _consume();
       if (_symbolTable.contains(name))
          return _logError<FunctionPrototypeAST>("redefinition of '" + name + "'");
 
+      utils::debugLog("definition of function prototype '{}' with type '{}'", name, type);
       std::vector<std::unique_ptr<ExpressionAST>> args;
       _consume(); // consumes (
-      while (_peek().type != TokenType::CloseParen) {
-         args.push_back(_parseVariableDeclaration());
+      while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile) {
+         args.push_back(_parseArgument());
+         utils::debugLog("argument {}: {} {}", args.size(), _lexeme(_peek(-2)), _lexeme(_peek(-1)));
       }
-
+      if (_peek().type == TokenType::EndOFFile)
+         return _logError<FunctionPrototypeAST>("expected ')'");
       _consume(); // consumes )
       return std::make_unique<FunctionPrototypeAST>(type, name, std::move(args));
    }
@@ -232,4 +415,15 @@ namespace tungsten {
       return std::make_unique<FunctionAST>(std::move(proto), std::move(body));
    }
 
+   std::unique_ptr<ExpressionAST> Parser::_parseImport() {
+      _consume(); // consume import
+      if (_peek().type != TokenType::Identifier)
+         return _logError("expected an identifier after 'import'");
+      std::string module = _lexeme(_peek());
+      _consume(); // consume identifier
+
+      utils::debugLog("Importing module: {}", module);
+
+      return std::make_unique<ExpressionAST>();
+   }
 } // namespace tungsten

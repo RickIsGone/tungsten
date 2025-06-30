@@ -4,7 +4,6 @@ module;
 #include <string_view>
 #include <iostream>
 #include <sstream>
-
 export module Tungsten.utils;
 
 namespace Colors {
@@ -25,4 +24,13 @@ export namespace tungsten::utils {
       std::cerr << errors.str();
    }
 
+#ifdef TUNGSTEN_DEBUG
+   template <typename... Args>
+   void debugLog(std::string_view message, Args&&... args) {
+      std::cout << "[DEBUG] " << std::vformat(message, std::make_format_args(args...)) << '\n';
+   }
+#else
+   template <typename... Args>
+   void debugLog(Args&&... args) {}
+#endif
 } // namespace tungsten::utils

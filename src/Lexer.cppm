@@ -75,8 +75,8 @@ namespace tungsten {
             do {
                buffer.push_back(_peek().value());
                _consume();
-            } while (_peek().has_value() && std::isdigit(static_cast<unsigned char>(_peek().value())));
-            tokens.push_back({TokenType::IntLiteral, startingIndex, buffer.length()});
+            } while (_peek().has_value() && (std::isdigit(static_cast<unsigned char>(_peek().value())) || _peek().value() == '.'));
+            tokens.push_back({buffer.find(".") == std::string::npos ? TokenType::IntLiteral : TokenType::FloatLiteral, startingIndex, buffer.length()});
             buffer.clear();
 
          } else {
