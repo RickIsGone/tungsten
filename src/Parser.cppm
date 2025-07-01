@@ -67,6 +67,9 @@ namespace tungsten {
       std::unique_ptr<FunctionPrototypeAST> _parseFunctionPrototype();
       std::unique_ptr<FunctionAST> _parseFunctionDeclaration();
       std::unique_ptr<ExpressionAST> _parseIfStatement();
+      std::unique_ptr<ExpressionAST> _parseWhileStatement();
+      std::unique_ptr<ExpressionAST> _parseDoWhileStatement();
+      std::unique_ptr<ExpressionAST> _parseForStatement();
       std::unique_ptr<ExpressionAST> _parseImport();
 
       std::unordered_map<std::string, SymbolType> _symbolTable{};
@@ -339,6 +342,18 @@ namespace tungsten {
          case TokenType::If:
             return _parseIfStatement();
 
+         case TokenType::While:
+            return _parseWhileStatement();
+
+         case TokenType::Do:
+            expr = _parseDoWhileStatement();
+            if (_peek().type != TokenType::Semicolon)
+               return _logError("expected ';' after do-while statement");
+            return expr;
+
+         case TokenType::For:
+            return _parseForStatement();
+
          case TokenType::Int:
          case TokenType::Int8:
          case TokenType::Int16:
@@ -405,6 +420,7 @@ namespace tungsten {
    }
 
    std::unique_ptr<BlockStatementAST> Parser::_parseBlock() {
+      _consume(); // consume {
       std::vector<std::unique_ptr<ExpressionAST>> statements;
       while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile) {
          _parsePrimaryExpression();
@@ -445,7 +461,6 @@ namespace tungsten {
       if (_peek().type != TokenType::OpenBrace)
          return _logError<FunctionAST>("expected '{'");
 
-      _consume(); // consume {
       std::unique_ptr<BlockStatementAST> body = _parseBlock();
       return std::make_unique<FunctionAST>(std::move(proto), std::move(body));
    }
@@ -461,22 +476,81 @@ namespace tungsten {
       _consume(); // consume )
       std::unique_ptr<ExpressionAST> thenBranch;
       std::unique_ptr<ExpressionAST> elseBranch = nullptr;
-      if (_peek().type == TokenType::OpenBrace) {
-         _consume(); // consume {
+      if (_peek().type == TokenType::OpenBrace)
          thenBranch = _parseBlock();
-      } else
+      else
          thenBranch = _parsePrimaryExpression();
 
       if (_peek().type == TokenType::Else) {
          _consume();
-         if (_peek().type == TokenType::OpenBrace) {
-            _consume(); // consume {
+         if (_peek().type == TokenType::OpenBrace)
             elseBranch = _parseBlock();
-         } else
+         else
             elseBranch = _parsePrimaryExpression();
       }
 
       return std::make_unique<IfStatementAST>(std::move(condition), std::move(thenBranch), std::move(elseBranch));
+   }
+
+   std::unique_ptr<ExpressionAST> Parser::_parseWhileStatement() {
+      _consume(); // consume while
+      if (_peek().type != TokenType::OpenParen)
+         return _logError("expected '(' after 'while'");
+      _consume(); // consume (
+      std::unique_ptr<ExpressionAST> condition = _parsePrimaryExpression();
+      if (_peek().type != TokenType::CloseParen)
+         return _logError("expected ')' after 'while' condition");
+      _consume(); // consume )
+      std::unique_ptr<ExpressionAST> body;
+      if (_peek().type == TokenType::OpenBrace)
+         body = _parseBlock();
+      else
+         body = _parsePrimaryExpression();
+
+      return std::make_unique<WhileStatementAST>(std::move(condition), std::move(body));
+   }
+
+   std::unique_ptr<ExpressionAST> Parser::_parseDoWhileStatement() {
+      _consume(); // consume do
+      if (_peek().type != TokenType::OpenBrace)
+         return _logError("expected '{' after 'do'");
+      std::unique_ptr<ExpressionAST> body = _parseBlock();
+
+      if (_peek().type != TokenType::While)
+         return _logError("expected 'while' after 'do' block");
+      _consume(); // consume while
+
+      if (_peek().type != TokenType::OpenParen)
+         return _logError("expected '(' after 'while'");
+      _consume(); // consume (
+
+      std::unique_ptr<ExpressionAST> condition = _parsePrimaryExpression();
+      if (_peek().type != TokenType::CloseParen)
+         return _logError("expected ')' after 'while' condition");
+      _consume(); // consume )
+
+      return std::make_unique<DoWhileStatementAST>(std::move(condition), std::move(body));
+   }
+
+   std::unique_ptr<ExpressionAST> Parser::_parseForStatement() {
+      _consume(); // consume for
+      if (_peek().type != TokenType::OpenParen)
+         return _logError("expected '(' after 'for'");
+      _consume(); // consume (
+      std::unique_ptr<ExpressionAST> init = _parsePrimaryExpression();
+      std::unique_ptr<ExpressionAST> condition = _parsePrimaryExpression();
+      std::unique_ptr<ExpressionAST> increment = _parsePrimaryExpression();
+      if (_peek().type != TokenType::CloseParen)
+         return _logError("expected ')' after 'for' condition");
+      _consume(); // consume )
+
+      std::unique_ptr<ExpressionAST> body;
+      if (_peek().type == TokenType::OpenBrace)
+         body = _parseBlock();
+      else
+         body = _parsePrimaryExpression();
+
+      return std::make_unique<ForStatementAST>(std::move(init), std::move(condition), std::move(increment), std::move(body));
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseImport() {
