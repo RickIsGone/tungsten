@@ -10,7 +10,7 @@ namespace fs = std::filesystem;
 export namespace tungsten {
    class TranslationUnit {
    public:
-      explicit TranslationUnit(const fs::path& path) : _lexer{path} {}
+      explicit TranslationUnit(const fs::path& path) : _filePath{path} {}
       TranslationUnit() = default;
       ~TranslationUnit() = default;
       TranslationUnit(const TranslationUnit&) = delete;
@@ -19,16 +19,15 @@ export namespace tungsten {
       void compile(const fs::path& path);
 
    private:
-      Lexer _lexer{};
-      Parser _parser{};
+      std::string _raw{};
+      fs::path _filePath{};
    };
 
    //  ========================================== implementation ==========================================
 
    void TranslationUnit::compile(const fs::path& path) {
-      _lexer.setFileTarget(path);
-      _parser.setTarget(path, _lexer.tokenize());
-      _parser.setRaw(_lexer.raw());
+      Lexer _lexer{path, _raw};
+      Parser _parser{path, _lexer.tokenize(), _raw};
       _parser.parse();
    }
 

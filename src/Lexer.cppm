@@ -17,15 +17,14 @@ namespace tungsten {
 
    export class Lexer {
    public:
-      explicit Lexer(const fs::path& path) : _path(path) {}
-      Lexer() = default;
+      Lexer(const fs::path& path, std::string& raw) : _path(path), _raw{raw} {}
+      Lexer() = delete;
       ~Lexer() = default;
       Lexer(const Lexer&) = delete;
       Lexer operator=(const Lexer&) = delete;
 
       _NODISCARD std::vector<Token> tokenize();
       _NODISCARD const std::string& raw() const { return _raw; }
-      void setFileTarget(const fs::path& path);
 
    private:
       _NODISCARD std::optional<char> _peek(size_t offset = 0) const;
@@ -33,8 +32,8 @@ namespace tungsten {
       void _consume(const size_t amount = 1) { _index += amount; }
 
       size_t _index{0};
-      fs::path _path{};
-      std::string _raw{};
+      const fs::path& _path{};
+      std::string& _raw;
    };
 
    /*  ========================================== implementation ==========================================  */
@@ -305,9 +304,5 @@ namespace tungsten {
       return std::nullopt;
    }
 
-   void Lexer::setFileTarget(const fs::path& path) {
-      _path = path;
-      _index = 0;
-   }
 
 } // namespace tungsten

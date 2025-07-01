@@ -1,12 +1,23 @@
 module;
 
 #include <vector>
-#include <ostream>
 #include <iostream>
 #include <string>
 #include <memory>
 #include <unordered_map>
 #include <filesystem>
+
+// #include "llvm/ADT/APFloat.h"
+// #include "llvm/ADT/STLExtras.h"
+// #include "llvm/IR/BasicBlock.h"
+// #include "llvm/IR/Constants.h"
+// #include "llvm/IR/DerivedTypes.h"
+// #include "llvm/IR/Function.h"
+// #include "llvm/IR/IRBuilder.h"
+// #include "llvm/IR/LLVMContext.h"
+// #include "llvm/IR/Module.h"
+// #include "llvm/IR/Type.h"
+// #include "llvm/IR/Verifier.h"
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
 #endif
@@ -25,30 +36,31 @@ namespace tungsten {
    };
    export class Parser {
    public:
-      Parser() = default;
+      Parser(const std::filesystem::path& file, const std::vector<Token>& tokens, const std::string& raw) : _filePath{file}, _tokens{tokens}, _raw{raw} {}
+      Parser() = delete;
       ~Parser() = default;
       Parser(const Parser&) = delete;
       Parser operator=(const Parser&) = delete;
 
       void parse();
-      void setTarget(std::filesystem::path file, const std::vector<Token>& tokens);
-      void setRaw(const std::string& raw) { _fileContents = raw; }
 
    private:
       _NODISCARD Token _peek(size_t offset = 0) const;
       void _consume(const size_t amount = 1) { _index += amount; }
-      std::string _lexeme(Token token) { return _fileContents.substr(token.position, token.length); }
-      std::string _location(Token token);
+      std::string _lexeme(const Token& token) const { return _raw.substr(token.position, token.length); }
+      std::string _location(const Token& token);
       template <typename Ty = ExpressionAST>
       std::unique_ptr<Ty> _logError(const std::string& str);
+      // llvm::Value* _logErrorV(const std::string& Str);
+      std::string _parseType();
       std::unique_ptr<ExpressionAST> _parseNumberExpression();
       std::unique_ptr<ExpressionAST> _parseIdentifierExpression();
       std::unique_ptr<ExpressionAST> _parseStringExpression();
       std::unique_ptr<ExpressionAST> _parseFunctionCall();
+      std::unique_ptr<FunctionPrototypeAST> _parseExternStatement();
       std::unique_ptr<ExpressionAST> _parseReturnStatement();
       std::unique_ptr<ExpressionAST> _parseExitStatement();
       std::unique_ptr<ExpressionAST> _parsePrimaryExpression();
-      std::string _parseType();
       std::unique_ptr<ExpressionAST> _parseVariableDeclaration();
       std::unique_ptr<ExpressionAST> _parseArgument();
       std::unique_ptr<BlockStatementAST> _parseBlock();
@@ -58,9 +70,15 @@ namespace tungsten {
 
       std::unordered_map<std::string, SymbolType> _symbolTable{};
       size_t _index{0};
-      std::vector<Token> _tokens{};
-      std::string _fileContents{};
-      std::filesystem::path _filePath{};
+      const std::string& _raw;
+      const std::vector<Token> _tokens{};
+      const std::filesystem::path& _filePath{};
+
+      // llvm stuff
+      // std::unique_ptr<llvm::LLVMContext> TheContext{};
+      // std::unique_ptr<llvm::IRBuilder<>> Builder{};
+      // std::unique_ptr<llvm::Module> TheModule{};
+      // std::map<std::string, llvm::Value*> NamedValues{};
    };
 
    //  ========================================== implementation ==========================================
@@ -69,15 +87,15 @@ namespace tungsten {
       std::cerr << _location(_peek()) << " error: " << str << "\n";
       return nullptr;
    }
-   void Parser::setTarget(std::filesystem::path file, const std::vector<Token>& tokens) {
-      _filePath = file;
-      _tokens = tokens;
-      _index = 0;
-   }
-   std::string Parser::_location(Token token) {
+   // llvm::Value* Parser::_logErrorV(const std::string& Str) {
+   //    _logError(Str);
+   //    return nullptr;
+   // }
+
+   std::string Parser::_location(const Token& token) {
       size_t line = 1, column = 1;
       for (size_t i = 0; i < token.position; ++i) {
-         if (_fileContents[i] == '\n') {
+         if (_raw[i] == '\n') {
             ++line;
             column = 1;
          } else {
@@ -88,7 +106,9 @@ namespace tungsten {
    }
 
    Token Parser::_peek(const size_t offset) const {
-      return _tokens.at(_index + offset);
+      if (_index + offset + 1 <= _raw.size())
+         return _tokens.at(_index + offset);
+      return _tokens.back();
    }
 
    void Parser::parse() {
@@ -116,11 +136,11 @@ namespace tungsten {
                   _logError("expected ';' after import statement");
                _consume(); // consume ';'
                break;
-            // case TokenType::Extern:
-            //    _parseExtern();
-            //    if (_peek().type != TokenType::Semicolon)
-            //       _logError("expected ';' after extern statement");
-            //    _consume(); // consume ';'
+            case TokenType::Extern:
+               _parseExternStatement();
+               if (_peek().type != TokenType::Semicolon)
+                  _logError("expected ';' after extern statement");
+               _consume(); // consume ';'
             case TokenType::Int:
             case TokenType::Int8:
             case TokenType::Int16:
@@ -232,11 +252,17 @@ namespace tungsten {
 
       return std::make_unique<CallExpressionAST>(identifier, std::move(args));
    }
+   std::unique_ptr<FunctionPrototypeAST> Parser::_parseExternStatement() {
+      _consume(); // consume extern
+      if (_peek(1).type != TokenType::OpenParen && _peek().type != TokenType::Identifier)
+         return _logError<FunctionPrototypeAST>("expected an function after 'extern'");
+      return _parseFunctionPrototype();
+   }
 
    std::unique_ptr<ExpressionAST> Parser::_parseReturnStatement() {
       _consume(); // consume return
       if (_peek().type == TokenType::Semicolon) {
-         return std::make_unique<ReturnStatementAST>(std::make_unique<ExpressionAST>());
+         return std::make_unique<ReturnStatementAST>(nullptr);
       }
 
       auto value = _parsePrimaryExpression();
@@ -259,7 +285,7 @@ namespace tungsten {
       switch (_peek().type) {
          case TokenType::Semicolon:
             _consume();
-            return std::make_unique<ExpressionAST>(); // empty expression
+            return nullptr;
          case TokenType::CodeSuccess:
             _consume();
             return std::make_unique<NumberExpressionAST>(0);
@@ -424,6 +450,6 @@ namespace tungsten {
 
       utils::debugLog("Importing module: {}", module);
 
-      return std::make_unique<ExpressionAST>();
+      return nullptr;
    }
 } // namespace tungsten
