@@ -461,25 +461,24 @@ namespace tungsten {
       _consume(); // consume )
       std::unique_ptr<ExpressionAST> thenBranch;
       std::unique_ptr<ExpressionAST> elseBranch = nullptr;
-      if (_peek().type != TokenType::OpenBrace)
-         thenBranch = _parsePrimaryExpression();
-      else {
+      if (_peek().type == TokenType::OpenBrace) {
          _consume(); // consume {
          thenBranch = _parseBlock();
-      }
+      } else
+         thenBranch = _parsePrimaryExpression();
 
       if (_peek().type == TokenType::Else) {
          _consume();
-         if (_peek().type != TokenType::OpenBrace)
-            elseBranch = _parsePrimaryExpression();
-         else {
+         if (_peek().type == TokenType::OpenBrace) {
             _consume(); // consume {
             elseBranch = _parseBlock();
-         }
+         } else
+            elseBranch = _parsePrimaryExpression();
       }
 
       return std::make_unique<IfStatementAST>(std::move(condition), std::move(thenBranch), std::move(elseBranch));
    }
+
    std::unique_ptr<ExpressionAST> Parser::_parseImport() {
       _consume(); // consume import
       if (_peek().type != TokenType::Identifier)
