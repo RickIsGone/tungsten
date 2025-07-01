@@ -66,6 +66,7 @@ namespace tungsten {
       std::unique_ptr<BlockStatementAST> _parseBlock();
       std::unique_ptr<FunctionPrototypeAST> _parseFunctionPrototype();
       std::unique_ptr<FunctionAST> _parseFunctionDeclaration();
+      std::unique_ptr<ExpressionAST> _parseIfStatement();
       std::unique_ptr<ExpressionAST> _parseImport();
 
       std::unordered_map<std::string, SymbolType> _symbolTable{};
@@ -106,7 +107,7 @@ namespace tungsten {
    }
 
    Token Parser::_peek(const size_t offset) const {
-      if (_index + offset + 1 <= _raw.size())
+      if (_index + offset <= _raw.size() - 1)
          return _tokens.at(_index + offset);
       return _tokens.back();
    }
@@ -286,10 +287,15 @@ namespace tungsten {
          case TokenType::Semicolon:
             _consume();
             return nullptr;
+         case TokenType::True:
+            _consume();
+            return std::make_unique<NumberExpressionAST>(1);
+         case TokenType::False:
+            _consume();
+            return std::make_unique<NumberExpressionAST>(0);
          case TokenType::CodeSuccess:
             _consume();
             return std::make_unique<NumberExpressionAST>(0);
-
          case TokenType::CodeFailure:
             _consume();
             return std::make_unique<NumberExpressionAST>(1);
@@ -329,6 +335,9 @@ namespace tungsten {
                return _logError("expected ';' after exit statement");
             _consume(); // consume ;
             return std::move(expr);
+
+         case TokenType::If:
+            return _parseIfStatement();
 
          case TokenType::Int:
          case TokenType::Int8:
@@ -441,13 +450,43 @@ namespace tungsten {
       return std::make_unique<FunctionAST>(std::move(proto), std::move(body));
    }
 
+   std::unique_ptr<ExpressionAST> Parser::_parseIfStatement() {
+      _consume(); // consume if
+      if (_peek().type != TokenType::OpenParen)
+         return _logError("expected '(' after 'if'");
+      _consume(); // consume (
+      std::unique_ptr<ExpressionAST> condition = _parsePrimaryExpression();
+      if (_peek().type != TokenType::CloseParen)
+         return _logError("expected ')' after 'if' condition");
+      _consume(); // consume )
+      std::unique_ptr<ExpressionAST> thenBranch;
+      std::unique_ptr<ExpressionAST> elseBranch = nullptr;
+      if (_peek().type != TokenType::OpenBrace)
+         thenBranch = _parsePrimaryExpression();
+      else {
+         _consume(); // consume {
+         thenBranch = _parseBlock();
+      }
+
+      if (_peek().type == TokenType::Else) {
+         _consume();
+         if (_peek().type != TokenType::OpenBrace)
+            elseBranch = _parsePrimaryExpression();
+         else {
+            _consume(); // consume {
+            elseBranch = _parseBlock();
+         }
+      }
+
+      return std::make_unique<IfStatementAST>(std::move(condition), std::move(thenBranch), std::move(elseBranch));
+   }
    std::unique_ptr<ExpressionAST> Parser::_parseImport() {
       _consume(); // consume import
       if (_peek().type != TokenType::Identifier)
          return _logError("expected an identifier after 'import'");
       std::string module = _lexeme(_peek());
       _consume(); // consume identifier
-
+      // TODO: Implement module import logic
       utils::debugLog("Importing module: {}", module);
 
       return nullptr;

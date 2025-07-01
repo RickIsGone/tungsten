@@ -298,7 +298,7 @@ namespace tungsten {
    }
 
    std::optional<char> Lexer::_peek(const size_t offset) const {
-      if (_index + offset + 1 <= _raw.size())
+      if (_index + offset <= _raw.size() - 1)
          return _raw.at(_index + offset);
 
       return std::nullopt;
