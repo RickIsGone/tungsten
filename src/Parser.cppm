@@ -5,19 +5,20 @@ module;
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <map>
 #include <filesystem>
 
-// #include "llvm/ADT/APFloat.h"
-// #include "llvm/ADT/STLExtras.h"
-// #include "llvm/IR/BasicBlock.h"
-// #include "llvm/IR/Constants.h"
-// #include "llvm/IR/DerivedTypes.h"
-// #include "llvm/IR/Function.h"
-// #include "llvm/IR/IRBuilder.h"
-// #include "llvm/IR/LLVMContext.h"
-// #include "llvm/IR/Module.h"
-// #include "llvm/IR/Type.h"
-// #include "llvm/IR/Verifier.h"
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Verifier.h"
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
 #endif
@@ -34,6 +35,41 @@ namespace tungsten {
       Class,
       NoType
    };
+   std::unordered_map<TokenType, int> operatorPrecedence = {
+       {TokenType::LogicalOr, 15}, // ||
+       {TokenType::LogicalAnd, 14}, // &&
+       {TokenType::BitwiseOr, 13}, // |
+       {TokenType::BitwiseXor, 12}, // ^
+       {TokenType::BitwiseAnd, 11}, // &
+       {TokenType::EqualEqual, 10}, // ==
+       {TokenType::NotEqual, 10}, // !=
+       {TokenType::Less, 9}, // <
+       {TokenType::LessEqual, 9}, // <=
+       {TokenType::Greater, 9}, // >
+       {TokenType::GreaterEqual, 9}, // >=
+       {TokenType::ShiftLeft, 7}, // <<
+       {TokenType::ShiftRight, 7}, // >>
+       {TokenType::Plus, 6}, // +
+       {TokenType::Minus, 6}, // -
+       {TokenType::Multiply, 5}, // *
+       {TokenType::Divide, 5}, // /
+       {TokenType::ModuleOperator, 5}, // %
+       {TokenType::LogicalNot, 3}, // ! (unary)
+       {TokenType::Equal, 16}, // =   (assignment)
+       {TokenType::PlusEqual, 16}, // +=
+       {TokenType::MinusEqual, 16}, // -=
+       {TokenType::MultiplyEqual, 16}, // *=
+       {TokenType::DivideEqual, 16}, // /=
+       {TokenType::ModuleEqual, 16}, // %=
+       {TokenType::AndEqual, 16}, // &=
+       {TokenType::OrEqual, 16}, // |=
+       {TokenType::XorEqual, 16}, // ^=
+       {TokenType::ShiftLeftEqual, 16}, // <<=
+       {TokenType::ShiftRightEqual, 16}, // >>=
+       {TokenType::Ternary, 16}, // ?:
+       {TokenType::PlusPlus, 2}, // ++
+       {TokenType::MinusMinus, 2}, // --
+   };
    export class Parser {
    public:
       Parser(const std::filesystem::path& file, const std::vector<Token>& tokens, const std::string& raw) : _filePath{file}, _tokens{tokens}, _raw{raw} {}
@@ -47,11 +83,12 @@ namespace tungsten {
    private:
       _NODISCARD Token _peek(size_t offset = 0) const;
       void _consume(const size_t amount = 1) { _index += amount; }
-      std::string _lexeme(const Token& token) const { return _raw.substr(token.position, token.length); }
+      _NODISCARD std::string _lexeme(const Token& token) const { return _raw.substr(token.position, token.length); }
       std::string _location(const Token& token);
+      int _getPrecedence(TokenType type);
       template <typename Ty = ExpressionAST>
       std::unique_ptr<Ty> _logError(const std::string& str);
-      // llvm::Value* _logErrorV(const std::string& Str);
+      llvm::Value* _logErrorV(const std::string& Str);
       std::string _parseType();
       std::unique_ptr<ExpressionAST> _parseNumberExpression();
       std::unique_ptr<ExpressionAST> _parseIdentifierExpression();
@@ -60,6 +97,8 @@ namespace tungsten {
       std::unique_ptr<FunctionPrototypeAST> _parseExternStatement();
       std::unique_ptr<ExpressionAST> _parseReturnStatement();
       std::unique_ptr<ExpressionAST> _parseExitStatement();
+      std::unique_ptr<ExpressionAST> _parseExpression();
+      std::unique_ptr<ExpressionAST> _parseBinaryOperationRHS(int exprPrecedence, std::unique_ptr<ExpressionAST> lhs);
       std::unique_ptr<ExpressionAST> _parsePrimaryExpression();
       std::unique_ptr<ExpressionAST> _parseVariableDeclaration();
       std::unique_ptr<ExpressionAST> _parseArgument();
@@ -74,9 +113,9 @@ namespace tungsten {
 
       std::unordered_map<std::string, SymbolType> _symbolTable{};
       size_t _index{0};
-      const std::string& _raw;
-      const std::vector<Token> _tokens{};
       const std::filesystem::path& _filePath{};
+      const std::vector<Token> _tokens{};
+      const std::string& _raw;
 
       // llvm stuff
       // std::unique_ptr<llvm::LLVMContext> TheContext{};
@@ -86,15 +125,16 @@ namespace tungsten {
    };
 
    //  ========================================== implementation ==========================================
+
    template <typename Ty = ExpressionAST>
    std::unique_ptr<Ty> Parser::_logError(const std::string& str) {
       std::cerr << _location(_peek()) << " error: " << str << "\n";
       return nullptr;
    }
-   // llvm::Value* Parser::_logErrorV(const std::string& Str) {
-   //    _logError(Str);
-   //    return nullptr;
-   // }
+   llvm::Value* Parser::_logErrorV(const std::string& Str) {
+      _logError(Str);
+      return nullptr;
+   }
 
    std::string Parser::_location(const Token& token) {
       size_t line = 1, column = 1;
@@ -108,6 +148,12 @@ namespace tungsten {
       }
       return std::filesystem::absolute(_filePath).string() + ":" + std::to_string(line) + ":" + std::to_string(column) + ":";
    }
+   int Parser::_getPrecedence(TokenType type) {
+      auto it = operatorPrecedence.find(type);
+      if (it != operatorPrecedence.end())
+         return it->second;
+      return -1;
+   }
 
    Token Parser::_peek(const size_t offset) const {
       if (_index + offset <= _raw.size() - 1)
@@ -116,16 +162,6 @@ namespace tungsten {
    }
 
    void Parser::parse() {
-      // std::cout << "Tokens: {";
-      // for (int i = 1; const Token& token : _tokens) {
-      //    std::cout << "{" << tokenTypeNames.at(token.type);
-      //    if (token.type == TokenType::IntLiteral || token.type == TokenType::StringLiteral || token.type == TokenType::Identifier || token.type == TokenType::Invalid)
-      //       std::cout << ", " << _lexeme(token);
-      //
-      //    std::cout << (i++ < _tokens.size() ? "},\n\t " : "}");
-      // }
-      // std::cout << "}\n";
-
       while (_peek().type != TokenType::EndOFFile) {
          switch (_peek().type) {
             case TokenType::Semicolon:
@@ -145,6 +181,7 @@ namespace tungsten {
                if (_peek().type != TokenType::Semicolon)
                   _logError("expected ';' after extern statement");
                _consume(); // consume ';'
+               break;
             case TokenType::Int:
             case TokenType::Int8:
             case TokenType::Int16:
@@ -177,7 +214,7 @@ namespace tungsten {
                   else {
                      _parseVariableDeclaration();
                      if (_peek().type != TokenType::Semicolon)
-                        _logError("expected ';' after import statement");
+                        _logError("expected ';' after variable declaration");
                      _consume(); // consume ';'
                   }
                } else {
@@ -197,6 +234,39 @@ namespace tungsten {
          utils::debugLog("found entry point");
       }
    }
+   std::unique_ptr<ExpressionAST> Parser::_parseExpression() {
+      auto lhs = _parsePrimaryExpression();
+      if (!lhs)
+         return nullptr;
+      return _parseBinaryOperationRHS(0, std::move(lhs));
+   }
+
+   std::unique_ptr<ExpressionAST> Parser::_parseBinaryOperationRHS(int exprPrecedence, std::unique_ptr<ExpressionAST> lhs) {
+      while (true) {
+         int tokPrecedence = _getPrecedence(_peek().type);
+
+         if (tokPrecedence < exprPrecedence)
+            return lhs;
+
+         Token opToken = _peek();
+         _consume(); // consume operator
+
+         auto rhs = _parsePrimaryExpression();
+         if (!rhs)
+            return nullptr;
+
+         TokenType nextOpType = _peek().type;
+         int nextPrecedence = _getPrecedence(nextOpType);
+
+         if (tokPrecedence < nextPrecedence) {
+            rhs = _parseBinaryOperationRHS(tokPrecedence + 1, std::move(rhs));
+            if (!rhs)
+               return nullptr;
+         }
+
+         lhs = std::make_unique<BinaryExpressionAST>(_lexeme(opToken), std::move(lhs), std::move(rhs));
+      }
+   }
 
    std::unique_ptr<ExpressionAST> Parser::_parseNumberExpression() {
       auto number = _peek().type == TokenType::IntLiteral ? std::stoi(_lexeme(_peek())) : std::stof(_lexeme(_peek()));
@@ -212,6 +282,7 @@ namespace tungsten {
 
       return std::make_unique<VariableExpressionAST>(identifier);
    }
+
    std::unique_ptr<ExpressionAST> Parser::_parseStringExpression() {
       std::string string = _lexeme(_peek());
       _consume();
@@ -220,31 +291,16 @@ namespace tungsten {
 
    std::unique_ptr<ExpressionAST> Parser::_parseFunctionCall() {
       std::string identifier = _lexeme(_peek());
-      _consume();
+      _consume(); // consume identifier
       _consume(); // consume (
       std::vector<std::unique_ptr<ExpressionAST>> args;
-      do {
-         if (_peek().type == TokenType::Identifier) {
-            if (!_symbolTable.contains(_lexeme(_peek())))
-               _logError("unknown identifier: '" + _lexeme(_peek()) + "'");
+      while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile) {
+         if (!_parseExpression())
+            return nullptr; // error already logged
 
-            if (_peek(1).type == TokenType::OpenParen)
-               args.push_back(_parseFunctionCall());
-            else
-               args.push_back(_parseIdentifierExpression());
-         } else if (_peek().type == TokenType::IntLiteral || _peek().type == TokenType::FloatLiteral)
-            args.push_back(_parseNumberExpression());
-
-         else if (_peek().type == TokenType::StringLiteral)
-            args.push_back(_parseStringExpression());
-
-         else {
-            _consume();
-            return _logError("expected an argument in function call, got: '" + _lexeme(_peek()) + "'");
-         }
          if (_peek().type == TokenType::Comma)
             _consume(); // consume ,
-      } while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile);
+      }
 
       if (_peek().type == TokenType::EndOFFile)
          return _logError("expected ')' after function call");
@@ -256,6 +312,7 @@ namespace tungsten {
 
       return std::make_unique<CallExpressionAST>(identifier, std::move(args));
    }
+
    std::unique_ptr<FunctionPrototypeAST> Parser::_parseExternStatement() {
       _consume(); // consume extern
       if (_peek(1).type != TokenType::OpenParen && _peek().type != TokenType::Identifier)
@@ -265,23 +322,17 @@ namespace tungsten {
 
    std::unique_ptr<ExpressionAST> Parser::_parseReturnStatement() {
       _consume(); // consume return
-      if (_peek().type == TokenType::Semicolon) {
+      if (_peek().type == TokenType::Semicolon)
          return std::make_unique<ReturnStatementAST>(nullptr);
-      }
 
-      auto value = _parsePrimaryExpression();
-      utils::debugLog("returning value: {}", _lexeme(_peek(-1)));
-      return std::make_unique<ReturnStatementAST>(std::move(value));
+      return std::make_unique<ReturnStatementAST>(_parseExpression());
    }
    std::unique_ptr<ExpressionAST> Parser::_parseExitStatement() {
       _consume(); // consume exit
       if (_peek().type == TokenType::Semicolon)
          return _logError("expected an expression after 'exit'");
 
-      auto value = _parsePrimaryExpression();
-
-      utils::debugLog("exiting with value: {}", _lexeme(_peek(-1)));
-      return std::make_unique<ExitStatement>(std::move(value));
+      return std::make_unique<ExitStatement>(_parseExpression());
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parsePrimaryExpression() {
@@ -303,19 +354,22 @@ namespace tungsten {
             _consume();
             return std::make_unique<NumberExpressionAST>(1);
 
+         case TokenType::OpenBrace:
+            return _parseBlock();
+
          case TokenType::Identifier:
             if (_symbolTable.contains(_lexeme(_peek())) && _symbolTable.at(_lexeme(_peek())) == SymbolType::Class) {
                expr = _parseVariableDeclaration();
-               if (_peek().type != TokenType::Semicolon)
-                  return _logError("expected ';' after variable declaration");
-               _consume(); // consume ;
+               // if (_peek().type != TokenType::Semicolon)
+               //    return _logError("expected ';' after variable declaration");
+               // _consume(); // consume ;
                return std::move(expr);
             }
             if (_peek(1).type == TokenType::OpenParen) {
                expr = _parseFunctionCall();
-               if (_peek().type != TokenType::Semicolon)
-                  return _logError("expected ';' after function call");
-               _consume(); // consume ;
+               // if (_peek().type != TokenType::Semicolon)
+               //    return _logError("expected ';' after function call");
+               // _consume(); // consume ;
                return std::move(expr);
             }
             expr = _parseIdentifierExpression();
@@ -324,19 +378,21 @@ namespace tungsten {
          case TokenType::IntLiteral:
          case TokenType::FloatLiteral:
             return _parseNumberExpression();
+         case TokenType::StringLiteral:
+            return _parseStringExpression();
 
          case TokenType::Return:
             expr = _parseReturnStatement();
-            if (_peek().type != TokenType::Semicolon)
-               return _logError("expected ';' after return statement");
-            _consume(); // consume ;
+            // if (_peek().type != TokenType::Semicolon)
+            //    return _logError("expected ';' after return statement");
+            // _consume(); // consume ;
             return std::move(expr);
 
          case TokenType::Exit:
             expr = _parseExitStatement();
-            if (_peek().type != TokenType::Semicolon)
-               return _logError("expected ';' after exit statement");
-            _consume(); // consume ;
+            // if (_peek().type != TokenType::Semicolon)
+            //    return _logError("expected ';' after exit statement");
+            // _consume(); // consume ;
             return std::move(expr);
 
          case TokenType::If:
@@ -347,8 +403,8 @@ namespace tungsten {
 
          case TokenType::Do:
             expr = _parseDoWhileStatement();
-            if (_peek().type != TokenType::Semicolon)
-               return _logError("expected ';' after do-while statement");
+            // if (_peek().type != TokenType::Semicolon)
+            //    return _logError("expected ';' after do-while statement");
             return expr;
 
          case TokenType::For:
@@ -371,9 +427,9 @@ namespace tungsten {
          case TokenType::String:
          case TokenType::Void:
             expr = _parseVariableDeclaration();
-            if (_peek().type != TokenType::Semicolon)
-               return _logError("expected ';' variable declaration");
-            _consume(); // consume ;
+            // if (_peek().type != TokenType::Semicolon)
+            //    return _logError("expected ';' variable declaration");
+            // _consume(); // consume ;
             return std::move(expr);
 
          default:
@@ -392,39 +448,63 @@ namespace tungsten {
 
    std::unique_ptr<ExpressionAST> Parser::_parseVariableDeclaration() {
       std::string type = _parseType();
-      _consume();
+      _consume(); // consume type
+
       if (_peek().type != TokenType::Identifier)
          return _logError("expected an identifier after type declaration but got: '" + _lexeme(_peek()) + "'");
+
       std::string name = _lexeme(_peek());
-      _consume();
+      _consume(); // consume identifier
 
       if (_symbolTable.contains(name))
          return _logError("redefinition of '" + name + "'");
+
       _symbolTable.insert({name, SymbolType::Variable});
 
-      utils::debugLog("definition of variable '{}' with type '{}'", name, type);
-      return std::make_unique<VariableDeclarationAST>(type, name);
+      std::unique_ptr<ExpressionAST> initExpr = nullptr;
+
+      if (_peek().type == TokenType::Equal) {
+         _consume(); // consume '='
+         initExpr = _parseExpression();
+      }
+
+      utils::debugLog("definition of variable '{}' with type '{}' and initialization", name, type);
+
+      return std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr));
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseArgument() {
       std::string type = _parseType();
-      _consume();
+      _consume(); // consume type
       std::string name = _lexeme(_peek());
-      _consume();
+      _consume(); // consume identifier
 
       if (_symbolTable.contains(name))
          return _logError("redefinition of '" + name + "'");
       _symbolTable.insert({name, SymbolType::Variable});
 
-      return std::make_unique<VariableDeclarationAST>(type, name);
+      std::unique_ptr<ExpressionAST> initExpr = nullptr;
+
+      if (_peek().type == TokenType::Equal) {
+         _consume(); // consume '=' / '{'
+         initExpr = _parseExpression();
+      } else if (_peek().type == TokenType::OpenBrace) {
+         _consume(); // consume '{'
+         initExpr = _parseExpression();
+         _consume(); // consume '}'
+      }
+      return std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr));
    }
 
    std::unique_ptr<BlockStatementAST> Parser::_parseBlock() {
       _consume(); // consume {
       std::vector<std::unique_ptr<ExpressionAST>> statements;
       while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile) {
-         _parsePrimaryExpression();
-         // _consume();
+         _parseExpression();
+         if (_peek().type != TokenType::Semicolon && _peek(-1).type != TokenType::CloseBrace)
+            return _logError<BlockStatementAST>("expected ';'");
+         if (_peek(-1).type != TokenType::CloseBrace)
+            _consume(); // consume ;
       }
       if (_peek().type == TokenType::EndOFFile)
          return _logError<BlockStatementAST>("expected '}'");
@@ -443,10 +523,13 @@ namespace tungsten {
 
       utils::debugLog("definition of function prototype '{}' with type '{}'", name, type);
       std::vector<std::unique_ptr<ExpressionAST>> args;
+      // check already handled in _parsePrimaryExpression()
       _consume(); // consumes (
       while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile) {
          args.push_back(_parseArgument());
          utils::debugLog("argument {}: {} {}", args.size(), _lexeme(_peek(-2)), _lexeme(_peek(-1)));
+         if (_peek().type == TokenType::Comma)
+            _consume(); // consume ,
       }
       if (_peek().type == TokenType::EndOFFile)
          return _logError<FunctionPrototypeAST>("expected ')'");
@@ -470,7 +553,7 @@ namespace tungsten {
       if (_peek().type != TokenType::OpenParen)
          return _logError("expected '(' after 'if'");
       _consume(); // consume (
-      std::unique_ptr<ExpressionAST> condition = _parsePrimaryExpression();
+      std::unique_ptr<ExpressionAST> condition = _parseExpression();
       if (_peek().type != TokenType::CloseParen)
          return _logError("expected ')' after 'if' condition");
       _consume(); // consume )
@@ -478,17 +561,24 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> elseBranch = nullptr;
       if (_peek().type == TokenType::OpenBrace)
          thenBranch = _parseBlock();
-      else
-         thenBranch = _parsePrimaryExpression();
-
-      if (_peek().type == TokenType::Else) {
+      else {
+         thenBranch = _parseExpression();
+         if (_peek().type != TokenType::Semicolon)
+            return _logError("expected ';' after expression");
+         // not consuming because if the if doesn't have an else the semicolon is automatically consumed in the _parseBlock()
+      }
+      if (_peek(1).type == TokenType::Else) {
+         _consume();
          _consume();
          if (_peek().type == TokenType::OpenBrace)
             elseBranch = _parseBlock();
-         else
-            elseBranch = _parsePrimaryExpression();
+         else {
+            elseBranch = _parseExpression();
+            if (_peek().type != TokenType::Semicolon)
+               return _logError("expected ';' after expression");
+            _consume(); // consume ;
+         }
       }
-
       return std::make_unique<IfStatementAST>(std::move(condition), std::move(thenBranch), std::move(elseBranch));
    }
 
@@ -497,15 +587,14 @@ namespace tungsten {
       if (_peek().type != TokenType::OpenParen)
          return _logError("expected '(' after 'while'");
       _consume(); // consume (
-      std::unique_ptr<ExpressionAST> condition = _parsePrimaryExpression();
+      std::unique_ptr<ExpressionAST> condition = _parseExpression();
       if (_peek().type != TokenType::CloseParen)
          return _logError("expected ')' after 'while' condition");
       _consume(); // consume )
-      std::unique_ptr<ExpressionAST> body;
-      if (_peek().type == TokenType::OpenBrace)
-         body = _parseBlock();
-      else
-         body = _parsePrimaryExpression();
+      if (_peek().type != TokenType::OpenBrace)
+         _logError("expected '{' after 'while'");
+
+      std::unique_ptr<ExpressionAST> body = _parseBlock();
 
       return std::make_unique<WhileStatementAST>(std::move(condition), std::move(body));
    }
@@ -515,20 +604,19 @@ namespace tungsten {
       if (_peek().type != TokenType::OpenBrace)
          return _logError("expected '{' after 'do'");
       std::unique_ptr<ExpressionAST> body = _parseBlock();
-
       if (_peek().type != TokenType::While)
          return _logError("expected 'while' after 'do' block");
       _consume(); // consume while
-
       if (_peek().type != TokenType::OpenParen)
          return _logError("expected '(' after 'while'");
       _consume(); // consume (
-
-      std::unique_ptr<ExpressionAST> condition = _parsePrimaryExpression();
+      std::unique_ptr<ExpressionAST> condition = _parseExpression();
       if (_peek().type != TokenType::CloseParen)
          return _logError("expected ')' after 'while' condition");
       _consume(); // consume )
-
+      if (_peek().type != TokenType::Semicolon)
+         return _logError("expected ';' after 'do-while' statement");
+      _consume(); // consume ;
       return std::make_unique<DoWhileStatementAST>(std::move(condition), std::move(body));
    }
 
@@ -537,13 +625,18 @@ namespace tungsten {
       if (_peek().type != TokenType::OpenParen)
          return _logError("expected '(' after 'for'");
       _consume(); // consume (
-      std::unique_ptr<ExpressionAST> init = _parsePrimaryExpression();
-      std::unique_ptr<ExpressionAST> condition = _parsePrimaryExpression();
-      std::unique_ptr<ExpressionAST> increment = _parsePrimaryExpression();
+      std::unique_ptr<ExpressionAST> init = _parseExpression();
+      if (_peek().type != TokenType::Semicolon)
+         return _logError("expected ';' after 'for' initialization");
+      _consume(); // consume ;
+      std::unique_ptr<ExpressionAST> condition = _parseExpression();
+      if (_peek().type != TokenType::Semicolon)
+         return _logError("expected ';' after 'for' condition");
+      _consume(); // consume ;
+      std::unique_ptr<ExpressionAST> increment = _parseExpression();
       if (_peek().type != TokenType::CloseParen)
          return _logError("expected ')' after 'for' condition");
       _consume(); // consume )
-
       std::unique_ptr<ExpressionAST> body;
       if (_peek().type == TokenType::OpenBrace)
          body = _parseBlock();
