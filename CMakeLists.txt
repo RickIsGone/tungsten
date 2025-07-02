@@ -2,14 +2,21 @@ cmake_minimum_required(VERSION 3.28)
 project(tungsten VERSION 0.1.0)
 
 set(CMAKE_CXX_STANDARD 20)
+list(APPEND CMAKE_MODULE_PATH "${LLVM_DIR}") # for find_package(LLVM)
+message("CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
+include(AddLLVM)
 file(GLOB_RECURSE SRC "src/*.cpp")
-add_executable(tungsten ${SRC})
+add_llvm_executable(tungsten ${SRC})
 
-if (CMAKE_BUILD_TYPE MATCHES Debug)
+if (CMAKE_BUILD_TYPE MATCHES Debug OR CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
     add_definitions(-DTUNGSTEN_DEBUG)
 endif ()
 
 if (EMSCRIPTEN)
+    set(ZLIB_LIBRARY "C:/vcpkg/vcpkg/installed/x64-windows/lib") # for vcpkg
+    set(ZLIB_INCLUDE_DIR "C:/vcpkg/vcpkg/installed/x64-windows/include") # for vcpkg
+    find_package(ZLIB REQUIRED)
+    target_link_libraries(tungsten PRIVATE ZLIB::ZLIB)
     set_target_properties(tungsten PROPERTIES
             LINK_FLAGS "--bind -sEXPORTED_RUNTIME_METHODS=['FS','FS_writeFile','FS_readFile','callMain'] -sEXCEPTION_CATCHING_ALLOWED='1'"
             OUTPUT_NAME "tungsten"
@@ -17,9 +24,7 @@ if (EMSCRIPTEN)
 endif ()
 
 find_package(LLVM REQUIRED CONFIG)
-message("Found LLVM at: ${LLVM_DIR}")
 include_directories(${LLVM_INCLUDE_DIRS})
-message("llvm include dirs: ${LLVM_INCLUDE_DIRS}")
 llvm_map_components_to_libnames(LLVM_LIBS
         core
         support
