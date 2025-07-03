@@ -81,10 +81,12 @@ namespace tungsten {
       Uint16,
       Uint32,
       Uint64,
+      Uint128,
       Int8,
       Int16,
       Int32,
       Int64,
+      Int128,
 
       // literals
       IntLiteral,
@@ -151,10 +153,12 @@ namespace tungsten {
        {"Uint16", TokenType::Uint16},
        {"Uint32", TokenType::Uint32},
        {"Uint64", TokenType::Uint64},
+       {"Uint128", TokenType::Uint128},
        {"Int8", TokenType::Int8},
        {"Int16", TokenType::Int16},
        {"Int32", TokenType::Int32},
        {"Int64", TokenType::Int64},
+       {"Int128", TokenType::Int128},
 
        // constants
        {"null", TokenType::Null},

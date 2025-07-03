@@ -35,7 +35,36 @@ namespace tungsten {
       std::cerr << "error: " << Str << "\n";
       return nullptr;
    }
+
+   llvm::Type* LLVMType(const std::string& type) {
+      using namespace llvm;
+      if (type == "Void")
+         return Type::getVoidTy(*TheContext);
+      if (type == "Bool")
+         return Type::getInt1Ty(*TheContext);
+      if (type == "Char")
+         return Type::getInt8Ty(*TheContext);
+      if (type == "String")
+         return PointerType::getInt8Ty(*TheContext);
+      if (type == "Int" || type == "Int32" || type == "Uint" || type == "Uint32")
+         return Type::getInt32Ty(*TheContext);
+      if (type == "Int8" || type == "Uint8")
+         return Type::getInt8Ty(*TheContext);
+      if (type == "Int16" || type == "Uint16")
+         return Type::getInt16Ty(*TheContext);
+      if (type == "Int64" || type == "Uint64")
+         return Type::getInt64Ty(*TheContext);
+      if (type == "Int128" || type == "Uint128")
+         return Type::getInt128Ty(*TheContext);
+      if (type == "Float")
+         return Type::getFloatTy(*TheContext);
+      if (type == "Double")
+         return Type::getDoubleTy(*TheContext);
+
+      return nullptr;
+   }
 } // namespace tungsten
+
 export namespace tungsten {
    void initLLVM() {
       TheContext = std::make_unique<llvm::LLVMContext>();
@@ -238,7 +267,7 @@ export namespace tungsten {
    }
 
    llvm::Value* StringExpression::codegen() {
-      return nullptr;
+      return Builder->CreateGlobalString(_value);
    }
 
    llvm::Value* BinaryExpressionAST::codegen() {
@@ -246,6 +275,10 @@ export namespace tungsten {
    }
 
    llvm::Value* VariableDeclarationAST::codegen() {
+      llvm::Type* type = LLVMType(_type);
+      if (!type)
+         return LogErrorV("unknown type '" + _type + "'");
+
       return nullptr;
    }
 
@@ -260,11 +293,33 @@ export namespace tungsten {
       return nullptr;
    }
    llvm::Value* ReturnStatementAST::codegen() {
-      return nullptr;
+      llvm::Value* returnValue = _value->codegen();
+      return Builder->CreateRet(returnValue);
    }
-
    llvm::Value* ExitStatement::codegen() {
-      return nullptr;
+      llvm::Value* exitValue = _value->codegen();
+      if (!exitValue)
+         return LogErrorV("exit statement requires a value");
+
+      llvm::Function* exitFunc = TheModule->getFunction("exit");
+      if (!exitFunc) {
+         llvm::FunctionType* exitType = llvm::FunctionType::get(
+             llvm::Type::getVoidTy(*TheContext),
+             {llvm::Type::getInt32Ty(*TheContext)},
+             false);
+         exitFunc = llvm::Function::Create(
+             exitType, llvm::Function::ExternalLinkage, "exit", TheModule.get());
+      }
+
+      if (exitValue->getType() != llvm::Type::getInt32Ty(*TheContext)) {
+         exitValue = Builder->CreateIntCast(exitValue, llvm::Type::getInt32Ty(*TheContext), false);
+      }
+
+      llvm::Value* call = Builder->CreateCall(exitFunc, exitValue);
+
+      Builder->CreateUnreachable();
+
+      return call;
    }
 
    llvm::Value* IfStatementAST::codegen() {
