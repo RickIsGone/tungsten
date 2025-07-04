@@ -22,6 +22,8 @@ void helpMessage() {
              << "  search                 Searches for available packages\n"
              << "  update                 Lists package that can be upgraded\n\n";
 }
+constexpr const char* HideCursor = "\033[?25l";
+constexpr const char* ShowCursor = "\033[?25h";
 
 int main(int argc, char** argv) {
    if (argc == 1) {
@@ -37,13 +39,13 @@ int main(int argc, char** argv) {
    }
    fs::path downloads = downloadsDir(argv[0]);
    // TPKG::Curl curl{};
-   TPKG::ProgressTimer timer;
 
-   std::cout << "\033[?25l"; // hide cursor
+   TPKG::ProgressTimer timer;
+   std::cout << HideCursor;
    for (size_t i = 0; i <= 100; ++i) {
       printProgressBar(i, 100, timer);
       std::this_thread::sleep_for(std::chrono::milliseconds(50));
    }
-   std::cout << "\033[?25h"; // show cursor
+   std::cout << ShowCursor;
    return EXIT_SUCCESS;
 }
