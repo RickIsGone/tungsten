@@ -29,16 +29,26 @@ Int main(String[] args) {
 
 # Trying the language
 
-if you want to try *Tungsten* before installing the compiler feel free to do so on
+if you want to try *Tungsten* before installing the compiler, feel free to do so on
 the [online tungsten compiler](https://rickisgone.github.io/tungsten-sandbox/)
 
 # Building
 
 ## Prerequisites
 
-- LLVM
+Global
+
 - cmake 3.28 or newer
 - git
+
+Compiler
+
+- LLVM
+
+Package Manager
+
+- Libcurl
+- libarchive
 
 > [!IMPORTANT]
 > this project uses C++ modules, which are currently not supported by all compilers and CMake generators, so make sure
@@ -80,24 +90,26 @@ cmake --build build --config Release
 
 Types follow the ***PascalCase*** convention, they are:
 
-| Type     | Alignment (Bytes) |
-|----------|-------------------|
-| `Void`   | N/A               |
-| `Int`    | 4                 |
-| `Uint`   | 4                 |
-| `Float`  | 4                 |
-| `Double` | 8                 |
-| `Char`   | 2                 |
-| `Bool`   | 1                 |
-| `String` | N/A               |
-| `Int8`   | 1                 |
-| `Int16`  | 2                 |
-| `Int32`  | 4                 |
-| `Int64`  | 8                 |
-| `Uint8`  | 1                 |
-| `Uint16` | 2                 |
-| `Uint32` | 4                 |
-| `Uint64` | 8                 |
+| Type      | Alignment (Bytes) |
+|-----------|-------------------|
+| `Void`    | N/A               |
+| `Int`     | 4                 |
+| `Uint`    | 4                 |
+| `Float`   | 4                 |
+| `Double`  | 8                 |
+| `Char`    | 2                 |
+| `Bool`    | 1                 |
+| `String`  | N/A               |
+| `Int8`    | 1                 |
+| `Int16`   | 2                 |
+| `Int32`   | 4                 |
+| `Int64`   | 8                 |
+| `Int128`  | 16                |
+| `Uint8`   | 1                 |
+| `Uint16`  | 2                 |
+| `Uint32`  | 4                 |
+| `Uint64`  | 8                 |
+| `Uint128` | 16                |
 
 ### Stack allocation
 

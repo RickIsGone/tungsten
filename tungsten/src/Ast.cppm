@@ -60,7 +60,6 @@ namespace tungsten {
          return Type::getFloatTy(*TheContext);
       if (type == "Double")
          return Type::getDoubleTy(*TheContext);
-
       return nullptr;
    }
 } // namespace tungsten
@@ -71,6 +70,12 @@ export namespace tungsten {
       Builder = std::make_unique<llvm::IRBuilder<>>(*TheContext);
       TheModule = std::make_unique<llvm::Module>("tungsten", *TheContext);
    }
+   void dumpIR() {
+#ifdef TUNGSTEN_DEBUG
+      TheModule->print(llvm::outs(), nullptr);
+#endif
+   }
+
    // base for all nodes in the AST
    class ExpressionAST {
    public:

@@ -62,7 +62,7 @@ namespace tungsten {
       Parser(const std::filesystem::path& file, const std::vector<Token>& tokens, const std::string& raw)
           : _filePath{file}, _tokens{tokens}, _raw{raw} { initLLVM(); }
       Parser() = delete;
-      ~Parser() = default;
+      ~Parser() { dumpIR(); }
       Parser(const Parser&) = delete;
       Parser operator=(const Parser&) = delete;
 
@@ -113,7 +113,6 @@ namespace tungsten {
       std::cerr << _location(_peek()) << " error: " << str << "\n";
       return nullptr;
    }
-
 
    std::string Parser::_location(const Token& token) {
       size_t line = 1, column = 1;
@@ -363,11 +362,14 @@ namespace tungsten {
             return _parseStringExpression();
 
          case TokenType::Return:
-            return _parseReturnStatement();
+            expr = _parseReturnStatement();
+            expr->codegen();
+            return std::move(expr);
 
          case TokenType::Exit:
-            return _parseExitStatement();
-
+            expr = _parseExitStatement();
+            expr->codegen();
+            return std::move(expr);
          case TokenType::If:
             return _parseIfStatement();
 
