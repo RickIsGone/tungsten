@@ -1,6 +1,7 @@
 module;
 
 #include <chrono>
+#include <cmath>
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -50,7 +51,7 @@ namespace TPKG {
          return csbi.srWindow.Right - csbi.srWindow.Left + 1;
       return 80;
 #else
-      struct winsize w{};
+      winsize w{};
       if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0)
          return w.ws_col;
       return 80;
@@ -58,7 +59,7 @@ namespace TPKG {
    }
 
    export void printProgressBar(size_t current, size_t total, const ProgressTimer& timer) {
-      int width = shellWidth();
+      int width = shellWidth() * 0.7f;
       float ratio = (total > 0) ? static_cast<float>(current) / total : 1.0f;
       std::cout << "\r" << std::string(width, ' ') << "\r"; // Clear line
 
@@ -70,7 +71,7 @@ namespace TPKG {
       int filled = static_cast<int>(barWidth * ratio);
       std::string bar = "\r[";
       bar += std::string(filled, '#');
-      bar += std::string(barWidth - filled, ' ');
+      bar += std::string(barWidth - filled, '-');
       bar += "]";
 
       std::cout << "\r" << bar << percent << eta << std::flush;

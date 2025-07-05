@@ -53,13 +53,18 @@ target_sources(tungsten PUBLIC FILE_SET tungsten_modules TYPE CXX_MODULES FILES
 )
 
 # === Output Structure ===
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tungsten/tungsten/bin)
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tungsten/tungsten/include)
+set(TUNGSTEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/tungsten/tungsten)
+file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR})
+file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/bin)
+file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/include)
+set_target_properties(tungsten PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/bin
+)
 
 # === Copy stdlib modules ===
 file(GLOB STDLIB "src/stdlib/*.tgs")
 foreach (LIB IN LISTS STDLIB)
     get_filename_component(LIBNAME ${LIB} NAME)
     message("copying lib: ${LIB} as ${LIBNAME}")
-    file(COPY_FILE ${LIB} ${CMAKE_BINARY_DIR}/tungsten/tungsten/include/${LIBNAME})
+    file(COPY_FILE ${LIB} ${TUNGSTEN_OUTPUT_DIR}/include/${LIBNAME})
 endforeach ()
