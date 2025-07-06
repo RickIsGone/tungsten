@@ -18,8 +18,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug OR CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
 endif ()
 
 # === Source Files ===
-file(GLOB_RECURSE SRC "src/*.cpp")
-add_llvm_executable(tungsten ${SRC})
+add_llvm_executable(tungsten src/main.cpp)
 
 # === LLVM ===
 target_include_directories(tungsten PRIVATE ${LLVM_INCLUDE_DIRS})
@@ -56,14 +55,31 @@ target_sources(tungsten PUBLIC FILE_SET tungsten_modules TYPE CXX_MODULES FILES
 set(TUNGSTEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/tungsten/tungsten)
 file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR})
 file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/bin)
+file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/lib)
 file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/include)
 set_target_properties(tungsten PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/bin
 )
 
+# === Compile Core And Stdlib ===
+# === Stdlib ===
+file(GLOB STDLIB "src/stdlib/*.cpp")
+add_library(stdlib STATIC ${STDLIB})
+message("adding ${STDLIB} to the stdlib")
+set_target_properties(stdlib PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/lib
+)
+# === Core ===
+file(GLOB CORE "src/core/*.cpp")
+add_library(core STATIC ${CORE})
+set_target_properties(core PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/lib
+)
+add_dependencies(tungsten stdlib core) # to make cmake produce the .lib/.a
+
 # === Copy stdlib modules ===
-file(GLOB STDLIB "src/stdlib/*.tgs")
-foreach (LIB IN LISTS STDLIB)
+file(GLOB STDLIB_MODULES "src/stdlib/*.tgs")
+foreach (LIB IN LISTS STDLIB_MODULES)
     get_filename_component(LIBNAME ${LIB} NAME)
     message("copying lib: ${LIB} as ${LIBNAME}")
     file(COPY_FILE ${LIB} ${TUNGSTEN_OUTPUT_DIR}/include/${LIBNAME})
