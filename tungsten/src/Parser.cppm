@@ -73,6 +73,10 @@ namespace tungsten {
       void _consume(const size_t amount = 1) { _index += amount; }
       _NODISCARD std::string _lexeme(const Token& token) const { return _raw.substr(token.position, token.length); }
       std::string _location(const Token& token);
+      size_t _column(const Token& token);
+      size_t _line(const Token& token);
+      std::string _file();
+      std::string _function();
       int _getPrecedence(TokenType type);
       template <typename Ty = ExpressionAST>
       std::unique_ptr<Ty> _logError(const std::string& str);
@@ -88,6 +92,13 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parseExpression();
       std::unique_ptr<ExpressionAST> _parseBinaryOperationRHS(int exprPrecedence, std::unique_ptr<ExpressionAST> lhs);
       std::unique_ptr<ExpressionAST> _parsePrimaryExpression();
+      std::unique_ptr<ExpressionAST> _parseBuiltinFunction();
+      std::unique_ptr<ExpressionAST> _parseBuiltinColumn();
+      std::unique_ptr<ExpressionAST> _parseBuiltinLine();
+      std::unique_ptr<ExpressionAST> _parseBuiltinFile();
+      std::unique_ptr<ExpressionAST> _parseTypeof();
+      std::unique_ptr<ExpressionAST> _parseNameof();
+      std::unique_ptr<ExpressionAST> _parseSizeof();
       std::unique_ptr<ExpressionAST> _parseVariableDeclaration();
       std::unique_ptr<ExpressionAST> _parseArgument();
       std::unique_ptr<BlockStatementAST> _parseBlock();
@@ -126,6 +137,31 @@ namespace tungsten {
       }
       return std::filesystem::absolute(_filePath).string() + ":" + std::to_string(line) + ":" + std::to_string(column) + ":";
    }
+   size_t Parser::_column(const Token& token) {
+      size_t column = 1;
+      for (size_t i = 0; i < token.position; ++i) {
+         if (_raw[i] == '\n') {
+            column = 1;
+         } else {
+            ++column;
+         }
+      }
+      return column;
+   }
+   size_t Parser::_line(const Token& token) {
+      size_t line = 1;
+      for (size_t i = 0; i < token.position; ++i) {
+         if (_raw[i] == '\n') ++line;
+      }
+      return line;
+   }
+   std::string Parser::_file() {
+      return std::filesystem::absolute(_filePath).string();
+   }
+   std::string Parser::_function() {
+      return ""; // TODO: fix
+   }
+
    int Parser::_getPrecedence(TokenType type) {
       if (operatorPrecedence.contains(type))
          return operatorPrecedence.at(type);
@@ -400,12 +436,92 @@ namespace tungsten {
          case TokenType::Void:
             return _parseVariableDeclaration();
 
+         case TokenType::__BuiltinFunction:
+            return _parseBuiltinFunction();
+         case TokenType::__BuiltinColumn:
+            return _parseBuiltinColumn();
+         case TokenType::__BuiltinLine:
+            return _parseBuiltinLine();
+         case TokenType::__BuiltinFile:
+            return _parseBuiltinFile();
+         case TokenType::Nameof:
+            return _parseNameof();
+         case TokenType::Typeof:
+            return _parseTypeof();
+         case TokenType::Sizeof:
+            return _parseSizeof();
+
          default:
             _consume();
             return _logError("unknown token when expecting an expression");
       }
    }
 
+   std::unique_ptr<ExpressionAST> Parser::_parseBuiltinFunction() {
+      if (_peek().type != TokenType::OpenParen) {
+         _consume();
+         return _logError("expected '(' after '__builtinFunction'");
+      }
+      if (_peek(1).type != TokenType::CloseParen) {
+         _consume(2);
+         return _logError("expected ')' after '('");
+      }
+
+      auto expr = std::make_unique<__BuiltinFunctionAST>(_function());
+      _consume(3); // consume '__builtinFunction()'
+      return std::move(expr);
+   }
+   std::unique_ptr<ExpressionAST> Parser::_parseBuiltinColumn() {
+      if (_peek().type != TokenType::OpenParen) {
+         _consume();
+         return _logError("expected '(' after '__builtinColumn'");
+      }
+      if (_peek(1).type != TokenType::CloseParen) {
+         _consume(2);
+         return _logError("expected ')' after '('");
+      }
+
+      auto expr = std::make_unique<__BuiltinColumnAST>(_column(_peek()));
+      _consume(3); // consume '__builtinColumn()'
+      return std::move(expr);
+   }
+   std::unique_ptr<ExpressionAST> Parser::_parseBuiltinLine() {
+      if (_peek().type != TokenType::OpenParen) {
+         _consume();
+         return _logError("expected '(' after '__builtinLine'");
+      }
+      if (_peek(1).type != TokenType::CloseParen) {
+         _consume(2);
+         return _logError("expected ')' after '('");
+      }
+
+      auto expr = std::make_unique<__BuiltinColumnAST>(_column(_peek()));
+      _consume(3); // consume '__builtinLine()'
+      return std::move(expr);
+   }
+   std::unique_ptr<ExpressionAST> Parser::_parseBuiltinFile() {
+      if (_peek().type != TokenType::OpenParen) {
+         _consume();
+         return _logError("expected '(' after '__builtinFile'");
+      }
+      if (_peek(1).type != TokenType::CloseParen) {
+         _consume(2);
+         return _logError("expected ')' after '('");
+      }
+
+      auto expr = std::make_unique<__BuiltinFileAST>(_file());
+      _consume(3); // consume '__builtinFile()'
+      return std::move(expr);
+   }
+   std::unique_ptr<ExpressionAST> Parser::_parseTypeof() {
+      return std::make_unique<TypeOfStatementAST>(nullptr);
+   }
+   std::unique_ptr<ExpressionAST> Parser::_parseNameof() {
+      return std::make_unique<NameOfStatementAST>(nullptr);
+   }
+   std::unique_ptr<ExpressionAST> Parser::_parseSizeof() {
+      return std::make_unique<SizeOfStatementAST>(nullptr);
+   }
    std::string Parser::_parseType() {
       std::string type = _lexeme(_peek());
       if ((_peek().type >= TokenType::Auto && _peek().type <= TokenType::Int64) || _symbolTable.contains(_lexeme(_peek())))

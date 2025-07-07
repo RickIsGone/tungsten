@@ -113,6 +113,15 @@ namespace tungsten {
       Comma,
       Colon,
 
+      // core functions
+      __BuiltinFunction,
+      __BuiltinLine,
+      __BuiltinColumn,
+      __BuiltinFile,
+      Typeof,
+      Nameof,
+      Sizeof,
+
       EndOFFile
    };
 
@@ -165,7 +174,16 @@ namespace tungsten {
        {"nullptr", TokenType::Nullptr},
        {"NaN", TokenType::Nan},
        {"CodeSuccess", TokenType::CodeSuccess},
-       {"CodeFailure", TokenType::CodeFailure}};
+       {"CodeFailure", TokenType::CodeFailure},
+
+       // core functions
+       {"__builtinFunction", TokenType::__BuiltinFunction},
+       {"__builtinColumn", TokenType::__BuiltinColumn},
+       {"__builtinLine", TokenType::__BuiltinLine},
+       {"__builtinFile", TokenType::__BuiltinFile},
+       {"nameof", TokenType::Nameof},
+       {"typeof", TokenType::Typeof},
+       {"sizeof", TokenType::Sizeof}};
 
    export struct Token {
       TokenType type{TokenType::Invalid};

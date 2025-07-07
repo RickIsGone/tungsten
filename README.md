@@ -9,7 +9,7 @@ Java
 
 Below is a snippet of code which shows some of the basic functionalities of tungsten
 
-```java
+```c++
 import stdio;
 Uint fibonacci(Uint num) {
     if (num <= 1) return num;
@@ -201,6 +201,34 @@ Int main() {
     return 0;
 }
 ```
+
+### Building a project
+
+To build a project, you need to make a `build.tgs` file  
+A simple project build file will look like this:
+
+```c++
+import build;
+
+Project myProject{Executable, "myProject"};
+
+Void main() {
+    myProject.addSource("main.tgs");
+    myProject.build();
+}
+```
+
+to then build the file, you'll then have to call the compiler in the directory where the build file is located
+
+```shell
+cd projectDirectory
+tungsten 
+```
+
+The compiler will then automatically compile the `build.tgs` file.  
+After compiling the file, the compiler will automatically execute the `build` executable which will compile the project
+following the rules set by the `build.tgs` file.  
+The build output will then be put into the `projectDirectory/build` directory
 
 # License
 

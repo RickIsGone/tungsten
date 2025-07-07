@@ -150,6 +150,66 @@ export namespace tungsten {
       std::vector<std::unique_ptr<ExpressionAST>> _args;
    };
 
+   class TypeOfStatementAST : public ExpressionAST {
+   public:
+      TypeOfStatementAST(const std::string& variable) : _variable{variable} {}
+      llvm::Value* codegen() override;
+
+   private:
+      std::string _variable;
+   };
+
+   class NameOfStatementAST : public ExpressionAST {
+   public:
+      NameOfStatementAST(const std::string& variable) : _name{variable} {}
+      llvm::Value* codegen() override;
+
+   private:
+      std::string _name;
+   };
+
+   class SizeOfStatementAST : public ExpressionAST {
+   public:
+      SizeOfStatementAST(const std::string& variable) : _variable{variable} {}
+      llvm::Value* codegen() override;
+
+   private:
+      std::string _variable;
+   };
+
+   class __BuiltinFunctionAST : public ExpressionAST {
+   public:
+      __BuiltinFunctionAST(const std::string& function) : _function{function} {}
+      llvm::Value* codegen() override;
+
+   private:
+      std::string _function;
+   };
+   class __BuiltinLineAST : public ExpressionAST {
+   public:
+      __BuiltinLineAST(size_t line) : _line{line} {}
+      llvm::Value* codegen() override;
+
+   private:
+      size_t _line;
+   };
+   class __BuiltinColumnAST : public ExpressionAST {
+   public:
+      __BuiltinColumnAST(size_t column) : _column{column} {}
+      llvm::Value* codegen() override;
+
+   private:
+      size_t _column;
+   };
+   class __BuiltinFileAST : public ExpressionAST {
+   public:
+      __BuiltinFileAST(const std::string& file) : _file{file} {}
+      llvm::Value* codegen() override;
+
+   private:
+      std::string _file;
+   };
+
    // // expression for if statements
    class IfStatementAST : public ExpressionAST {
    public:
@@ -288,6 +348,29 @@ export namespace tungsten {
    }
 
    llvm::Value* CallExpressionAST::codegen() {
+      return nullptr;
+   }
+
+   llvm::Value* TypeOfStatementAST::codegen() {
+      return nullptr;
+   }
+   llvm::Value* NameOfStatementAST::codegen() {
+      return nullptr;
+   }
+   llvm::Value* SizeOfStatementAST::codegen() {
+      return nullptr;
+   }
+
+   llvm::Value* __BuiltinFunctionAST::codegen() {
+      return nullptr;
+   }
+   llvm::Value* __BuiltinLineAST::codegen() {
+      return nullptr;
+   }
+   llvm::Value* __BuiltinColumnAST::codegen() {
+      return nullptr;
+   }
+   llvm::Value* __BuiltinFileAST::codegen() {
       return nullptr;
    }
 
