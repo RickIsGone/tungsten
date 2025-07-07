@@ -31,6 +31,12 @@ namespace tungsten {
       Default,
       Break,
       Continue,
+      Class,
+      Public,
+      Private,
+      Protected,
+      Static,
+      Namespace,
 
       // operators
       Plus,
@@ -147,6 +153,12 @@ namespace tungsten {
        {"default", TokenType::Default},
        {"break", TokenType::Break},
        {"continue", TokenType::Continue},
+       {"class", TokenType::Class},
+       {"public", TokenType::Public},
+       {"private", TokenType::Private},
+       {"protected", TokenType::Protected},
+       {"static", TokenType::Static},
+       {"namespace", TokenType::Namespace},
 
        // types
        {"Auto", TokenType::Auto},

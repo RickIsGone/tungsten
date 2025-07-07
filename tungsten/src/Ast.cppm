@@ -321,6 +321,30 @@ export namespace tungsten {
       std::unique_ptr<ExpressionAST> _body;
    };
 
+   // classes
+   enum class Visibility {
+      Private,
+      Public,
+      Protected
+   };
+
+   class ClassMember {
+      Visibility _visibility;
+      std::string _name;
+      std::string _type;
+      bool _isStatic;
+   };
+
+   class ClassAST {
+   public:
+      ClassAST(const std::string& name, std::vector<ClassMember> members)
+          : _name{name}, _members{std::move(members)} {}
+
+   private:
+      std::string _name;
+      std::vector<ClassMember> _members;
+   };
+
    //  ========================================== implementation ==========================================
 
    llvm::Value* NumberExpressionAST::codegen() {

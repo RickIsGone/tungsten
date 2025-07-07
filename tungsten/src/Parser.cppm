@@ -458,12 +458,12 @@ namespace tungsten {
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseBuiltinFunction() {
-      if (_peek().type != TokenType::OpenParen) {
-         _consume();
+      if (_peek(1).type != TokenType::OpenParen) {
+         _consume(2);
          return _logError("expected '(' after '__builtinFunction'");
       }
-      if (_peek(1).type != TokenType::CloseParen) {
-         _consume(2);
+      if (_peek(2).type != TokenType::CloseParen) {
+         _consume(3);
          return _logError("expected ')' after '('");
       }
 
@@ -472,12 +472,12 @@ namespace tungsten {
       return std::move(expr);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseBuiltinColumn() {
-      if (_peek().type != TokenType::OpenParen) {
-         _consume();
+      if (_peek(1).type != TokenType::OpenParen) {
+         _consume(2);
          return _logError("expected '(' after '__builtinColumn'");
       }
-      if (_peek(1).type != TokenType::CloseParen) {
-         _consume(2);
+      if (_peek(2).type != TokenType::CloseParen) {
+         _consume(3);
          return _logError("expected ')' after '('");
       }
 
@@ -486,12 +486,12 @@ namespace tungsten {
       return std::move(expr);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseBuiltinLine() {
-      if (_peek().type != TokenType::OpenParen) {
-         _consume();
+      if (_peek(1).type != TokenType::OpenParen) {
+         _consume(2);
          return _logError("expected '(' after '__builtinLine'");
       }
-      if (_peek(1).type != TokenType::CloseParen) {
-         _consume(2);
+      if (_peek(2).type != TokenType::CloseParen) {
+         _consume(3);
          return _logError("expected ')' after '('");
       }
 
@@ -500,12 +500,12 @@ namespace tungsten {
       return std::move(expr);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseBuiltinFile() {
-      if (_peek().type != TokenType::OpenParen) {
-         _consume();
+      if (_peek(1).type != TokenType::OpenParen) {
+         _consume(2);
          return _logError("expected '(' after '__builtinFile'");
       }
-      if (_peek(1).type != TokenType::CloseParen) {
-         _consume(2);
+      if (_peek(2).type != TokenType::CloseParen) {
+         _consume(3);
          return _logError("expected ')' after '('");
       }
 
