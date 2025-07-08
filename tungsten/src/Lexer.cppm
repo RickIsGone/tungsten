@@ -54,7 +54,7 @@ namespace tungsten {
                if (!_peek().has_value()) break;
             } while (_peek().has_value() && std::isspace(static_cast<unsigned char>(_peek().value())));
 
-         } else if (std::isalpha(static_cast<unsigned char>(_peek().value())) || _peek().value() == '_') {
+         } else if (std::isalpha(static_cast<unsigned char>(_peek().value())) || _peek().value() == '_' || _peek().value() == '~') {
             // KEYWORDS, TYPES AND IDENTIFIERS
             do {
                buffer.push_back(_peek().value());

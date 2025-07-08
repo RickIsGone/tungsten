@@ -132,6 +132,9 @@ export namespace tungsten {
           : _type{type}, _name{name}, _init{std::move(init)} {}
       llvm::Value* codegen() override;
 
+      _NODISCARD const std::string& name() const { return _name; }
+      _NODISCARD const std::string& type() const { return _type; }
+
    private:
       std::string _type;
       std::string _name;
@@ -292,6 +295,7 @@ export namespace tungsten {
       llvm::Function* codegen();
 
       _NODISCARD const std::string& name() const { return _name; }
+      _NODISCARD const std::string& type() const { return _type; }
 
    private:
       std::string _type;
@@ -316,6 +320,9 @@ export namespace tungsten {
           : _prototype{std::move(prototype)}, _body{std::move(body)} {}
       llvm::Function* codegen();
 
+      _NODISCARD const std::string& name() const { return _prototype->name(); }
+      _NODISCARD const std::string& type() const { return _prototype->type(); }
+
    private:
       std::unique_ptr<FunctionPrototypeAST> _prototype;
       std::unique_ptr<ExpressionAST> _body;
@@ -327,24 +334,89 @@ export namespace tungsten {
       Public,
       Protected
    };
+   enum class MemberType {
+      Variable,
+      Method,
+      Constructor,
+      Destructor
+   };
 
-   class ClassMember {
+   class ClassMethodAST {
+   public:
+      ClassMethodAST(Visibility visibility, const std::string& name, const std::string& type, bool isStatic, std::unique_ptr<FunctionAST> method)
+          : _visibility{visibility}, _name{name}, _type{type}, _isStatic{isStatic}, _method{std::move(method)} {}
+      llvm::Value* codegen();
+
+   private:
       Visibility _visibility;
       std::string _name;
       std::string _type;
       bool _isStatic;
+      std::unique_ptr<FunctionAST> _method;
+   };
+
+   class ClassVariableAST {
+   public:
+      ClassVariableAST(Visibility visibility, const std::string& name, const std::string& type, bool isStatic, std::unique_ptr<ExpressionAST> variable)
+          : _visibility{visibility}, _name{name}, _type{type}, _isStatic{isStatic}, _variable{std::move(variable)} {}
+      llvm::Value* codegen();
+
+   private:
+      Visibility _visibility;
+      std::string _name;
+      std::string _type;
+      bool _isStatic;
+      std::unique_ptr<ExpressionAST> _variable;
+   };
+   class ClassConstructorAST {
+   public:
+      ClassConstructorAST(Visibility visibility, std::unique_ptr<FunctionAST> constructor)
+          : _visibility{visibility}, _constructor{std::move(constructor)} {}
+      llvm::Value* codegen();
+
+   private:
+      Visibility _visibility;
+      std::unique_ptr<FunctionAST> _constructor;
+   };
+   class ClassDestructorAST {
+   public:
+      ClassDestructorAST(std::unique_ptr<FunctionAST> destructor)
+          : _destructor{std::move(destructor)} {}
+      llvm::Value* codegen();
+
+   private:
+      std::unique_ptr<FunctionAST> _destructor;
    };
 
    class ClassAST {
    public:
-      ClassAST(const std::string& name, std::vector<ClassMember> members)
-          : _name{name}, _members{std::move(members)} {}
+      ClassAST(const std::string& name, std::vector<std::unique_ptr<ClassVariableAST>> variables, std::vector<std::unique_ptr<ClassMethodAST>> methods,
+               std::vector<std::unique_ptr<ClassConstructorAST>> constructors, std::unique_ptr<ClassDestructorAST> destructor)
+          : _name{name}, _variables{std::move(variables)}, _methods{std::move(methods)}, _constructors{std::move(constructors)}, _destructor{std::move(destructor)} {}
+      llvm::Value* codegen();
+
+      _NODISCARD const std::string& name() const { return _name; }
 
    private:
       std::string _name;
-      std::vector<ClassMember> _members;
+      std::vector<std::unique_ptr<ClassVariableAST>> _variables;
+      std::vector<std::unique_ptr<ClassMethodAST>> _methods;
+      std::vector<std::unique_ptr<ClassConstructorAST>> _constructors;
+      std::unique_ptr<ClassDestructorAST> _destructor;
    };
 
+   class NamespaceAST : public ExpressionAST {
+   public:
+      NamespaceAST(const std::string& name, std::vector<std::unique_ptr<ExpressionAST>> variables, std::vector<std::unique_ptr<FunctionAST>> functions, std::vector<std::unique_ptr<ClassAST>> classes)
+          : _name{name}, _variables{std::move(variables)}, _functions{std::move(functions)}, _classes{std::move(classes)} {}
+      llvm::Value* codegen() override;
+
+   private:
+      std::string _name;
+      std::vector<std::unique_ptr<ExpressionAST>> _variables;
+      std::vector<std::unique_ptr<FunctionAST>> _functions;
+      std::vector<std::unique_ptr<ClassAST>> _classes;
+   };
    //  ========================================== implementation ==========================================
 
    llvm::Value* NumberExpressionAST::codegen() {
@@ -454,6 +526,26 @@ export namespace tungsten {
    }
 
    llvm::Function* FunctionAST::codegen() {
+      return nullptr;
+   }
+
+   llvm::Value* NamespaceAST::codegen() {
+      return nullptr;
+   }
+
+   llvm::Value* ClassMethodAST::codegen() {
+      return nullptr;
+   }
+   llvm::Value* ClassVariableAST::codegen() {
+      return nullptr;
+   }
+   llvm::Value* ClassConstructorAST::codegen() {
+      return nullptr;
+   }
+   llvm::Value* ClassDestructorAST::codegen() {
+      return nullptr;
+   }
+   llvm::Value* ClassAST::codegen() {
       return nullptr;
    }
 
