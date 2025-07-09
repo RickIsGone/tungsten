@@ -49,7 +49,7 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y clang llvm libarchive-dev libcurl4-gnutls-dev
       
     - name: Setting up CMake
-      run: cmake -S . -B build -GNinja
+      run: cmake -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
       
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
