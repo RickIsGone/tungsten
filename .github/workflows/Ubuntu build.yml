@@ -49,11 +49,11 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y clang llvm libarchive-dev libcurl4-gnutls-dev
       
     - name: Setting up CMake
-      run: cmake -S . -B build
+      run: cmake -S . -B build -GNinja
       
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      run: cmake --build  ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }} -GNinja
+      run: cmake --build  ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }} 
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
