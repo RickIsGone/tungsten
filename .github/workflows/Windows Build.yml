@@ -22,18 +22,20 @@ jobs:
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       id: strings
-      shell: bash
+      shell: powershell
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
     
     - name: Install tools via winget
+      shell: powershell
       run: |
         winget install -e --id Microsoft.Git --accept-package-agreements --accept-source-agreements
         winget install -e --id Kitware.CMake --accept-package-agreements --accept-source-agreements
         winget install -e --id WiX.Toolset --accept-package-agreements --accept-source-agreements
         winget install -e --id 7zip.7zip --accept-package-agreements --accept-source-agreements
     - name: Install vcpkg
+      shell: powershell
       run: |
         git clone https://github.com/microsoft/vcpkg
         ./vcpkg/bootstrap-vcpkg.bat
