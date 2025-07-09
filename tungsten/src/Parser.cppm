@@ -56,7 +56,10 @@ namespace tungsten {
        {TokenType::Ternary, 16}, // ?:
        {TokenType::PlusPlus, 2}, // ++
        {TokenType::MinusMinus, 2}, // --
-   };
+
+       {TokenType::Dot, 1}, // class.member
+       {TokenType::Arrow, 1}}; // class->member
+
    export class Parser {
    public:
       Parser(const std::filesystem::path& file, const std::vector<Token>& tokens, const std::string& raw)
@@ -261,6 +264,7 @@ namespace tungsten {
          utils::debugLog("found entry point");
       }
    }
+
    // std::unique_ptr<ExpressionAST> Parser::_parseNamespace() {
    //    _consume(); // consume namespace
    //    if (_peek().type != TokenType::Identifier)
@@ -293,6 +297,7 @@ namespace tungsten {
    //    _consume(); // consume }
    //    return std::make_unique<NamespaceAST>(name, std::move(statements), std::move(functions), std::move(classes));
    // }
+
    std::unique_ptr<FunctionAST> Parser::_parseConstructorOrDestructor(const std::string& className) {
       std::string name = _lexeme(_peek());
       _consume();
@@ -347,6 +352,8 @@ namespace tungsten {
                      break;
                   case TokenType::Protected:
                      visibility = Visibility::Protected;
+                     break;
+                  default:
                      break;
                }
                _consume(2); // consume 'modifier:'
@@ -465,8 +472,8 @@ namespace tungsten {
       _consume(); // consume )
 
       utils::debugLog("function call: '{}', args number: {}", identifier, args.size());
-      if (!_symbolTable.contains(identifier))
-         return _logError("unknown function: '" + identifier + "'");
+      // if (!_symbolTable.contains(identifier))
+      //    return _logError("unknown function: '" + identifier + "'");
 
       return std::make_unique<CallExpressionAST>(identifier, std::move(args));
    }

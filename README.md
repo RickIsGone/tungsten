@@ -50,6 +50,8 @@ Package Manager
 - Libcurl
 - libarchive
 
+If you are on windows i'd suggest using [vcpkg](https://github.com/microsoft/vcpkg) to install the dependencies
+
 > [!IMPORTANT]
 > this project uses C++ modules, which are currently not supported by all compilers and CMake generators, so make sure
 > to use both a compiler and a CMake generator that supports modules
@@ -115,6 +117,7 @@ Types follow the ***PascalCase*** convention, they are:
 
 ```c++
 Int myVariable = 247;
+Int myVariable{247};
 ```
 
 ### Heap allocation
@@ -151,7 +154,7 @@ free[] myArray;
 
 ## Functions
 
-Just like in C++ and java, functions are declared like this:
+Just like in C++, functions are declared like this:
 
 ```c++
 Int myFunction() {
@@ -159,7 +162,7 @@ Int myFunction() {
 }
 ```
 
-Like in Java, you can return arrays by doing:
+You can return arrays by doing:
 
 ```c++
 Int[] myfunction() {
@@ -168,7 +171,7 @@ Int[] myfunction() {
 }
 ```
 
-Or you can use a C++ like approach and use a pointer:
+Or you can allocate on the heap and use a pointer:
 
 ```c++
 Int* myFunction() {
@@ -202,10 +205,10 @@ Int main() {
 }
 ```
 
-### Building a project
+## Building a project
 
 To build a project, you need to make a `build.tgs` file  
-A simple project build file will look like this:
+A simple project's build file will look something like this:
 
 ```c++
 import build;
@@ -232,5 +235,5 @@ The build output will then be put into the `projectDirectory/build` directory
 
 # License
 
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE.txt) file for details.
 

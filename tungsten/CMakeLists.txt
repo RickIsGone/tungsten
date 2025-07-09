@@ -30,20 +30,20 @@ llvm_map_components_to_libnames(LLVM_LIBS
         nativecodegen
         orcjit
 )
-message("found LLVM at: ${LLVM_DIR}")
-message("found LLVM libs: ${LLVM_LIBS}")
+message(STATUS "found LLVM at: ${LLVM_DIR}")
+message(STATUS "found LLVM libs: ${LLVM_LIBS}")
 target_link_libraries(tungsten PRIVATE ${LLVM_LIBS})
 add_definitions(${LLVM_DEFINITIONS})
 
 # === Emscripten ===
-if (EMSCRIPTEN)
-    find_package(ZLIB REQUIRED)
-    target_link_libraries(tungsten PRIVATE ZLIB::ZLIB)
-    set_target_properties(tungsten PROPERTIES
-            LINK_FLAGS "--bind -sEXPORTED_RUNTIME_METHODS=['FS','FS_writeFile','FS_readFile','callMain'] -sEXCEPTION_CATCHING_ALLOWED='1'"
-            OUTPUT_NAME "tungsten"
-    )
-endif ()
+#if (EMSCRIPTEN)
+#    find_package(ZLIB REQUIRED)
+#    target_link_libraries(tungsten PRIVATE ZLIB::ZLIB)
+#    set_target_properties(tungsten PROPERTIES
+#            LINK_FLAGS "--bind -sEXPORTED_RUNTIME_METHODS=['FS','FS_writeFile','FS_readFile','callMain'] -sEXCEPTION_CATCHING_ALLOWED='1'"
+#            OUTPUT_NAME "tungsten"
+#    )
+#endif ()
 
 # === Modules ===
 file(GLOB_RECURSE MODULES "src/*.cppm")
@@ -65,7 +65,7 @@ set_target_properties(tungsten PROPERTIES
 # === Stdlib ===
 file(GLOB STDLIB "src/stdlib/*.cpp")
 add_library(stdlib STATIC ${STDLIB})
-message("adding ${STDLIB} to the stdlib")
+message(STATUS "adding ${STDLIB} to the stdlib")
 set_target_properties(stdlib PROPERTIES
         ARCHIVE_OUTPUT_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/lib
 )
@@ -81,6 +81,6 @@ add_dependencies(tungsten stdlib core) # to make cmake produce the .lib/.a
 file(GLOB STDLIB_MODULES "src/stdlib/*.tgs")
 foreach (LIB IN LISTS STDLIB_MODULES)
     get_filename_component(LIBNAME ${LIB} NAME)
-    message("copying lib: ${LIB} as ${LIBNAME}")
+    message(STATUS "copying lib: ${LIBNAME}")
     file(COPY_FILE ${LIB} ${TUNGSTEN_OUTPUT_DIR}/include/${LIBNAME})
 endforeach ()
