@@ -228,6 +228,8 @@ namespace tungsten {
                   return MinusMinus;
                if (token[1] == '=')
                   return MinusEqual;
+               if (token[1] == '>')
+                  return Arrow;
                return Invalid;
             }
             return Minus;

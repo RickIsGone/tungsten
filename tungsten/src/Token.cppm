@@ -116,6 +116,7 @@ namespace tungsten {
 
       Semicolon,
       Dot,
+      Arrow,
       Comma,
       Colon,
 
