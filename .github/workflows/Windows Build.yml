@@ -1,8 +1,8 @@
-name: Windows 11 build
+name: Windows build
 
 on:
   push:
-    branches: [master]
+    branches: [ master ]
 
 jobs:
   build:
@@ -13,80 +13,77 @@ jobs:
     env:
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
       BUILD_TYPE: Release
-      
+
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: true
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
 
-    - name: Set reusable strings
-      # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
-      id: strings
-      shell: powershell
-      run: |
-        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+      - name: Set reusable strings
+        # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
+        id: strings
+        shell: powershell
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    
-    - name: Install tools via winget
-      shell: powershell
-      run: |
-        winget install -e --id Microsoft.Git --accept-package-agreements --accept-source-agreements
-        winget install -e --id Kitware.CMake --accept-package-agreements --accept-source-agreements
-        winget install -e --id WiX.Toolset --accept-package-agreements --accept-source-agreements
-        winget install -e --id 7zip.7zip --accept-package-agreements --accept-source-agreements
-    - name: Install vcpkg
-      shell: powershell
-      run: |
-        git clone https://github.com/microsoft/vcpkg
-        ./vcpkg/bootstrap-vcpkg.bat
- 
-    - name: Add vcpkg to PATH
-      run: echo "${{ github.workspace }}\\vcpkg" | Out-File -Append -FilePath $env:GITHUB_PATH
 
-    - name: Install dependencies 
-      run: vcpkg install curl:x64-windows-static libarchive:x64-windows-static llvm:x64-windows-static
+      - name: Install tools via Chocolatey
+        run: |
+          choco install -y cmake git wixtoolset 7zip
 
-    - name: Configure CMake
-      run: >
-        cmake -B build -S . 
-        -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake 
-        -DCMAKE_BUILD_TYPE=Release
+      - name: Install vcpkg
+        shell: powershell
+        run: |
+          git clone https://github.com/microsoft/vcpkg
+          ./vcpkg/bootstrap-vcpkg.bat
 
-    - name: Build
-      run: cmake --build build --config Release
+      - name: Add vcpkg to PATH
+        run: echo "${{ github.workspace }}\\vcpkg" | Out-File -Append -FilePath $env:GITHUB_PATH
 
-    - name: Test
-      working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: ctest --build-config ${{ matrix.build_type }}
+      - name: Install dependencies
+        run: vcpkg install curl:x64-windows-static libarchive:x64-windows-static llvm:x64-windows-static
 
-    - name: Package with CPack
-      working-directory: build
-      run: cpack
+      - name: Configure CMake
+        run: >
+          cmake -B build -S . 
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake 
+          -DCMAKE_BUILD_TYPE=Release
 
-    - name: Get version from latest tag
-      id: get_version
-      shell: bash
-      run: |
-        git fetch --tags
-        TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
-        echo "version=${TAG#v}" >> $GITHUB_OUTPUT
-        
-    - name: Upload Windows 7z artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: tungsten.7z
-        path: build/.*7z
-        
-    - name: Upload Windows zip artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: tungsten.zip
-        path: build/.*zip
-        
-    - name: Upload Windows msi artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: tungsten.msi
-        path: build/.*tar
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Test
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
+        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+        run: ctest --build-config ${{ matrix.build_type }}
+
+      - name: Package with CPack
+        working-directory: build
+        run: cpack
+
+      - name: Get version from latest tag
+        id: get_version
+        shell: bash
+        run: |
+          git fetch --tags
+          TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+
+      - name: Upload Windows 7z artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tungsten.7z
+          path: build/.*7z
+
+      - name: Upload Windows zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tungsten.zip
+          path: build/.*zip
+
+      - name: Upload Windows msi artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tungsten.msi
+          path: build/.*tar
