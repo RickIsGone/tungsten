@@ -4,7 +4,7 @@ name: Ubuntu build
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
     
 env:
