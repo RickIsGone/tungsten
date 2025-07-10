@@ -44,11 +44,11 @@ jobs:
       - name: Install dependencies
         run: vcpkg install curl libarchive
 
-      - name: Install LLVM
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "18.1.6"
-          directory: ${{ github.workspace }}/llvm
+      - name: Install Precompiled LLVM
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.6/LLVM-18.1.6-win64-static.7z -OutFile llvm.7z
+          7z x llvm.7z -o"${{ github.workspace }}\llvm"
 
       - name: Configure CMake
         run: >
