@@ -44,18 +44,30 @@ jobs:
       - name: Install dependencies
         run: vcpkg install curl libarchive
 
-      - name: Install Precompiled LLVM
+      - name: Install LLVM
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18.1.6"
+          directory: ${{ github.workspace }}/llvm
+
+      - name: Find LLVMConfig.cmake path
+        id: find_llvm
         shell: powershell
         run: |
-          Invoke-WebRequest -Uri https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.6/LLVM-18.1.6-win64-static.7z -OutFile llvm.7z
-          7z x llvm.7z -o"${{ github.workspace }}\llvm"
+          $file = Get-ChildItem -Recurse "${{ github.workspace }}\llvm" -Filter "LLVMConfig.cmake" | Select-Object -First 1
+          if ($null -eq $file) {
+            Write-Error "LLVMConfig.cmake non trovato!"
+            exit 1
+          }
+          $llvmDir = $file.DirectoryName
+          echo "llvm-cmake-dir=$llvmDir" >> $env:GITHUB_OUTPUT
 
       - name: Configure CMake
         run: >
           cmake -B build -S .
           -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake"
           -DCMAKE_BUILD_TYPE=Release
-          -DLLVM_DIR="${{ github.workspace }}\llvm\lib\cmake\llvm"
+          -DLLVM_DIR="${{ steps.find_llvm.outputs.llvm-cmake-dir }}"
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\llvm"
 
 
