@@ -11,7 +11,7 @@ jobs:
       fail-fast: false
 
     env:
-      #            VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
       BUILD_TYPE: Release
 
     steps:
@@ -42,7 +42,7 @@ jobs:
         run: echo "${{ github.workspace }}\\vcpkg" | Out-File -Append -FilePath $env:GITHUB_PATH
 
       - name: Install dependencies
-        run: vcpkg install curl libarchive llvm
+        run: vcpkg install curl libarchive llvm[core,irreader,orcjit,native,engine]
 
       - name: Configure CMake
         run: >
