@@ -11,7 +11,7 @@ jobs:
       fail-fast: false
 
     env:
-      VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      #            VCPKG_DEFAULT_TRIPLET: x64-windows-static
       BUILD_TYPE: Release
 
     steps:
@@ -87,4 +87,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tungsten.msi
-          path: build/.*tar
+          path: build/.*msi
