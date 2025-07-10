@@ -39,7 +39,7 @@ jobs:
           vcpkg update
 
       - name: Add vcpkg to PATH
-        run: echo "${{ github.workspace }}\\vcpkg" | Out-File -Append -FilePath $env:GITHUB_PATH
+        run: echo "${{ github.workspace }}\vcpkg" | Out-File -Append -FilePath $env:GITHUB_PATH
 
       - name: Install dependencies
         run: vcpkg install curl libarchive
@@ -53,10 +53,10 @@ jobs:
       - name: Configure CMake
         run: >
           cmake -B build -S .
-          -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
+          -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake"
           -DCMAKE_BUILD_TYPE=Release
-          -DLLVM_DIR="${{ github.workspace }}\\llvm\\lib\\cmake\\llvm"
-          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\\llvm"
+          -DLLVM_DIR="${{ github.workspace }}\llvm\lib\cmake\llvm"
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\llvm"
 
 
       - name: Build
