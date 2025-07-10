@@ -42,7 +42,7 @@ jobs:
         run: echo "${{ github.workspace }}\\vcpkg" | Out-File -Append -FilePath $env:GITHUB_PATH
 
       - name: Install dependencies
-        run: vcpkg install curl libarchive llvm[core,irreader,native,engine]
+        run: vcpkg install curl libarchive llvm[core,tools,enable-assertions,enable-rtti]
 
       - name: Configure CMake
         run: >
