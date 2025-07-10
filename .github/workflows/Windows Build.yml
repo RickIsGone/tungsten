@@ -42,12 +42,19 @@ jobs:
         run: echo "${{ github.workspace }}\\vcpkg" | Out-File -Append -FilePath $env:GITHUB_PATH
 
       - name: Install dependencies
-        run: vcpkg install curl libarchive llvm[core,tools,enable-assertions,enable-rtti]
+        run: vcpkg install curl libarchive
+
+      - name: Install LLVM
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18.1.6"
+          directory: ${{ github.workspace }}/llvm
 
       - name: Configure CMake
         run: >
           cmake -B build -S . 
-          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake 
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake
+          -DLLVM_DIR="${{ github.workspace }}\\llvm\\lib\\cmake\\llvm"
           -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
