@@ -84,16 +84,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tungsten.7z
-          path: build/.*7z
+          path: build/*.7z
 
       - name: Upload Windows zip artifact
         uses: actions/upload-artifact@v4
         with:
           name: tungsten.zip
-          path: build/.*zip
+          path: build/*.zip
 
       - name: Upload Windows msi artifact
         uses: actions/upload-artifact@v4
         with:
           name: tungsten.msi
-          path: build/.*msi
+          path: build/*.msi
