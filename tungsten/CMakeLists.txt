@@ -28,7 +28,7 @@ llvm_map_components_to_libnames(LLVM_LIBS
         irreader
         native
         nativecodegen
-        orcjit
+        #        orcjit
 )
 message(STATUS "found LLVM at: ${LLVM_DIR}")
 message(STATUS "found LLVM libs: ${LLVM_LIBS}")
