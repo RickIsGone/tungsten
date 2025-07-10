@@ -36,6 +36,7 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg
           ./vcpkg/bootstrap-vcpkg.bat
+          vcpkg update
 
       - name: Add vcpkg to PATH
         run: echo "${{ github.workspace }}\\vcpkg" | Out-File -Append -FilePath $env:GITHUB_PATH
