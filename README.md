@@ -1,9 +1,13 @@
-# Tungsten programming language
+<h1 style="text-align: center;"> The Tungsten programming language</h1> 
+
+<div style="text-align: center;">
+  <img src="tungsten logo.png" alt="Tungsten Logo" style="width: 33%;">
+</div>
 
 ## Introduction
 
-*Tungsten* is a statically-typed multi-paradigm compiled language made with the LLVM framework and inspired by C++ and
-Java
+*Tungsten* is a statically-typed multi-paradigm compiled programming language made with the LLVM framework and inspired
+by C++ and Java
 
 ## Example
 
@@ -236,4 +240,3 @@ The build output will then be put into the `projectDirectory/build` directory
 # License
 
 This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE.txt) file for details.
-
