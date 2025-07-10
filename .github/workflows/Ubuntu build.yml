@@ -6,7 +6,7 @@ on:
   push:
     branches: [ "master" ]
 
-    
+
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
   BUILD_TYPE: Release
@@ -23,76 +23,76 @@ jobs:
       fail-fast: false
       
       matrix:
-        build_type: [Release]
-        c_compiler: [clang]
-        cpp_compiler: [clang++]
+        build_type: [ Release ]
+        c_compiler: [ clang ]
+        cpp_compiler: [ clang++ ]
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: true
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
 
-    - name: Set reusable strings
-      # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
-      id: strings
-      shell: bash
-      run: |
-        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+      - name: Set reusable strings
+        # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
+        id: strings
+        shell: bash
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    - name: Install cpack dependencies
-      run: sudo apt-get update && sudo apt-get install -y build-essential cmake p7zip-full zip  ninja-build
-      
-    - name: Install DEB packaging dependencies
-      run: sudo apt-get install -y fakeroot dpkg-dev
-      
-    - name: Install tungsten dependencies
-      run: sudo apt-get update && sudo apt-get install -y clang llvm libarchive-dev libcurl4-gnutls-dev
-      
-    - name: Setting up CMake
-      run: cmake -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
-      
-    - name: Build
-      # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      run: cmake --build  ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }} 
+      - name: Install cpack dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake p7zip-full zip  ninja-build
 
-    - name: Test
-      working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: ctest --build-config ${{ matrix.build_type }}
+      - name: Install DEB packaging dependencies
+        run: sudo apt-get install -y fakeroot dpkg-dev
 
-    - name: Package with CPack
-      working-directory: build
-      run: cpack
+      - name: Install tungsten dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang llvm libarchive-dev libcurl4-gnutls-dev
 
-    - name: Get version from latest tag
-      id: get_version
-      shell: bash
-      run: |
-        git fetch --tags
-        TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
-        echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+      - name: Setting up CMake
+        run: cmake -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
 
-    - name: Upload STGZ package
-      uses: actions/upload-artifact@v4
-      with:
-        name: tungsten.sh
-        path: build/*.sh
+      - name: Build
+        # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
+        run: cmake --build  ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
 
-    - name: Upload TGZ package
-      uses: actions/upload-artifact@v4
-      with:
-        name: tungsten.tar.gz
-        path: build/*.tar.gz
+      - name: Test
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
+        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+        run: ctest --build-config ${{ matrix.build_type }}
 
-    - name: Upload 7Z package
-      uses: actions/upload-artifact@v4
-      with:
-        name: tungsten.7z
-        path: build/*.7z
+      - name: Package with CPack
+        working-directory: build
+        run: cpack
 
-    - name: Upload deb package
-      uses: actions/upload-artifact@v4
-      with:
-        name: tungsten.deb
-        path: build/*.deb
+      - name: Get version from latest tag
+        id: get_version
+        shell: bash
+        run: |
+          git fetch --tags
+          TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+
+      - name: Upload STGZ package
+        uses: actions/upload-artifact@v4
+        with:
+          name: tungsten.sh
+          path: build/*.sh
+
+      - name: Upload TGZ package
+        uses: actions/upload-artifact@v4
+        with:
+          name: tungsten.tar.gz
+          path: build/*.tar.gz
+
+      - name: Upload 7Z package
+        uses: actions/upload-artifact@v4
+        with:
+          name: tungsten.7z
+          path: build/*.7z
+
+      - name: Upload DEB package
+        uses: actions/upload-artifact@v4
+        with:
+          name: tungsten.deb
+          path: build/*.deb

@@ -42,7 +42,7 @@ jobs:
         run: echo "${{ github.workspace }}\\vcpkg" | Out-File -Append -FilePath $env:GITHUB_PATH
 
       - name: Install dependencies
-        run: vcpkg install curl:x64-windows-static libarchive:x64-windows-static llvm:x64-windows-static
+        run: vcpkg install curl libarchive llvm
 
       - name: Configure CMake
         run: >
