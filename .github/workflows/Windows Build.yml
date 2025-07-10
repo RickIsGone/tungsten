@@ -45,7 +45,7 @@ jobs:
         run: vcpkg install curl libarchive
 
       - name: Install Prebuilt LLVM
-        uses: RickIsGone/install-llvm-stripped@v1
+        uses: RickIsGone/install-llvm-stripped@v2
 
       - name: Find LLVMConfig.cmake path
         id: find_llvm
