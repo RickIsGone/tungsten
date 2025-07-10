@@ -1,4 +1,4 @@
-<h1 style="text-align: center;"> The Tungsten programming language</h1> 
+# The Tungsten programming language
 
 <p align="center">
   <img src="tungsten logo.png" alt="the tungsten logo" width="300" />
