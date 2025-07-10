@@ -52,10 +52,12 @@ jobs:
 
       - name: Configure CMake
         run: >
-          cmake -B build -S . 
-          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake
-          -DLLVM_DIR="${{ github.workspace }}\\llvm\\lib\\cmake\\llvm"
+          cmake -B build -S .
+          -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
           -DCMAKE_BUILD_TYPE=Release
+          -DLLVM_DIR="${{ github.workspace }}\\llvm\\lib\\cmake\\llvm"
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}\\llvm"
+
 
       - name: Build
         run: cmake --build build --config Release
