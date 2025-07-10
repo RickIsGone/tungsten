@@ -1,8 +1,8 @@
 <h1 style="text-align: center;"> The Tungsten programming language</h1> 
 
-<div style="text-align: center;">
-  <img src="tungsten logo.png" alt="Tungsten Logo" style="width: 33%;">
-</div>
+<p align="center">
+  <img src="tungsten logo.png" alt="the tungsten logo" width="300" />
+</p>
 
 ## Introduction
 
