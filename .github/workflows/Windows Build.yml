@@ -44,11 +44,8 @@ jobs:
       - name: Install dependencies
         run: vcpkg install curl libarchive
 
-      - name: Install LLVM
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "18.1.6"
-          directory: ${{ github.workspace }}/llvm
+      - name: Install prebuilt LLVM
+        uses: RickIsGone/install-llvm-stripped@v1.0.0
 
       - name: Find LLVMConfig.cmake path
         id: find_llvm
@@ -56,7 +53,7 @@ jobs:
         run: |
           $file = Get-ChildItem -Recurse "${{ github.workspace }}\llvm" -Filter "LLVMConfig.cmake" | Select-Object -First 1
           if ($null -eq $file) {
-            Write-Error "LLVMConfig.cmake non trovato!"
+            Write-Error "LLVMConfig.cmake not found!"
             exit 1
           }
           $llvmDir = $file.DirectoryName
@@ -66,10 +63,9 @@ jobs:
         run: >
           cmake -B build -S .
           -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake"
-          -DCMAKE_BUILD_TYPE=Release
-          -DLLVM_DIR="${{ steps.find_llvm.outputs.llvm-cmake-dir }}"
+          -DLLVM_DIR"${{ steps.find_llvm.outputs.llvm-cmake-dir }}"
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\llvm"
-
+          -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: cmake --build build --config Release
