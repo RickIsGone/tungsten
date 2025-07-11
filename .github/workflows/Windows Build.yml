@@ -46,7 +46,8 @@ jobs:
 
       - name: Install Prebuilt LLVM
         uses: RickIsGone/install-llvm-stripped@v2
-        output-dir: "${{ github.workspace }}\llvm"
+        with:
+          output-dir: "${{ github.workspace }}/llvm"
 
       - name: Find LLVMConfig.cmake path
         id: find_llvm
