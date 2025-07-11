@@ -64,10 +64,13 @@ jobs:
       - name: Configure CMake
         run: >
           cmake -B build -S .
+          -DVCPKG_TARGET_TRIPLET=x64-windows-static 
+          -Dzstd_DIR="${{ github.workspace }}\vcpkg\installed\x64-windows-static\share\zstd"
           -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake"
           -DLLVM_DIR="${{ steps.find_llvm.outputs.llvm-cmake-dir }}"
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\llvm"
           -DCMAKE_BUILD_TYPE=Release
+          -DLLVM_BUILD_TYPE=Release
 
       - name: Build
         run: cmake --build build --config Release
