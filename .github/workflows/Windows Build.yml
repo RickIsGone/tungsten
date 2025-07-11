@@ -65,7 +65,7 @@ jobs:
         run: >
           cmake -B build -S .
           -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake"
-          -DLLVM_DIR"${{ steps.find_llvm.outputs.llvm-cmake-dir }}"
+          -DLLVM_DIR="${{ steps.find_llvm.outputs.llvm-cmake-dir }}"
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\llvm"
           -DCMAKE_BUILD_TYPE=Release
 
