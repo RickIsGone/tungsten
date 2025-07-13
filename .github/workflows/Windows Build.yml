@@ -61,7 +61,7 @@ jobs:
           $llvmDir = $file.DirectoryName
           echo "llvm-cmake-dir=$llvmDir" >> $env:GITHUB_OUTPUT
 
-      - name: Configure CMake
+      - name: Configure CMake # this fucking step is taking too long, I want to kill myself
         run: >
           cmake -B build -S .
           -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake"
@@ -73,9 +73,10 @@ jobs:
           -DCMAKE_CXX_COMPILER="${{ github.workspace }}\llvm\tools\llvm\clang++.exe"
           -DCMAKE_C_COMPILER="${{ github.workspace }}\llvm\tools\llvm\clang.exe"
           -GNinja
+          -DUSE_DIA_SDK=OFF
 
       - name: Build
-        run: cmake --build build -DUSE_DIA_SDK=OFF
+        run: cmake --build build
 
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
