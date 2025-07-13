@@ -29,7 +29,7 @@ jobs:
 
       - name: Install tools via Chocolatey
         run: |
-          choco install -y cmake git wixtoolset 7zip ninja clang
+          choco install -y cmake git wixtoolset 7zip ninja
 
       - name: Install vcpkg
         shell: powershell
@@ -70,7 +70,7 @@ jobs:
           -Dzstd_DIR="${{ github.workspace }}\vcpkg\installed\x64-windows-static\share\zstd"
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\llvm"
           -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_CXX_COMPILER="${{ github.workspace }}\llvm\tools\llvm\clang++"
           -GNinja
 
       - name: Build
