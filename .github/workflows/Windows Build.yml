@@ -52,17 +52,17 @@ jobs:
       #        with:
       #          output-dir: "${{ github.workspace }}/llvm"
 
-      - name: Find LLVMConfig.cmake path
-        id: find_llvm
-        shell: powershell
-        run: |
-          $file = Get-ChildItem -Recurse "${{ github.workspace }}" -Filter "LLVMConfig.cmake" | Select-Object -First 1
-          if ($null -eq $file) {
-            Write-Error "LLVMConfig.cmake not found!"
-            exit 1
-          }
-          $llvmDir = $file.DirectoryName
-          echo "llvm-cmake-dir=$llvmDir" >> $env:GITHUB_OUTPUT
+      #      - name: Find LLVMConfig.cmake path
+      #        id: find_llvm
+      #        shell: powershell
+      #        run: |
+      #          $file = Get-ChildItem -Recurse "${{ github.workspace }}" -Filter "LLVMConfig.cmake" | Select-Object -First 1
+      #          if ($null -eq $file) {
+      #            Write-Error "LLVMConfig.cmake not found!"
+      #            exit 1
+      #          }
+      #          $llvmDir = $file.DirectoryName
+      #          echo "llvm-cmake-dir=$llvmDir" >> $env:GITHUB_OUTPUT
 
       - name: Configure CMake # this fucking step is taking too long, I want to kill myself
         run: >
