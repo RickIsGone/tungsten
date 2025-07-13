@@ -29,7 +29,7 @@ jobs:
 
       - name: Install tools via Chocolatey
         run: |
-          choco install -y cmake git wixtoolset 7zip ninja
+          choco install -y cmake git wixtoolset 7zip ninja llvm
 
       - name: Install Visual Studio Workloads (C++ with DIA SDK)
         uses: microsoft/setup-msbuild@v2
@@ -47,16 +47,16 @@ jobs:
       - name: Install dependencies
         run: vcpkg install curl libarchive
 
-      - name: Install Prebuilt LLVM
-        uses: RickIsGone/install-llvm-stripped@v2
-        with:
-          output-dir: "${{ github.workspace }}/llvm"
+      #      - name: Install Prebuilt LLVM
+      #        uses: RickIsGone/install-llvm-stripped@v2
+      #        with:
+      #          output-dir: "${{ github.workspace }}/llvm"
 
       - name: Find LLVMConfig.cmake path
         id: find_llvm
         shell: powershell
         run: |
-          $file = Get-ChildItem -Recurse "${{ github.workspace }}\llvm" -Filter "LLVMConfig.cmake" | Select-Object -First 1
+          $file = Get-ChildItem -Recurse "${{ github.workspace }}" -Filter "LLVMConfig.cmake" | Select-Object -First 1
           if ($null -eq $file) {
             Write-Error "LLVMConfig.cmake not found!"
             exit 1
