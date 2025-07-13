@@ -70,6 +70,7 @@ jobs:
           -Dzstd_DIR="${{ github.workspace }}\vcpkg\installed\x64-windows-static\share\zstd"
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\llvm"
           -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_COMPILER=clang++
           -GNinja
 
       - name: Build
