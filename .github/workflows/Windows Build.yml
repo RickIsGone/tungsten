@@ -75,7 +75,7 @@ jobs:
           -GNinja
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build build -DUSE_DIA_SDK=OFF
 
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
