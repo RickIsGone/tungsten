@@ -71,6 +71,7 @@ jobs:
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\llvm"
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_CXX_COMPILER="${{ github.workspace }}\llvm\tools\llvm\clang++"
+          -DCMAKE_C_COMPILER="${{ github.workspace }}\llvm\tools\llvm\clang"
           -GNinja
 
       - name: Build
