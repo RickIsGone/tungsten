@@ -38,6 +38,12 @@ the [online tungsten compiler](https://rickisgone.github.io/tungsten-sandbox/)
 
 # Building
 
+| Platform | Build Status                                                                                                                                                                             |
+|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Ubuntu   | [![Ubuntu Build](https://github.com/rickisgone/tungsten/actions/workflows/Ubuntu%20build.yml/badge.svg)](https://github.com/rickisgone/tungsten/actions/workflows/Ubuntu%20build.yml)    |
+| Windows  | [![Windows Build](https://github.com/rickisgone/tungsten/actions/workflows/Windows%20Build.yml/badge.svg)](https://github.com/rickisgone/tungsten/actions/workflows/Windows%20Build.yml) |
+| Mac      | **not added yet**                                                                                                                                                                        |
+
 ## Prerequisites
 
 Global
@@ -67,13 +73,16 @@ after doing this follow the instruction for the targeted OS
 
 <details><summary><big>WINDOWS</big></summary><p>
 
-<ins> **2. Compiling the project:** </ins>
+<ins> **2. Compiling the project:** </ins>  
+
+if you're using vcpkg:
 
 ```bash
-cmake -S . -B build
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="VCPKG_DIR\scripts\buildsystems\vcpkg.cmake"  -DVCPKG_TARGET_TRIPLET=x64-windows-static -DLLVM_DIR='VCPKG_DIR/installed/x64-windows-static/share/llvm/' -Dzstd_DIR='VCPKG_DIR/installed/x64-windows-static/share/zstd'
 cmake --build build --config Release
 ```
 
+replace `VCPKG_DIR` with the vcpkg directory
 </details>
 
 <details><summary><big>LINUX</big></summary><p>
@@ -236,6 +245,34 @@ The compiler will then automatically compile the `build.tgs` file.
 After compiling the file, the compiler will automatically execute the `build` executable which will compile the project
 following the rules set by the `build.tgs` file.  
 The build output will then be put into the `projectDirectory/build` directory
+
+# TPKG
+
+tpkg is the package manager included with the *Tungsten programming language*
+
+> [!NOTE]
+> tpkg uses a centralized git directory, which is not checked, meaning it's on the users to open issues reporting
+> possible badware
+
+package files are written in **json**, and a simple package file looks like this
+
+```json
+{
+  "name": "myPackage",
+  "version": "1.0.0",
+  "description": "my package description",
+  "homepage": "homepage url",
+  "license": "MIT/Apache 2.0/ecc.",
+  "source": "source/release code zip url",
+  "dependencies": [
+    "your dependencies"
+  ],
+  "build": {
+    "type": "cmd/buildsystem",
+    "args": "args to pass to the compiler"
+  }
+}
+```
 
 # License
 
