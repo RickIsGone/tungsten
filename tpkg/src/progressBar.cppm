@@ -1,11 +1,11 @@
 module;
 
 #include <chrono>
-#include <cmath>
 #include <iostream>
 #include <iomanip>
 #include <string>
 #include <thread>
+#include <algorithm>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -15,7 +15,7 @@ module;
 #endif
 
 export module TPKG.progressBar;
-
+import TPKG.package;
 namespace TPKG {
 
    export class ProgressTimer {
@@ -42,7 +42,7 @@ namespace TPKG {
       std::chrono::steady_clock::time_point _startTime;
    };
 
-   //  ========================================== implementation ==========================================
+   // ========================================== implementation ==========================================
 
    int shellWidth() {
 #if defined(_WIN32)
@@ -58,22 +58,41 @@ namespace TPKG {
 #endif
    }
 
-   export void printProgressBar(size_t current, size_t total, const ProgressTimer& timer) {
-      int width = shellWidth() * 0.7f;
-      float ratio = (total > 0) ? static_cast<float>(current) / total : 1.0f;
-      std::cout << "\r" << std::string(width, ' ') << "\r"; // Clear line
+   export void printProgressBar(const Package& pack, size_t currentBytes, double speedBytesPerSec, const ProgressTimer& timer) {
+      using namespace std;
+      using namespace std::chrono;
 
-      std::string eta = " ETA: " + timer.eta(current, total);
-      std::string percent = " " + std::to_string(static_cast<int>(ratio * 100)) + "%";
+      constexpr int nameWidth = 40;
+      constexpr int barWidth = 52;
 
-      int barWidth = width - static_cast<int>(percent.size() + eta.size() + 4); // 4 for " [] "
+      float ratio = pack.size > 0 ? static_cast<float>(currentBytes) / pack.size : 1.0f;
+      ratio = clamp(ratio, 0.0f, 1.0f);
+
+      auto formatSize = [](size_t bytes) -> std::string {
+         static const std::string units[] = {"B", "KiB", "MiB", "GiB"};
+         double size = static_cast<double>(bytes);
+         size_t unitIndex = 0;
+         while (size >= 1024.0 && unitIndex < 3) {
+            size /= 1024.0;
+            ++unitIndex;
+         }
+         ostringstream ss;
+         ss << fixed << setprecision(1) << size << " " << units[unitIndex];
+         return ss.str();
+      };
+
+      ostringstream out;
+      out << left << setw(nameWidth) << pack.name;
+      out << right << setw(8) << formatSize(pack.size);
+      out << "  " << setw(8) << formatSize(static_cast<size_t>(speedBytesPerSec)) << "/s";
+      out << " " << timer.eta(currentBytes, pack.size);
 
       int filled = static_cast<int>(barWidth * ratio);
-      std::string bar = "\r[";
-      bar += std::string(filled, '#');
-      bar += std::string(barWidth - filled, '-');
-      bar += "]";
+      out << " [" << string(filled, '#') << string(barWidth - filled, '-') << "]";
+      out << " " << setw(3) << static_cast<int>(ratio * 100) << "%";
 
-      std::cout << "\r" << bar << percent << eta << std::flush;
+      cout << '\r' << out.str() << flush;
    }
+
+
 } // namespace TPKG
