@@ -5,6 +5,7 @@
 using namespace std::string_view_literals;
 namespace fs = std::filesystem;
 import TPKG.progressBar;
+import TPKG.package;
 constexpr const char* Version = "0.1.0";
 namespace specialChars {
    constexpr const char* ColorRed = "\x1B[91m";
@@ -69,11 +70,14 @@ int main(int argc, char** argv) {
          if (argv[1] == "install"sv) {
             fs::path downloads = downloadsDir(argv[0]);
             TPKG::ProgressTimer timer;
+            TPKG::Package package{argv[2], 292864};
+            double speed = 25 * 1024 * 1024 * 1024; // 25 GiB/s
             std::cout << specialChars::HideCursor;
-            for (size_t i = 0; i <= 100; ++i) {
-               printProgressBar(i, 100, timer);
-               std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            for (size_t downloaded = 0; downloaded <= package.size; downloaded += speed) {
+               std::this_thread::sleep_for(std::chrono::milliseconds(200));
+               TPKG::printProgressBar(package, downloaded, speed, timer);
             }
+            TPKG::printProgressBar(package, package.size, speed, timer);
             std::cout << specialChars::ShowCursor;
             break;
          }
