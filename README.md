@@ -252,7 +252,7 @@ tpkg is the package manager included with the *Tungsten programming language*
 
 > [!NOTE]
 > tpkg uses a centralized git directory, which is not checked, meaning it's on the users to open issues reporting
-> possible badware
+> malicious packages
 
 package files are written in **json**, and a simple package file looks like this
 
