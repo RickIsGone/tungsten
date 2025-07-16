@@ -59,14 +59,19 @@ namespace TPKG {
    }
 
    export void printProgressBar(const Package& pack, size_t currentBytes, double speedBytesPerSec, const ProgressTimer& timer) {
-      using namespace std;
-      using namespace std::chrono;
+      const int terminalWidth = shellWidth();
 
-      constexpr int nameWidth = 40;
-      constexpr int barWidth = 52;
+      const int nameWidth = max(20, static_cast<int>(pack.name.length()));
+      const int sizeWidth = 8;
+      const int speedWidth = 8;
+      const int etaWidth = 8;
+      const int fixedSpacing = nameWidth + sizeWidth + speedWidth + etaWidth + 10;
+      int barWidth = terminalWidth - fixedSpacing;
+
+      if (barWidth < 10) barWidth = 10;
 
       float ratio = pack.size > 0 ? static_cast<float>(currentBytes) / pack.size : 1.0f;
-      ratio = clamp(ratio, 0.0f, 1.0f);
+      ratio = std::clamp(ratio, 0.0f, 1.0f);
 
       auto formatSize = [](size_t bytes) -> std::string {
          static const std::string units[] = {"B", "KiB", "MiB", "GiB"};
@@ -76,22 +81,22 @@ namespace TPKG {
             size /= 1024.0;
             ++unitIndex;
          }
-         ostringstream ss;
-         ss << fixed << setprecision(1) << size << " " << units[unitIndex];
+         std::ostringstream ss;
+         ss << std::fixed << std::setprecision(1) << size << " " << units[unitIndex];
          return ss.str();
       };
 
-      ostringstream out;
-      out << left << setw(nameWidth) << pack.name;
-      out << right << setw(8) << formatSize(pack.size);
-      out << "  " << setw(8) << formatSize(static_cast<size_t>(speedBytesPerSec)) << "/s";
+      std::ostringstream out;
+      out << std::left << std::setw(nameWidth) << pack.name;
+      out << std::right << std::setw(sizeWidth) << formatSize(pack.size);
+      out << "  " << std::setw(speedWidth) << formatSize(static_cast<size_t>(speedBytesPerSec)) << "/s";
       out << " " << timer.eta(currentBytes, pack.size);
 
       int filled = static_cast<int>(barWidth * ratio);
-      out << " [" << string(filled, '#') << string(barWidth - filled, '-') << "]";
-      out << " " << setw(3) << static_cast<int>(ratio * 100) << "%";
+      out << " [" << std::string(filled, '#') << std::string(barWidth - filled, '-') << "]";
+      out << " " << static_cast<int>(ratio * 100) << "%";
 
-      cout << '\r' << out.str() << flush;
+      std::cout << '\r' << out.str() << std::flush;
    }
 
 
