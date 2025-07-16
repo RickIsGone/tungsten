@@ -62,6 +62,84 @@ namespace tungsten {
          return Type::getDoubleTy(*TheContext);
       return nullptr;
    }
+   std::string mapLLVMTypeToCustomType(llvm::Type* type) {
+      if (type->isIntegerTy()) {
+         unsigned bits = type->getIntegerBitWidth();
+         switch (bits) {
+            case 1:
+               return "Bool";
+            case 8:
+               return "Int8";
+            case 16:
+               return "Int16";
+            case 32:
+               return "Int32";
+            case 64:
+               return "Int64";
+            case 128:
+               return "Int128";
+            default:
+               return "Int" + std::to_string(bits); // fallback
+         }
+      }
+
+      if (type->isFloatingPointTy()) {
+         if (type->isFloatTy()) return "Float";
+         if (type->isDoubleTy()) return "Double";
+         return "FloatN";
+      }
+
+      if (type->isPointerTy()) {
+         llvm::Type* pointee = type->getPointerTo();
+
+         // String (assunto come i8*) – modifica se la tua rappresentazione differisce
+         if (pointee->isIntegerTy(8)) {
+            return "String";
+         }
+
+         // Char (int8_t*)
+         if (pointee->isIntegerTy(8)) {
+            return "Char";
+         }
+
+         // Classi
+         if (pointee->isStructTy()) {
+            llvm::StructType* structTy = llvm::cast<llvm::StructType>(pointee);
+            if (structTy->hasName()) {
+               llvm::StringRef name = structTy->getName();
+               if (name.starts_with("class.")) {
+                  return name.substr(6).str(); // rimuove "class."
+               }
+               return name.str();
+            }
+            return "AnonymousClass";
+         }
+
+         return "Ptr<" + mapLLVMTypeToCustomType(pointee) + ">";
+      }
+
+      if (type->isVoidTy()) {
+         return "Void";
+      }
+
+      if (type->isStructTy()) {
+         llvm::StructType* structTy = llvm::cast<llvm::StructType>(type);
+         if (structTy->hasName()) {
+            llvm::StringRef name = structTy->getName();
+            if (name.starts_with("class.")) {
+               return name.substr(6).str();
+            }
+            return name.str();
+         }
+         return "AnonymousStruct";
+      }
+
+      return "UnknownType";
+   }
+
+   std::string getTypeString(llvm::Value* val) {
+      return mapLLVMTypeToCustomType(val->getType());
+   }
 } // namespace tungsten
 
 export namespace tungsten {
@@ -420,15 +498,19 @@ export namespace tungsten {
    //  ========================================== implementation ==========================================
 
    llvm::Value* NumberExpressionAST::codegen() {
+      // return llvm::ConstantFP::get(*TheContext, llvm::APFloat(_value));
       return nullptr;
    }
 
    llvm::Value* VariableExpressionAST::codegen() {
-      return nullptr;
+      llvm::Value* V = NamedValues[_name];
+      if (!V)
+         return LogErrorV("unknown variable '" + _name + "'");
+      return V;
    }
 
    llvm::Value* StringExpression::codegen() {
-      return Builder->CreateGlobalString(_value);
+      return Builder->CreateGlobalStringPtr(_value, "strtmp");
    }
 
    llvm::Value* BinaryExpressionAST::codegen() {
@@ -444,7 +526,35 @@ export namespace tungsten {
    }
 
    llvm::Value* CallExpressionAST::codegen() {
-      return nullptr;
+      llvm::Function* callee = TheModule->getFunction(_callee);
+      if (!callee)
+         return LogErrorV("unknown function '" + _callee + "'");
+
+      bool areParamsOk = true;
+
+      if (callee->arg_size() != _args.size())
+         areParamsOk = false;
+      // return LogErrorV("no instance of function " + _callee + " with args " + std::to_string(_args.size()) + " arguments");
+
+      std::vector<llvm::Value*> args;
+      std::string argsTypes;
+      for (unsigned i = 0; i < _args.size(); ++i) {
+         llvm::Value* argVal = _args[i]->codegen();
+         if (!argVal)
+            return nullptr;
+
+         llvm::Type* expectedType = callee->getFunctionType()->getParamType(i);
+         argsTypes += i == _args.size() - 1 ? getTypeString(argVal) + ", " : getTypeString(argVal);
+         if (argVal->getType() != expectedType) {
+            areParamsOk = false;
+         }
+
+         args.push_back(argVal);
+      }
+      if (!areParamsOk)
+         return LogErrorV("no instance of function " + _callee + " with args '" + argsTypes + "'");
+
+      return Builder->CreateCall(callee->getFunctionType(), callee, args, "calltmp");
    }
 
    llvm::Value* TypeOfStatementAST::codegen() {
