@@ -72,6 +72,8 @@ namespace TPKG {
 
       float ratio = pack.size > 0 ? static_cast<float>(currentBytes) / pack.size : 1.0f;
       ratio = std::clamp(ratio, 0.0f, 1.0f);
+      if (ratio == 1.f)
+         --barWidth;
 
       auto formatSize = [](size_t bytes) -> std::string {
          static const std::string units[] = {"B", "KiB", "MiB", "GiB"};

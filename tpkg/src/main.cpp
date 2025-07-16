@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
             fs::path downloads = downloadsDir(argv[0]);
             TPKG::ProgressTimer timer;
             TPKG::Package package{argv[2], 292864};
-            double speed = 25 * 1024 * 1024 * 1024; // 25 GiB/s
+            double speed = 10 * 1024; // 10KiB
             std::cout << specialChars::HideCursor;
             for (size_t downloaded = 0; downloaded <= package.size; downloaded += speed) {
                std::this_thread::sleep_for(std::chrono::milliseconds(200));
