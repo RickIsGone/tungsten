@@ -195,17 +195,13 @@ Int* myFunction() {
 
 ### Main Function
 
-The `main` function can return either `Void` or `Int`. Command line arguments are passed as a `String` array.
-If the function is declared as `Int` and no return value is provided, `0` will be returned by default.
+The `main` function can return either `Int` or `Int32`. Command line arguments are passed as a `String` array.
+If no return value is provided, `0` will be returned by default.
 
 ```c++
 Int main(String[] args) {
     /* your code */
     return 0;
-}
-
-Void main(String[] args) {
-    /* your code */
 }
 ```
 

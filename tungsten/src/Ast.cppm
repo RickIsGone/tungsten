@@ -35,6 +35,10 @@ namespace tungsten {
       std::cerr << "error: " << Str << "\n";
       return nullptr;
    }
+   llvm::Function* LogErrorF(const std::string& Str) {
+      std::cerr << "error: " << Str << "\n";
+      return nullptr;
+   }
 
    llvm::Type* LLVMType(const std::string& type) {
       using namespace llvm;
@@ -45,7 +49,7 @@ namespace tungsten {
       if (type == "Char")
          return Type::getInt8Ty(*TheContext);
       if (type == "String")
-         return PointerType::getInt8Ty(*TheContext);
+         return Type::getInt8Ty(*TheContext)->getPointerTo();
       if (type == "Int" || type == "Int32" || type == "Uint" || type == "Uint32")
          return Type::getInt32Ty(*TheContext);
       if (type == "Int8" || type == "Uint8")
@@ -632,11 +636,40 @@ export namespace tungsten {
    }
 
    llvm::Function* FunctionPrototypeAST::codegen() {
-      return nullptr;
+      std::vector<llvm::Type*> paramTypes;
+      for (const auto& arg : _args) {
+         llvm::Type* type = LLVMType(static_cast<VariableDeclarationAST*>(arg.get())->type());
+         if (!type)
+            return LogErrorF("unknown type: '" + static_cast<VariableDeclarationAST*>(arg.get())->type() + "' in argument declaration");
+         paramTypes.push_back(type);
+      }
+      llvm::Type* returnType = LLVMType(_type);
+      if (!returnType)
+         return LogErrorF("unknown type: '" + _type + "' in function declaration");
+
+      llvm::FunctionType* functionType = llvm::FunctionType::get(returnType, paramTypes, false);
+      llvm::Function* function = llvm::Function::Create(
+          functionType,
+          llvm::Function::ExternalLinkage,
+          _name,
+          TheModule.get());
+
+      return function;
    }
 
    llvm::Function* FunctionAST::codegen() {
-      return nullptr;
+      llvm::Function* function = _prototype->codegen();
+      if (!function)
+         return nullptr;
+
+      llvm::BasicBlock* BB = llvm::BasicBlock::Create(*TheContext, "entry", function);
+      Builder->SetInsertPoint(BB);
+
+      llvm::Value* retVal = llvm::ConstantInt::get(*TheContext, llvm::APInt(32, 0));
+      Builder->CreateRet(retVal);
+
+      llvm::verifyFunction(*function);
+      return function;
    }
 
    llvm::Value* NamespaceAST::codegen() {
