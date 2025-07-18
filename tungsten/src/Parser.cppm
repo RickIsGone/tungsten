@@ -165,7 +165,7 @@ namespace tungsten {
       return std::filesystem::absolute(_filePath).string();
    }
    std::string Parser::_function() {
-      return ""; // TODO: fix
+      return "function"; // TODO: fix
    }
 
    int Parser::_getPrecedence(TokenType type) {
@@ -421,7 +421,7 @@ namespace tungsten {
          int tokPrecedence = _getPrecedence(_peek().type);
 
          if (tokPrecedence < exprPrecedence)
-            return lhs;
+            return std::move(lhs);
 
          Token opToken = _peek();
          _consume(); // consume operator
@@ -468,7 +468,8 @@ namespace tungsten {
       _consume(); // consume (
       std::vector<std::unique_ptr<ExpressionAST>> args;
       while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile) {
-         if (!_parseExpression())
+         args.push_back(_parseExpression());
+         if (!args.back())
             return nullptr; // error already logged
 
          if (_peek().type == TokenType::Comma)
@@ -644,7 +645,7 @@ namespace tungsten {
          return _logError("expected ')' after '('");
       }
 
-      auto expr = std::make_unique<__BuiltinColumnAST>(_column(_peek()));
+      auto expr = std::make_unique<__BuiltinColumnAST>(_line(_peek()));
       _consume(3); // consume '__builtinLine()'
       return std::move(expr);
    }
@@ -733,7 +734,7 @@ namespace tungsten {
       _consume(); // consume {
       std::vector<std::unique_ptr<ExpressionAST>> statements;
       while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile) {
-         _parseExpression();
+         statements.push_back(_parseExpression());
          if (_peek().type != TokenType::Semicolon && _peek(-1).type != TokenType::CloseBrace)
             return _logError<BlockStatementAST>("expected ';' before '" + _lexeme(_peek()) + "'");
          if (_peek(-1).type != TokenType::CloseBrace)

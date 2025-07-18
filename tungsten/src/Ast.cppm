@@ -93,26 +93,22 @@ namespace tungsten {
          return "FloatN";
       }
 
-      if (type->isPointerTy()) {
+      if (type->isPointerTy()) { // TODO: fix infinite recursive calling
          llvm::Type* pointee = type->getPointerTo();
-
-         // String (assunto come i8*) – modifica se la tua rappresentazione differisce
          if (pointee->isIntegerTy(8)) {
             return "String";
          }
 
-         // Char (int8_t*)
          if (pointee->isIntegerTy(8)) {
             return "Char";
          }
 
-         // Classi
-         if (pointee->isStructTy()) {
+         if (pointee->isStructTy()) { // classes
             llvm::StructType* structTy = llvm::cast<llvm::StructType>(pointee);
             if (structTy->hasName()) {
                llvm::StringRef name = structTy->getName();
                if (name.starts_with("class.")) {
-                  return name.substr(6).str(); // rimuove "class."
+                  return name.substr(6).str();
                }
                return name.str();
             }
@@ -155,6 +151,8 @@ export namespace tungsten {
    void dumpIR() {
 #ifdef TUNGSTEN_DEBUG
       TheModule->print(llvm::outs(), nullptr);
+      std::cerr << "\nllvm errors:\n";
+      TheModule->print(llvm::errs(), nullptr);
 #endif
    }
 
@@ -163,6 +161,7 @@ export namespace tungsten {
    public:
       virtual ~ExpressionAST() = default;
       virtual llvm::Value* codegen() = 0;
+      virtual bool isLValue() { return true; }
    };
 
    // expression for numbers
@@ -171,6 +170,7 @@ export namespace tungsten {
    public:
       NumberExpressionAST(Number value) : _value{value} {}
       llvm::Value* codegen() override;
+      bool isLValue() override { return false; }
 
    private:
       Number _value{};
@@ -190,6 +190,7 @@ export namespace tungsten {
    public:
       StringExpression(const std::string& value) : _value{value} {}
       llvm::Value* codegen() override;
+      bool isLValue() override { return false; }
 
    private:
       std::string _value{};
@@ -502,8 +503,32 @@ export namespace tungsten {
    //  ========================================== implementation ==========================================
 
    llvm::Value* NumberExpressionAST::codegen() {
-      // return llvm::ConstantFP::get(*TheContext, llvm::APFloat(_value));
-      return nullptr;
+      return std::visit([](auto&& val) -> llvm::Value* {
+         using T = std::decay_t<decltype(val)>;
+
+         if constexpr (std::is_same_v<T, int>) {
+            return llvm::ConstantInt::get(*TheContext, llvm::APInt(32, val, true));
+         } else if constexpr (std::is_same_v<T, int8_t>) {
+            return llvm::ConstantInt::get(*TheContext, llvm::APInt(8, val, true));
+         } else if constexpr (std::is_same_v<T, int16_t>) {
+            return llvm::ConstantInt::get(*TheContext, llvm::APInt(16, val, true));
+         } else if constexpr (std::is_same_v<T, int64_t>) {
+            return llvm::ConstantInt::get(*TheContext, llvm::APInt(64, val, true));
+         } else if constexpr (std::is_same_v<T, uint8_t>) {
+            return llvm::ConstantInt::get(*TheContext, llvm::APInt(8, val, false));
+         } else if constexpr (std::is_same_v<T, uint16_t>) {
+            return llvm::ConstantInt::get(*TheContext, llvm::APInt(16, val, false));
+         } else if constexpr (std::is_same_v<T, uint32_t>) {
+            return llvm::ConstantInt::get(*TheContext, llvm::APInt(32, val, false));
+         } else if constexpr (std::is_same_v<T, float>) {
+            return llvm::ConstantFP::get(llvm::Type::getFloatTy(*TheContext), val);
+         } else if constexpr (std::is_same_v<T, double>) {
+            return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*TheContext), val);
+         } else {
+            return nullptr;
+         }
+      },
+                        _value);
    }
 
    llvm::Value* VariableExpressionAST::codegen() {
@@ -518,7 +543,41 @@ export namespace tungsten {
    }
 
    llvm::Value* BinaryExpressionAST::codegen() {
-      return nullptr;
+      if (!_LHS->isLValue()) {
+         return LogErrorV("left side of assignment must be a variable or assignable expression");
+      }
+      llvm::Value* L = _LHS->codegen();
+      llvm::Value* R = _RHS->codegen();
+      if (!L || !R)
+         return nullptr;
+
+      if (_op == "+")
+         return Builder->CreateAdd(L, R, "addtmp");
+      if (_op == "-")
+         return Builder->CreateSub(L, R, "subtmp");
+      if (_op == "*")
+         return Builder->CreateMul(L, R, "multmp");
+      if (_op == "/")
+         return Builder->CreateSDiv(L, R, "divtmp");
+      if (_op == "%")
+         return Builder->CreateSRem(L, R, "modtmp");
+      if (_op == "&")
+         return Builder->CreateAnd(L, R, "andtmp");
+      if (_op == "|")
+         return Builder->CreateOr(L, R, "ortmp");
+      if (_op == "^")
+         return Builder->CreateXor(L, R, "xortmp");
+      if (_op == "==")
+         return Builder->CreateICmpEQ(L, R, "eqtmp");
+      if (_op == "=") {
+         if (!L->getType()->isPointerTy()) {
+            return LogErrorV("Left side of assignment must be a variable");
+         }
+         return Builder->CreateStore(R, L);
+      }
+      // if (_op == "&&")
+      //    return
+      // TODO: add other operators
    }
 
    llvm::Value* VariableDeclarationAST::codegen() {
@@ -526,7 +585,21 @@ export namespace tungsten {
       if (!type)
          return LogErrorV("unknown type '" + _type + "'");
 
-      return nullptr;
+      llvm::Function* function = Builder->GetInsertBlock()->getParent();
+      llvm::IRBuilder<> tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
+      llvm::AllocaInst* allocInstance = tmpBuilder.CreateAlloca(type, nullptr, _name);
+
+      if (_init) {
+         llvm::Value* initVal = _init->codegen();
+         if (!initVal)
+            return nullptr;
+
+         Builder->CreateStore(initVal, allocInstance);
+      }
+
+      NamedValues[_name] = allocInstance;
+
+      return allocInstance;
    }
 
    llvm::Value* CallExpressionAST::codegen() {
@@ -538,7 +611,6 @@ export namespace tungsten {
 
       if (callee->arg_size() != _args.size())
          areParamsOk = false;
-      // return LogErrorV("no instance of function " + _callee + " with args " + std::to_string(_args.size()) + " arguments");
 
       std::vector<llvm::Value*> args;
       std::string argsTypes;
@@ -555,8 +627,12 @@ export namespace tungsten {
 
          args.push_back(argVal);
       }
-      if (!areParamsOk)
+      if (!areParamsOk) {
+         if (callee->arg_size() == 0)
+            return LogErrorV("no instance of function " + _callee + " with no args");
+
          return LogErrorV("no instance of function " + _callee + " with args '" + argsTypes + "'");
+      }
 
       return Builder->CreateCall(callee->getFunctionType(), callee, args, "calltmp");
    }
@@ -572,21 +648,29 @@ export namespace tungsten {
    }
 
    llvm::Value* __BuiltinFunctionAST::codegen() {
-      return nullptr;
+      return Builder->CreateGlobalStringPtr(_function, "strtmp");
    }
    llvm::Value* __BuiltinLineAST::codegen() {
-      return nullptr;
+      return llvm::ConstantInt::get(llvm::Type::getInt64Ty(*TheContext), _line, false);
    }
    llvm::Value* __BuiltinColumnAST::codegen() {
-      return nullptr;
+      return llvm::ConstantInt::get(llvm::Type::getInt64Ty(*TheContext), _column, false);
    }
    llvm::Value* __BuiltinFileAST::codegen() {
-      return nullptr;
+      return Builder->CreateGlobalStringPtr(_file, "strtmp");
    }
 
    llvm::Value* BlockStatementAST::codegen() {
-      return nullptr;
+      llvm::Value* last = nullptr;
+      for (const auto& statement : _statements) {
+         last = statement->codegen();
+         if (!last) {
+            return nullptr;
+         }
+      }
+      return last;
    }
+
    llvm::Value* ExternStatementAST::codegen() {
       return nullptr;
    }
@@ -665,10 +749,16 @@ export namespace tungsten {
       llvm::BasicBlock* BB = llvm::BasicBlock::Create(*TheContext, "entry", function);
       Builder->SetInsertPoint(BB);
 
-      llvm::Value* retVal = llvm::ConstantInt::get(*TheContext, llvm::APInt(32, 0));
-      Builder->CreateRet(retVal);
+      if (!_body || !_body->codegen()) {
+         function->eraseFromParent();
+         return LogErrorF("error in function: '" + name() + "'");
+      }
 
-      llvm::verifyFunction(*function);
+      if (Builder->GetInsertBlock()->getTerminator() == nullptr) {
+         return LogErrorF("missing return statement in function: '" + name() + "'");
+      }
+
+      llvm::verifyFunction(*function, &llvm::errs());
       return function;
    }
 
