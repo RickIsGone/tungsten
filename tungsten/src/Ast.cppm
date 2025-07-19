@@ -145,10 +145,11 @@ namespace tungsten {
 } // namespace tungsten
 
 export namespace tungsten {
-   void initLLVM() {
+   void initLLVM(const std::string& moduleName, const std::string& fileName) {
       TheContext = std::make_unique<llvm::LLVMContext>();
       Builder = std::make_unique<llvm::IRBuilder<>>(*TheContext);
-      TheModule = std::make_unique<llvm::Module>("tungsten", *TheContext);
+      TheModule = std::make_unique<llvm::Module>(moduleName, *TheContext);
+      TheModule->setSourceFileName(fileName);
    }
    void dumpIR() {
 #ifdef TUNGSTEN_DEBUG

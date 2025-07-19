@@ -63,7 +63,7 @@ namespace tungsten {
    export class Parser {
    public:
       Parser(const std::filesystem::path& file, const std::vector<Token>& tokens, const std::string& raw)
-          : _filePath{file}, _tokens{tokens}, _raw{raw} { initLLVM(); }
+          : _filePath{file}, _tokens{tokens}, _raw{raw} { initLLVM(file.filename().stem().string(), file.filename().string()); }
       Parser() = delete;
       ~Parser() { dumpIR(); }
       Parser(const Parser&) = delete;
