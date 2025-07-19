@@ -19,6 +19,8 @@ module;
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Verifier.h>
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/FileSystem.h"
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
 #endif
@@ -150,9 +152,15 @@ export namespace tungsten {
    }
    void dumpIR() {
 #ifdef TUNGSTEN_DEBUG
-      TheModule->print(llvm::outs(), nullptr);
-      std::cerr << "\nllvm errors:\n";
-      TheModule->print(llvm::errs(), nullptr);
+
+      std::error_code EC;
+      llvm::raw_fd_ostream outFile("tungsten.ll", EC, llvm::sys::fs::OF_None);
+
+      if (EC) {
+         std::cerr << "error opening the file: " << EC.message() << std::endl;
+      } else {
+         TheModule->print(outFile, nullptr);
+      }
 #endif
    }
 
@@ -543,38 +551,88 @@ export namespace tungsten {
    }
 
    llvm::Value* BinaryExpressionAST::codegen() {
-      if (!_LHS->isLValue()) {
-         return LogErrorV("left side of assignment must be a variable or assignable expression");
-      }
       llvm::Value* L = _LHS->codegen();
       llvm::Value* R = _RHS->codegen();
       if (!L || !R)
          return nullptr;
 
-      if (_op == "+")
-         return Builder->CreateAdd(L, R, "addtmp");
-      if (_op == "-")
-         return Builder->CreateSub(L, R, "subtmp");
-      if (_op == "*")
-         return Builder->CreateMul(L, R, "multmp");
-      if (_op == "/")
-         return Builder->CreateSDiv(L, R, "divtmp");
-      if (_op == "%")
-         return Builder->CreateSRem(L, R, "modtmp");
-      if (_op == "&")
-         return Builder->CreateAnd(L, R, "andtmp");
-      if (_op == "|")
-         return Builder->CreateOr(L, R, "ortmp");
-      if (_op == "^")
-         return Builder->CreateXor(L, R, "xortmp");
-      if (_op == "==")
-         return Builder->CreateICmpEQ(L, R, "eqtmp");
-      if (_op == "=") {
-         if (!L->getType()->isPointerTy()) {
-            return LogErrorV("Left side of assignment must be a variable");
+      if (!L->getType()->isFloatingPointTy() && !R->getType()->isFloatingPointTy()) {
+         if (_op == "+")
+            return Builder->CreateAdd(L, R, "addtmp");
+         if (_op == "-")
+            return Builder->CreateSub(L, R, "subtmp");
+         if (_op == "*")
+            return Builder->CreateMul(L, R, "multmp");
+         if (_op == "/")
+            return Builder->CreateSDiv(L, R, "divtmp");
+
+         if (_op == "%")
+            return Builder->CreateSRem(L, R, "modtmp");
+         if (_op == "&")
+            return Builder->CreateAnd(L, R, "andtmp");
+         if (_op == "|")
+            return Builder->CreateOr(L, R, "ortmp");
+         if (_op == "^")
+            return Builder->CreateXor(L, R, "xortmp");
+         if (_op == "==")
+            return Builder->CreateICmpEQ(L, R, "eqtmp");
+
+         if (_op == "=") {
+            if (!L->getType()->isPointerTy() || !_LHS->isLValue()) {
+               return LogErrorV("left side of assignment must be a variable or assignable expression");
+            }
+            return Builder->CreateStore(R, L);
          }
-         return Builder->CreateStore(R, L);
+         if (_op == "!=")
+            return Builder->CreateICmpNE(L, R, "netmp");
+         if (_op == "<")
+            return Builder->CreateICmpSLT(L, R, "lttmp");
+         if (_op == "<=")
+            return Builder->CreateICmpSLE(L, R, "letmp");
+         if (_op == ">")
+            return Builder->CreateICmpSGT(L, R, "gttmp");
+         if (_op == ">=")
+            return Builder->CreateICmpSGE(L, R, "getmp");
+
+      } else {
+         if (_op == "+")
+            return Builder->CreateFAdd(L, R, "addtmp");
+         if (_op == "-")
+            return Builder->CreateFSub(L, R, "subtmp");
+         if (_op == "*")
+            return Builder->CreateFMul(L, R, "multmp");
+         if (_op == "/")
+            return Builder->CreateFDiv(L, R, "divtmp");
+
+         if (_op == "%")
+            return Builder->CreateFRem(L, R, "modtmp");
+         if (_op == "&")
+            return Builder->CreateAnd(L, R, "andtmp");
+         if (_op == "|")
+            return Builder->CreateOr(L, R, "ortmp");
+         if (_op == "^")
+            return Builder->CreateXor(L, R, "xortmp");
+         if (_op == "==")
+            return Builder->CreateFCmpOEQ(L, R, "eqtmp");
+         if (_op == "=") {
+            if (!L->getType()->isPointerTy() || !_LHS->isLValue()) {
+               return LogErrorV("left side of assignment must be a variable or assignable expression");
+            }
+            return Builder->CreateStore(R, L);
+         }
+         if (_op == "!=")
+            return Builder->CreateFCmpONE(L, R, "netmp");
+         if (_op == "<")
+            return Builder->CreateFCmpOLT(L, R, "netmp");
+         if (_op == "<=")
+            return Builder->CreateFCmpOLE(L, R, "netmp");
+         if (_op == ">")
+            return Builder->CreateFCmpOGT(L, R, "gttmp");
+         if (_op == ">=")
+            return Builder->CreateFCmpOGE(L, R, "getmp");
       }
+
+
       // if (_op == "&&")
       //    return
       // TODO: add other operators
@@ -586,7 +644,7 @@ export namespace tungsten {
          return LogErrorV("unknown type '" + _type + "'");
 
       llvm::Function* function = Builder->GetInsertBlock()->getParent();
-      llvm::IRBuilder<> tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
+      llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
       llvm::AllocaInst* allocInstance = tmpBuilder.CreateAlloca(type, nullptr, _name);
 
       if (_init) {
@@ -705,8 +763,43 @@ export namespace tungsten {
    }
 
    llvm::Value* IfStatementAST::codegen() {
-      return nullptr;
+      llvm::Value* CondV = _condition->codegen();
+      if (!CondV)
+         return nullptr;
+
+      CondV = Builder->CreateICmpNE(CondV, llvm::ConstantInt::get(CondV->getType(), 0), "ifcond");
+
+      llvm::Function* function = Builder->GetInsertBlock()->getParent();
+
+      llvm::BasicBlock* ThenBB = llvm::BasicBlock::Create(*TheContext, "then", function);
+      llvm::BasicBlock* ElseBB = llvm::BasicBlock::Create(*TheContext, "else");
+      llvm::BasicBlock* MergeBB = llvm::BasicBlock::Create(*TheContext, "ifcont");
+
+      Builder->CreateCondBr(CondV, ThenBB, ElseBB);
+
+      // then
+      Builder->SetInsertPoint(ThenBB);
+      if (_thenBranch)
+         _thenBranch->codegen();
+      if (!Builder->GetInsertBlock()->getTerminator())
+         Builder->CreateBr(MergeBB);
+
+      // else
+      function->insert(function->end(), ElseBB);
+      Builder->SetInsertPoint(ElseBB);
+      if (_elseBranch)
+         _elseBranch->codegen();
+      if (!Builder->GetInsertBlock()->getTerminator())
+         Builder->CreateBr(MergeBB);
+
+      // end of if
+      function->insert(function->end(), MergeBB);
+      Builder->SetInsertPoint(MergeBB);
+
+      return llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*TheContext));
    }
+
+
    llvm::Value* WhileStatementAST::codegen() {
       return nullptr;
    }

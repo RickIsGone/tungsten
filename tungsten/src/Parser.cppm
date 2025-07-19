@@ -799,21 +799,28 @@ namespace tungsten {
       if (_peek().type == TokenType::OpenBrace)
          thenBranch = _parseBlock();
       else {
-         thenBranch = _parseExpression();
-         if (_peek().type != TokenType::Semicolon)
-            return _logError("expected ';' after expression");
-         // not consuming because if the 'if' doesn't have an 'else' the semicolon is automatically consumed in the _parseBlock()
+         if (_peek().type == TokenType::If)
+            thenBranch = _parseExpression();
+         else {
+            thenBranch = _parseExpression();
+            if (_peek().type != TokenType::Semicolon)
+               return _logError("expected ';' before '" + _lexeme(_peek()) + "'");
+         }
+         // not consuming the ';' because if the 'if' doesn't have an 'else' the semicolon is automatically consumed in the _parseBlock() which calls this function
       }
       if (_peek(1).type == TokenType::Else) {
-         _consume();
-         _consume();
+         _consume(2);
          if (_peek().type == TokenType::OpenBrace)
             elseBranch = _parseBlock();
          else {
-            elseBranch = _parseExpression();
-            if (_peek().type != TokenType::Semicolon)
-               return _logError("expected ';' after expression");
-            _consume(); // consume ;
+            if (_peek().type == TokenType::If)
+               elseBranch = _parseExpression();
+            else {
+               elseBranch = _parseExpression();
+               if (_peek().type != TokenType::Semicolon)
+                  return _logError("expected ';' before '" + _lexeme(_peek()) + "'");
+            }
+            // not consuming the ';' because if the 'if' doesn't have an 'else' the semicolon is automatically consumed in the _parseBlock() which calls this function
          }
       }
       return std::make_unique<IfStatementAST>(std::move(condition), std::move(thenBranch), std::move(elseBranch));

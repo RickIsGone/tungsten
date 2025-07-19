@@ -61,7 +61,7 @@ namespace TPKG {
    export void printProgressBar(const Package& pack, size_t currentBytes, double speedBytesPerSec, const ProgressTimer& timer) {
       const int terminalWidth = shellWidth();
 
-      const int nameWidth = max(20, static_cast<int>(pack.name.length()));
+      const int nameWidth = pack.name.length() > 20 ? pack.name.length() : 20;
       const int sizeWidth = 8;
       const int speedWidth = 8;
       const int etaWidth = 8;
