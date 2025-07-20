@@ -155,7 +155,7 @@ export namespace tungsten {
 #ifdef TUNGSTEN_DEBUG
 
       std::error_code EC;
-      llvm::raw_fd_ostream outFile("tungsten.ll", EC, llvm::sys::fs::OF_None);
+      llvm::raw_fd_ostream outFile(TheModule->getModuleIdentifier() + ".ll", EC, llvm::sys::fs::OF_None);
 
       if (EC) {
          std::cerr << "error opening the file: " << EC.message() << std::endl;

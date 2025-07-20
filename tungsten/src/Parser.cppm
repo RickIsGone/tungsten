@@ -444,7 +444,7 @@ namespace tungsten {
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseNumberExpression() {
-      auto number = _peek().type == TokenType::IntLiteral ? std::stoi(_lexeme(_peek())) : std::stof(_lexeme(_peek()));
+      Number number = _peek().type == TokenType::IntLiteral ? std::stoi(_lexeme(_peek())) : std::stod(_lexeme(_peek()));
       _consume();
       return std::make_unique<NumberExpressionAST>(number);
    }

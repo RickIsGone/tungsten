@@ -36,6 +36,13 @@ Int main(String[] args) {
 if you want to try *Tungsten* before installing the compiler, feel free to do so on
 the [online tungsten compiler](https://rickisgone.github.io/tungsten-sandbox/)
 
+# VSCode Extension
+
+You can install the VSCode extension for *Tungsten* from
+the [VSCode marketplace](https://marketplace.visualstudio.com/items?itemName=RickIsGone.tungsten)
+or by searching for `tungsten` in the extensions tab of VSCode.
+You'll need to have the compiler installed on your system for the extension to work properly.
+
 # Building
 
 | Platform | Build Status                                                                                                                                                                             |
