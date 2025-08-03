@@ -22,17 +22,22 @@ add_llvm_executable(tungsten src/main.cpp)
 
 # === LLVM ===
 target_include_directories(tungsten PRIVATE ${LLVM_INCLUDE_DIRS})
-llvm_map_components_to_libnames(LLVM_LIBS
+message(STATUS "found LLVM at: ${LLVM_DIR}")
+file(READ "/etc/os-release" OS_RELEASE_CONTENT)
+if(OS_RELEASE_CONTENT MATCHES "ID=arch") # pacman package only contains libLLVM.a
+    target_link_libraries(tungsten PRIVATE LLVM) 
+else()
+    llvm_map_components_to_libnames(LLVM_LIBS
         support
         core
         irreader
         native
         nativecodegen
         orcjit
-)
-message(STATUS "found LLVM at: ${LLVM_DIR}")
-message(STATUS "found LLVM libs: ${LLVM_LIBS}")
-target_link_libraries(tungsten PRIVATE ${LLVM_LIBS})
+    )
+    message(STATUS "found LLVM libs: ${LLVM_LIBS}")
+    target_link_libraries(tungsten PRIVATE ${LLVM_LIBS})
+endif()
 add_definitions(${LLVM_DEFINITIONS})
 
 # === Emscripten ===

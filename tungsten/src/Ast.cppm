@@ -388,6 +388,7 @@ export namespace tungsten {
 
       _NODISCARD const std::string& name() const { return _name; }
       _NODISCARD const std::string& type() const { return _type; }
+      _NODISCARD const std::vector<std::unique_ptr<ExpressionAST>>& args() const { return _args; }
 
    private:
       std::string _type;
@@ -548,7 +549,7 @@ export namespace tungsten {
    }
 
    llvm::Value* StringExpression::codegen() {
-      return Builder->CreateGlobalStringPtr(_value, "strtmp");
+      return Builder->CreateGlobalString(_value, "strtmp");
    }
 
    llvm::Value* BinaryExpressionAST::codegen() {
@@ -802,7 +803,34 @@ export namespace tungsten {
 
 
    llvm::Value* WhileStatementAST::codegen() {
-      return nullptr;
+      llvm::Function* function = Builder->GetInsertBlock()->getParent();
+
+      llvm::BasicBlock* condBB = llvm::BasicBlock::Create(*TheContext, "CondBB", function);
+      llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*TheContext, "BodyBB");
+      llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*TheContext, "whilecont");
+
+      Builder->CreateBr(condBB);
+
+      // condtion
+      Builder->SetInsertPoint(condBB);
+      llvm::Value* CondV = _condition->codegen();
+      if (!CondV)
+         return nullptr;
+      CondV = Builder->CreateICmpNE(CondV, llvm::ConstantInt::get(CondV->getType(), 0), "whilecond");
+      Builder->CreateCondBr(CondV, bodyBB, endBB);
+
+      // body
+      function->insert(function->end(), bodyBB);
+      Builder->SetInsertPoint(bodyBB);
+      if (_body)
+         _body->codegen();
+      Builder->CreateBr(condBB);
+
+      // end of while
+      function->insert(function->end(), endBB);
+      Builder->SetInsertPoint(endBB);
+
+      return llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*TheContext));
    }
 
    llvm::Value* DoWhileStatementAST::codegen() {
@@ -842,6 +870,16 @@ export namespace tungsten {
 
       llvm::BasicBlock* BB = llvm::BasicBlock::Create(*TheContext, "entry", function);
       Builder->SetInsertPoint(BB);
+
+      size_t idx = 0;
+      for (auto& arg : function->args()) {
+         auto* varDecl = static_cast<VariableDeclarationAST*>(_prototype->args()[idx].get());
+         llvm::IRBuilder<> tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
+         llvm::AllocaInst* alloca = tmpBuilder.CreateAlloca(arg.getType(), nullptr, varDecl->name());
+         Builder->CreateStore(&arg, alloca);
+         NamedValues[varDecl->name()] = alloca;
+         ++idx;
+      }
 
       if (!_body || !_body->codegen()) {
          function->eraseFromParent();
