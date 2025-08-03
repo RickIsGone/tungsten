@@ -223,7 +223,17 @@ Int main() {
 
 ## Building a project
 
-To build a project, you need to make a `build.tgs` file  
+To build a project, you can either compile via cmd by calling the `tungsten` compiler or you can make a `build.tgs` file and use the integrated buildsystem
+
+### Compiling via cmd
+
+```shell
+cd projectDirectory
+tungsten <file> [flags]
+```
+
+### Compiling via buildsystem
+
 A simple project's build file will look something like this:
 
 ```c++
@@ -238,15 +248,14 @@ Void main() {
 ```
 
 to then build the file, you'll then have to call the compiler in the directory where the build file is located
-
+ 
 ```shell
 cd projectDirectory
-tungsten 
+tungsten tgs-build [flags] 
 ```
 
 The compiler will then automatically compile the `build.tgs` file.  
-After compiling the file, the compiler will automatically execute the `build` executable which will compile the project
-following the rules set by the `build.tgs` file.  
+After compiling the file, the compiler will automatically execute the `build` executable which will compile the project following the rules set by the `build.tgs` file.  
 The build output will then be put into the `projectDirectory/build` directory
 
 # TPKG
