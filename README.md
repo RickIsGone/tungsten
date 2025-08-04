@@ -250,7 +250,7 @@ Void main() {
 }
 ```
 
-to then build the file, you'll then have to call the compiler in the directory where the build file is located
+To build the file, you'll then have to call the compiler in the directory where the build file is located
  
 ```shell
 cd projectDirectory
