@@ -1,7 +1,7 @@
 module;
 
 #include <unordered_map>
-#include <fstream>
+#include <string>
 
 export module Tungsten.token;
 

@@ -82,10 +82,10 @@ after doing this follow the instruction for the targeted OS
 
 <ins> **2. Compiling the project:** </ins>  
 
-if you're using vcpkg:
+Here I'm using vcpkg:
 
 ```bash
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="VCPKG_DIR\scripts\buildsystems\vcpkg.cmake"  -DVCPKG_TARGET_TRIPLET=x64-windows-static -DLLVM_DIR='VCPKG_DIR/installed/x64-windows-static/share/llvm/' -Dzstd_DIR='VCPKG_DIR/installed/x64-windows-static/share/zstd'
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE='VCPKG_DIR\scripts\buildsystems\vcpkg.cmake'  -DVCPKG_TARGET_TRIPLET=x64-windows-static -DLLVM_DIR='VCPKG_DIR/installed/x64-windows-static/share/llvm/' -Dzstd_DIR='VCPKG_DIR/installed/x64-windows-static/share/zstd'
 cmake --build build --config Release
 ```
 
@@ -151,6 +151,8 @@ To free the pointer:
 ```c++
 free myPointer;
 ```
+>[!WARNING]  
+> Tungsten doesn't have a garbage collector so you have to manually free the pointers
 
 ## Arrays
 

@@ -33,6 +33,7 @@ namespace tungsten {
    std::unique_ptr<llvm::IRBuilder<>> Builder{};
    std::unique_ptr<llvm::Module> TheModule{};
    std::map<std::string, llvm::Value*> NamedValues{};
+   std::map<std::string, llvm::Type*> VariableTypes{};
    llvm::Value* LogErrorV(const std::string& Str) {
       std::cerr << "error: " << Str << "\n";
       return nullptr;
@@ -189,6 +190,7 @@ export namespace tungsten {
    class VariableExpressionAST : public ExpressionAST {
    public:
       VariableExpressionAST(const std::string& name) : _name{name} {}
+      _NODISCARD const std::string& name() const { return _name; }
       llvm::Value* codegen() override;
 
    private:
@@ -530,6 +532,8 @@ export namespace tungsten {
             return llvm::ConstantInt::get(*TheContext, llvm::APInt(16, val, false));
          } else if constexpr (std::is_same_v<T, uint32_t>) {
             return llvm::ConstantInt::get(*TheContext, llvm::APInt(32, val, false));
+         } else if constexpr (std::is_same_v<T, uint64_t>) {
+            return llvm::ConstantInt::get(*TheContext, llvm::APInt(64, val, false));
          } else if constexpr (std::is_same_v<T, float>) {
             return llvm::ConstantFP::get(llvm::Type::getFloatTy(*TheContext), val);
          } else if constexpr (std::is_same_v<T, double>) {
@@ -552,11 +556,132 @@ export namespace tungsten {
       return Builder->CreateGlobalString(_value, "strtmp");
    }
 
-   llvm::Value* BinaryExpressionAST::codegen() {
+   llvm::Value* BinaryExpressionAST::codegen() { // TODO: fix
       llvm::Value* L = _LHS->codegen();
       llvm::Value* R = _RHS->codegen();
       if (!L || !R)
          return nullptr;
+
+      auto castRToLType = [](llvm::Value*& L, llvm::Value*& R) -> bool {
+         llvm::Type* typeL = L->getType();
+         llvm::Type* typeR = R->getType();
+
+         if (typeL == typeR)
+            return true;
+
+         if (typeL->isIntegerTy() && typeR->isIntegerTy()) {
+            R = Builder->CreateIntCast(R, typeL, false, "castR");
+            return true;
+         }
+
+         if (typeL->isIntegerTy() && typeR->isFloatingPointTy()) {
+            R = Builder->CreateFPToUI(R, typeL, "castR");
+            return true;
+         }
+
+         if (typeL->isDoubleTy() && typeR->isIntegerTy()) {
+            R = Builder->CreateUIToFP(R, llvm::Type::getDoubleTy(*TheContext), "castR");
+            return true;
+         }
+
+         if (typeL->isFloatingPointTy() && typeR->isIntegerTy()) {
+            R = Builder->CreateUIToFP(R, typeL, "castR");
+            return true;
+         }
+
+         if (typeL->isDoubleTy() && typeR->isFloatTy()) {
+            R = Builder->CreateFPExt(R, llvm::Type::getDoubleTy(*TheContext), "castR");
+            return true;
+         }
+         if (typeL->isFloatTy() && typeR->isDoubleTy()) {
+            R = Builder->CreateFPTrunc(R, llvm::Type::getFloatTy(*TheContext), "castR");
+            return true;
+         }
+
+         if (typeL->isFloatingPointTy() && typeR->isFloatingPointTy()) {
+            unsigned bitsL = typeL->getPrimitiveSizeInBits();
+            unsigned bitsR = typeR->getPrimitiveSizeInBits();
+            if (bitsR < bitsL) {
+               R = Builder->CreateFPExt(R, typeL, "castR");
+            } else if (bitsR > bitsL) {
+               R = Builder->CreateFPTrunc(R, typeL, "castR");
+            }
+            return true;
+         }
+
+         LogErrorV("unsupported or unsafe type cast between operands");
+         return false;
+      };
+
+      if (_op == "=" || _op == "+=" || _op == "-=" || _op == "*=" || _op == "/=" || _op == "%=" || _op == "|=" || _op == "&=") {
+         if (!L->getType()->isPointerTy() || !_LHS->isLValue())
+            return LogErrorV("left side of assignment must be a variable or assignable expression");
+
+         llvm::Value* loadedL = L;
+         if (_op != "=") {
+            if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_LHS.get())) {
+               llvm::Type* ltype = VariableTypes[varExpr->name()];
+               loadedL = Builder->CreateLoad(ltype, L, "lval");
+            }
+         }
+
+         if (R->getType()->isPointerTy() && !_RHS->isLValue()) {
+            if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_RHS.get())) {
+               llvm::Type* rtype = VariableTypes[varExpr->name()];
+               R = Builder->CreateLoad(rtype, R, "rval");
+            }
+         }
+
+         if (!castRToLType(loadedL, R))
+            return nullptr;
+
+         llvm::Value* result = nullptr;
+         if (_op == "=") {
+            result = R;
+         } else if (_op == "+=") {
+            result = loadedL->getType()->isFloatingPointTy() ? Builder->CreateFAdd(loadedL, R, "addtmp") : Builder->CreateAdd(loadedL, R, "addtmp");
+         } else if (_op == "-=") {
+            result = loadedL->getType()->isFloatingPointTy() ? Builder->CreateFSub(loadedL, R, "subtmp") : Builder->CreateSub(loadedL, R, "subtmp");
+         } else if (_op == "*=") {
+            result = loadedL->getType()->isFloatingPointTy() ? Builder->CreateFMul(loadedL, R, "multmp") : Builder->CreateMul(loadedL, R, "multmp");
+         } else if (_op == "/=") {
+            result = loadedL->getType()->isFloatingPointTy() ? Builder->CreateFDiv(loadedL, R, "divtmp") : Builder->CreateSDiv(loadedL, R, "divtmp");
+         } else if (_op == "%=") {
+            result = loadedL->getType()->isFloatingPointTy() ? Builder->CreateFRem(loadedL, R, "modtmp") : Builder->CreateSRem(loadedL, R, "modtmp");
+         } else if (_op == "|=") {
+            result = Builder->CreateOr(loadedL, R, "ortmp");
+         } else if (_op == "&=") {
+            result = Builder->CreateAnd(loadedL, R, "andtmp");
+         }
+         return Builder->CreateStore(result, L);
+      }
+
+      if (L->getType()->isPointerTy() && !_LHS->isLValue()) {
+         if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_LHS.get())) {
+            llvm::Type* ltype = VariableTypes[varExpr->name()];
+            L = Builder->CreateLoad(ltype, L, "lval");
+         }
+      }
+      if (R->getType()->isPointerTy() && !_RHS->isLValue()) {
+         if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_RHS.get())) {
+            llvm::Type* rtype = VariableTypes[varExpr->name()];
+            R = Builder->CreateLoad(rtype, R, "rval");
+         }
+      }
+
+      if (!castRToLType(L, R))
+         return nullptr;
+
+      if (_op == "&&") {
+         L = Builder->CreateICmpNE(L, llvm::ConstantInt::get(L->getType(), 0), "lcond");
+         R = Builder->CreateICmpNE(R, llvm::ConstantInt::get(R->getType(), 0), "rcond");
+         return Builder->CreateAnd(L, R, "andtmp");
+      }
+      if (_op == "||") {
+         L = Builder->CreateICmpNE(L, llvm::ConstantInt::get(L->getType(), 0), "lcond");
+         R = Builder->CreateICmpNE(R, llvm::ConstantInt::get(R->getType(), 0), "rcond");
+         return Builder->CreateOr(L, R, "ortmp");
+      }
 
       if (!L->getType()->isFloatingPointTy() && !R->getType()->isFloatingPointTy()) {
          if (_op == "+")
@@ -567,7 +692,6 @@ export namespace tungsten {
             return Builder->CreateMul(L, R, "multmp");
          if (_op == "/")
             return Builder->CreateSDiv(L, R, "divtmp");
-
          if (_op == "%")
             return Builder->CreateSRem(L, R, "modtmp");
          if (_op == "&")
@@ -578,13 +702,6 @@ export namespace tungsten {
             return Builder->CreateXor(L, R, "xortmp");
          if (_op == "==")
             return Builder->CreateICmpEQ(L, R, "eqtmp");
-
-         if (_op == "=") {
-            if (!L->getType()->isPointerTy() || !_LHS->isLValue()) {
-               return LogErrorV("left side of assignment must be a variable or assignable expression");
-            }
-            return Builder->CreateStore(R, L);
-         }
          if (_op == "!=")
             return Builder->CreateICmpNE(L, R, "netmp");
          if (_op == "<")
@@ -595,7 +712,6 @@ export namespace tungsten {
             return Builder->CreateICmpSGT(L, R, "gttmp");
          if (_op == ">=")
             return Builder->CreateICmpSGE(L, R, "getmp");
-
       } else {
          if (_op == "+")
             return Builder->CreateFAdd(L, R, "addtmp");
@@ -605,39 +721,23 @@ export namespace tungsten {
             return Builder->CreateFMul(L, R, "multmp");
          if (_op == "/")
             return Builder->CreateFDiv(L, R, "divtmp");
-
          if (_op == "%")
             return Builder->CreateFRem(L, R, "modtmp");
-         if (_op == "&")
-            return Builder->CreateAnd(L, R, "andtmp");
-         if (_op == "|")
-            return Builder->CreateOr(L, R, "ortmp");
-         if (_op == "^")
-            return Builder->CreateXor(L, R, "xortmp");
          if (_op == "==")
             return Builder->CreateFCmpOEQ(L, R, "eqtmp");
-         if (_op == "=") {
-            if (!L->getType()->isPointerTy() || !_LHS->isLValue()) {
-               return LogErrorV("left side of assignment must be a variable or assignable expression");
-            }
-            return Builder->CreateStore(R, L);
-         }
          if (_op == "!=")
             return Builder->CreateFCmpONE(L, R, "netmp");
          if (_op == "<")
-            return Builder->CreateFCmpOLT(L, R, "netmp");
+            return Builder->CreateFCmpOLT(L, R, "lttmp");
          if (_op == "<=")
-            return Builder->CreateFCmpOLE(L, R, "netmp");
+            return Builder->CreateFCmpOLE(L, R, "letmp");
          if (_op == ">")
             return Builder->CreateFCmpOGT(L, R, "gttmp");
          if (_op == ">=")
             return Builder->CreateFCmpOGE(L, R, "getmp");
       }
 
-
-      // if (_op == "&&")
-      //    return
-      // TODO: add other operators
+      return nullptr;
    }
 
    llvm::Value* VariableDeclarationAST::codegen() {
@@ -658,6 +758,7 @@ export namespace tungsten {
       }
 
       NamedValues[_name] = allocInstance;
+      VariableTypes[_name] = type;
 
       return allocInstance;
    }
@@ -878,6 +979,7 @@ export namespace tungsten {
          llvm::AllocaInst* alloca = tmpBuilder.CreateAlloca(arg.getType(), nullptr, varDecl->name());
          Builder->CreateStore(&arg, alloca);
          NamedValues[varDecl->name()] = alloca;
+         VariableTypes[varDecl->name()] = arg.getType();
          ++idx;
       }
 
