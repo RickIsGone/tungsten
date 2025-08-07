@@ -37,6 +37,8 @@ namespace tungsten {
       Protected,
       Static,
       Namespace,
+      StaticCast,
+      ConstCast,
 
       // operators
       Plus,
@@ -160,6 +162,8 @@ namespace tungsten {
        {"protected", TokenType::Protected},
        {"static", TokenType::Static},
        {"namespace", TokenType::Namespace},
+       {"staticCast", TokenType::StaticCast},
+       {"constCast", TokenType::ConstCast},
 
        // types
        {"Auto", TokenType::Auto},

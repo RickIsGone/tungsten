@@ -284,7 +284,9 @@ package files are written in **json**, and a simple package file looks like this
   ],
   "build": {
     "type": "cmd/buildsystem",
-    "args": "args to pass to the compiler"
+    "args": [
+        "myargs"
+    ]
   }
 }
 ```

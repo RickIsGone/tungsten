@@ -102,6 +102,8 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parseTypeof();
       std::unique_ptr<ExpressionAST> _parseNameof();
       std::unique_ptr<ExpressionAST> _parseSizeof();
+      std::unique_ptr<ExpressionAST> _parseStaticCast();
+      std::unique_ptr<ExpressionAST> _parseConstCast();
       std::unique_ptr<ExpressionAST> _parseVariableDeclaration();
       std::unique_ptr<ExpressionAST> _parseArgument();
       std::unique_ptr<BlockStatementAST> _parseBlock();
@@ -564,6 +566,11 @@ namespace tungsten {
          case TokenType::Exit:
             return _parseExitStatement();
 
+         case TokenType::StaticCast:
+            return _parseStaticCast();
+         case TokenType::ConstCast:
+            return _parseConstCast();
+
          case TokenType::If:
             return _parseIfStatement();
          case TokenType::While:
@@ -677,6 +684,53 @@ namespace tungsten {
    std::unique_ptr<ExpressionAST> Parser::_parseSizeof() {
       return std::make_unique<SizeOfStatementAST>(nullptr);
    }
+   std::unique_ptr<ExpressionAST> Parser::_parseStaticCast() {
+      _consume(); // consume staticCast
+      if (_peek().type != TokenType::Less)
+         return _logError("expected '<' after 'staticCast'");
+      _consume(); // consume '<'
+      std::string type = _parseType();
+      if (type.empty())
+         return _logError("expected a type after '<' in 'staticCast'");
+      _consume(); // consume type
+      if (_peek().type != TokenType::Greater)
+         return _logError("expected '>' after type in 'staticCast'");
+      _consume(); // consume '>'
+      if (_peek().type != TokenType::OpenParen)
+         return _logError("expected '(' after '>' in 'staticCast'");
+      _consume(); // consume '('
+      std::unique_ptr<ExpressionAST> value = _parseExpression();
+      if (!value)
+         return nullptr; // error already logged
+      if (_peek().type != TokenType::CloseParen)
+         return _logError("expected ')' after expression in 'staticCast'");
+      _consume(); // consume ')'
+      return std::make_unique<StaticCastAST>(type, std::move(value));
+   }
+   std::unique_ptr<ExpressionAST> Parser::_parseConstCast() {
+      _consume(); // consume constCast
+      if (_peek().type != TokenType::Less)
+         return _logError("expected '<' after 'constCast'");
+      _consume(); // consume '<'
+      std::string type = _parseType();
+      if (type.empty())
+         return _logError("expected a type after '<' in 'constCast'");
+      _consume(); // consume type
+      if (_peek().type != TokenType::Greater)
+         return _logError("expected '>' after type in 'constCast'");
+      _consume(); // consume '>'
+      if (_peek().type != TokenType::OpenParen)
+         return _logError("expected '(' after '>' in 'constCast'");
+      _consume(); // consume '('
+      std::unique_ptr<ExpressionAST> value = _parseExpression();
+      if (!value)
+         return nullptr; // error already logged
+      if (_peek().type != TokenType::CloseParen)
+         return _logError("expected ')' after expression in 'constCast'");
+      _consume(); // consume ')'
+      return std::make_unique<ConstCastAST>(type, std::move(value));
+   }
+
    std::string Parser::_parseType() {
       std::string type = _lexeme(_peek());
       if ((_peek().type >= TokenType::Auto && _peek().type <= TokenType::Int128) || _symbolTable.contains(_lexeme(_peek())))

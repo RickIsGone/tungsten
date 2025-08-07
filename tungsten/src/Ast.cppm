@@ -307,7 +307,33 @@ export namespace tungsten {
       std::string _file;
    };
 
-   // // expression for if statements
+   // cast expressions
+   class StaticCastAST : public ExpressionAST {
+   public:
+      StaticCastAST(const std::string& type, std::unique_ptr<ExpressionAST> value)
+          : _type{type}, _value{std::move(value)} {}
+
+      _NODISCARD const std::string& type() const { return _type; }
+      llvm::Value* codegen() override;
+
+   private:
+      std::string _type;
+      std::unique_ptr<ExpressionAST> _value;
+   };
+   class ConstCastAST : public ExpressionAST {
+   public:
+      ConstCastAST(const std::string& type, std::unique_ptr<ExpressionAST> value)
+          : _type{type}, _value{std::move(value)} {}
+
+      _NODISCARD const std::string& type() const { return _type; }
+      llvm::Value* codegen() override;
+
+   private:
+      std::string _type;
+      std::unique_ptr<ExpressionAST> _value;
+   };
+
+   // expression for if statements
    class IfStatementAST : public ExpressionAST {
    public:
       IfStatementAST(std::unique_ptr<ExpressionAST> condition, std::unique_ptr<ExpressionAST> thenBranch, std::unique_ptr<ExpressionAST> elseBranch = nullptr)
@@ -809,7 +835,7 @@ export namespace tungsten {
    }
 
    llvm::Value* __BuiltinFunctionAST::codegen() {
-      return Builder->CreateGlobalStringPtr(_function, "strtmp");
+      return Builder->CreateGlobalString(_function, "strtmp");
    }
    llvm::Value* __BuiltinLineAST::codegen() {
       return llvm::ConstantInt::get(llvm::Type::getInt64Ty(*TheContext), _line, false);
@@ -818,7 +844,14 @@ export namespace tungsten {
       return llvm::ConstantInt::get(llvm::Type::getInt64Ty(*TheContext), _column, false);
    }
    llvm::Value* __BuiltinFileAST::codegen() {
-      return Builder->CreateGlobalStringPtr(_file, "strtmp");
+      return Builder->CreateGlobalString(_file, "strtmp");
+   }
+
+   llvm::Value* StaticCastAST::codegen() {
+      return nullptr;
+   }
+   llvm::Value* ConstCastAST::codegen() {
+      return nullptr;
    }
 
    llvm::Value* BlockStatementAST::codegen() {
