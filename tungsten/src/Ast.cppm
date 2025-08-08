@@ -43,6 +43,16 @@ namespace tungsten {
       return nullptr;
    }
 
+   bool isSignedType(const std::string& type) {
+      return type == "Int" || type == "Int8" || type == "Int16" || type == "Int32" || type == "Int64" || type == "Int128";
+   }
+   bool isUnsignedType(const std::string& type) {
+      return type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64" || type == "Uint128";
+   }
+   bool isFloatingPointType(const std::string& type) {
+      return type == "Float" || type == "Double";
+   }
+
    llvm::Type* LLVMType(const std::string& type) {
       using namespace llvm;
       if (type == "Void")
@@ -848,6 +858,29 @@ export namespace tungsten {
    }
 
    llvm::Value* StaticCastAST::codegen() {
+      llvm::Type* type = LLVMType(_type);
+      if (!type)
+         return LogErrorV("unknown type '" + _type + "'");
+
+      if (!_value)
+         return nullptr;
+      llvm::Value* castedValue = _value->codegen();
+      if (castedValue == nullptr)
+         return nullptr;
+
+      if (castedValue->getType()->isPointerTy()) // didn't add pointers yet so this check is ok
+         castedValue = Builder->CreateLoad(VariableTypes[static_cast<VariableExpressionAST*>(_value.get())->name()], castedValue, "lval");
+
+      if (isSignedType(_type)) {
+         return Builder->CreateIntCast(castedValue, type, true, "staticCast");
+      }
+      if (isUnsignedType(_type)) {
+         return Builder->CreateIntCast(castedValue, type, false, "staticCast");
+      }
+      if (isFloatingPointType(_type)) {
+         return Builder->CreateFPCast(castedValue, type, "staticCast");
+      }
+
       return nullptr;
    }
    llvm::Value* ConstCastAST::codegen() {
