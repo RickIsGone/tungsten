@@ -585,7 +585,7 @@ export namespace tungsten {
       llvm::Value* V = NamedValues[_name];
       if (!V)
          return LogErrorV("unknown variable '" + _name + "'");
-      return V;
+      return Builder->CreateLoad(VariableTypes[_name], V, "varval");
    }
 
    llvm::Value* StringExpression::codegen() {
@@ -650,21 +650,21 @@ export namespace tungsten {
       };
 
       if (_op == "=" || _op == "+=" || _op == "-=" || _op == "*=" || _op == "/=" || _op == "%=" || _op == "|=" || _op == "&=") {
-         if (!L->getType()->isPointerTy() || !_LHS->isLValue())
+         if (/*!L->getType()->isPointerTy() || */ !_LHS->isLValue())
             return LogErrorV("left side of assignment must be a variable or assignable expression");
 
          llvm::Value* loadedL = L;
-         if (_op != "=") {
+         if (_op != "=" && _op != "+=" && _op != "-=" && _op != "*=" && _op != "/=" && _op != "%=" && _op != "|=" && _op != "&=") {
             if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_LHS.get())) {
                llvm::Type* ltype = VariableTypes[varExpr->name()];
-               loadedL = Builder->CreateLoad(ltype, L, "lval");
+               // loadedL = Builder->CreateLoad(ltype, L, "lval");
             }
          }
 
          if (R->getType()->isPointerTy() && !_RHS->isLValue()) {
             if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_RHS.get())) {
                llvm::Type* rtype = VariableTypes[varExpr->name()];
-               R = Builder->CreateLoad(rtype, R, "rval");
+               // R = Builder->CreateLoad(rtype, R, "rval");
             }
          }
 
@@ -695,13 +695,13 @@ export namespace tungsten {
       if (L->getType()->isPointerTy() && !_LHS->isLValue()) {
          if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_LHS.get())) {
             llvm::Type* ltype = VariableTypes[varExpr->name()];
-            L = Builder->CreateLoad(ltype, L, "lval");
+            // L = Builder->CreateLoad(ltype, L, "lval");
          }
       }
       if (R->getType()->isPointerTy() && !_RHS->isLValue()) {
          if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_RHS.get())) {
             llvm::Type* rtype = VariableTypes[varExpr->name()];
-            R = Builder->CreateLoad(rtype, R, "rval");
+            // R = Builder->CreateLoad(rtype, R, "rval");
          }
       }
 
@@ -791,7 +791,9 @@ export namespace tungsten {
             return nullptr;
 
          Builder->CreateStore(initVal, allocInstance);
-      }
+      } else
+         Builder->CreateStore(llvm::Constant::getNullValue(type), allocInstance);
+
 
       NamedValues[_name] = allocInstance;
       VariableTypes[_name] = type;
@@ -835,13 +837,28 @@ export namespace tungsten {
    }
 
    llvm::Value* TypeOfStatementAST::codegen() {
-      return nullptr;
+      if (!NamedValues.contains(_variable) || !VariableTypes.contains(_variable))
+         return LogErrorV("unknown variable '" + _variable + "'");
+
+      llvm::Type* type = VariableTypes[_variable];
+      return nullptr; // Builder->CreateGlobalString() TODO: fix
    }
    llvm::Value* NameOfStatementAST::codegen() {
-      return nullptr;
+      if (!NamedValues.contains(_name))
+         return LogErrorV("unknown variable '" + _name + "'");
+
+      return Builder->CreateGlobalString(_name, "strtmp");
    }
    llvm::Value* SizeOfStatementAST::codegen() {
-      return nullptr;
+      if (!NamedValues.contains(_variable) || !VariableTypes.contains(_variable)) {
+         llvm::Type* type = LLVMType(_variable);
+         if (type)
+            return llvm::ConstantInt::get(type, type->getPrimitiveSizeInBits());
+         return LogErrorV("unknown variable or type '" + _variable + "'");
+      }
+
+      llvm::Type* type = VariableTypes[_variable];
+      return llvm::ConstantInt::get(type, type->getPrimitiveSizeInBits());
    }
 
    llvm::Value* __BuiltinFunctionAST::codegen() {

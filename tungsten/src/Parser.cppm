@@ -679,10 +679,32 @@ namespace tungsten {
       return std::make_unique<TypeOfStatementAST>(nullptr);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseNameof() {
-      return std::make_unique<NameOfStatementAST>(nullptr);
+      _consume(); // consume nameof
+      if (_peek().type != TokenType::OpenParen)
+         return _logError("expected '(' after 'nameof'");
+      _consume(); // consume '('
+      if (_peek().type != TokenType::Identifier)
+         return _logError("expected an identifier after '(' in 'nameof'");
+      std::string identifier = _lexeme(_peek());
+      _consume(); // consume identifier
+      if (_peek().type != TokenType::CloseParen)
+         return _logError("expected ')' after identifier in 'nameof'");
+      _consume(); // consume ')'
+      return std::make_unique<NameOfStatementAST>(identifier);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseSizeof() {
-      return std::make_unique<SizeOfStatementAST>(nullptr);
+      _consume(); // consume sizeof
+      if (_peek().type != TokenType::OpenParen)
+         return _logError("expected '(' after 'nameof'");
+      _consume(); // consume '('
+      if (_peek().type != TokenType::Identifier)
+         return _logError("expected an identifier after '(' in 'nameof'");
+      std::string identifier = _lexeme(_peek());
+      _consume(); // consume identifier
+      if (_peek().type != TokenType::CloseParen)
+         return _logError("expected ')' after identifier in 'nameof'");
+      _consume(); // consume ')'
+      return std::make_unique<SizeOfStatementAST>(identifier);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseStaticCast() {
       _consume(); // consume staticCast
