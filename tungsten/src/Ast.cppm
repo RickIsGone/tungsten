@@ -56,27 +56,27 @@ namespace tungsten {
    llvm::Type* LLVMType(const std::string& type) {
       using namespace llvm;
       if (type == "Void")
-         return Type::getVoidTy(*TheContext);
+         return Builder->getVoidTy();
       if (type == "Bool")
-         return Type::getInt1Ty(*TheContext);
+         return Builder->getInt1Ty();
       if (type == "Char")
-         return Type::getInt8Ty(*TheContext);
+         return Builder->getInt8Ty();
       if (type == "String")
-         return Type::getInt8Ty(*TheContext)->getPointerTo();
+         return Builder->getInt8Ty()->getPointerTo();
       if (type == "Int" || type == "Int32" || type == "Uint" || type == "Uint32")
-         return Type::getInt32Ty(*TheContext);
+         return Builder->getInt32Ty();
       if (type == "Int8" || type == "Uint8")
-         return Type::getInt8Ty(*TheContext);
+         return Builder->getInt8Ty();
       if (type == "Int16" || type == "Uint16")
-         return Type::getInt16Ty(*TheContext);
+         return Builder->getInt16Ty();
       if (type == "Int64" || type == "Uint64")
-         return Type::getInt64Ty(*TheContext);
+         return Builder->getInt64Ty();
       if (type == "Int128" || type == "Uint128")
-         return Type::getInt128Ty(*TheContext);
+         return Builder->getInt128Ty();
       if (type == "Float")
-         return Type::getFloatTy(*TheContext);
+         return Builder->getFloatTy();
       if (type == "Double")
-         return Type::getDoubleTy(*TheContext);
+         return Builder->getDoubleTy();
       return nullptr;
    }
    std::string mapLLVMTypeToCustomType(llvm::Type* type) {
@@ -106,6 +106,10 @@ namespace tungsten {
          return "FloatN";
       }
 
+      if (type->isVoidTy()) {
+         return "Void";
+      }
+
       if (type->isPointerTy()) { // TODO: fix infinite recursive calling
          llvm::Type* pointee = type->getPointerTo();
          if (pointee->isIntegerTy(8)) {
@@ -131,9 +135,6 @@ namespace tungsten {
          return "Ptr<" + mapLLVMTypeToCustomType(pointee) + ">";
       }
 
-      if (type->isVoidTy()) {
-         return "Void";
-      }
 
       if (type->isStructTy()) {
          llvm::StructType* structTy = llvm::cast<llvm::StructType>(type);
@@ -555,21 +556,21 @@ export namespace tungsten {
          using T = std::decay_t<decltype(val)>;
 
          if constexpr (std::is_same_v<T, int>) {
-            return llvm::ConstantInt::get(*TheContext, llvm::APInt(32, val, true));
+            return Builder->getIntN(32, val);
          } else if constexpr (std::is_same_v<T, int8_t>) {
-            return llvm::ConstantInt::get(*TheContext, llvm::APInt(8, val, true));
+            return Builder->getIntN(8, val);
          } else if constexpr (std::is_same_v<T, int16_t>) {
-            return llvm::ConstantInt::get(*TheContext, llvm::APInt(16, val, true));
+            return Builder->getIntN(16, val);
          } else if constexpr (std::is_same_v<T, int64_t>) {
-            return llvm::ConstantInt::get(*TheContext, llvm::APInt(64, val, true));
+            return Builder->getIntN(64, val);
          } else if constexpr (std::is_same_v<T, uint8_t>) {
-            return llvm::ConstantInt::get(*TheContext, llvm::APInt(8, val, false));
+            return Builder->getIntN(8, val);
          } else if constexpr (std::is_same_v<T, uint16_t>) {
-            return llvm::ConstantInt::get(*TheContext, llvm::APInt(16, val, false));
+            return Builder->getIntN(16, val);
          } else if constexpr (std::is_same_v<T, uint32_t>) {
-            return llvm::ConstantInt::get(*TheContext, llvm::APInt(32, val, false));
+            return Builder->getIntN(32, val);
          } else if constexpr (std::is_same_v<T, uint64_t>) {
-            return llvm::ConstantInt::get(*TheContext, llvm::APInt(64, val, false));
+            return Builder->getIntN(64, val);
          } else if constexpr (std::is_same_v<T, float>) {
             return llvm::ConstantFP::get(llvm::Type::getFloatTy(*TheContext), val);
          } else if constexpr (std::is_same_v<T, double>) {
@@ -791,9 +792,7 @@ export namespace tungsten {
             return nullptr;
 
          Builder->CreateStore(initVal, allocInstance);
-      } else
-         Builder->CreateStore(llvm::Constant::getNullValue(type), allocInstance);
-
+      }
 
       NamedValues[_name] = allocInstance;
       VariableTypes[_name] = type;
@@ -853,22 +852,22 @@ export namespace tungsten {
       if (!NamedValues.contains(_variable) || !VariableTypes.contains(_variable)) {
          llvm::Type* type = LLVMType(_variable);
          if (type)
-            return llvm::ConstantInt::get(type, type->getPrimitiveSizeInBits());
+            return Builder->getInt8(type->getPrimitiveSizeInBits());
          return LogErrorV("unknown variable or type '" + _variable + "'");
       }
 
       llvm::Type* type = VariableTypes[_variable];
-      return llvm::ConstantInt::get(type, type->getPrimitiveSizeInBits());
+      return Builder->getInt8(type->getPrimitiveSizeInBits());
    }
 
    llvm::Value* __BuiltinFunctionAST::codegen() {
       return Builder->CreateGlobalString(_function, "strtmp");
    }
    llvm::Value* __BuiltinLineAST::codegen() {
-      return llvm::ConstantInt::get(llvm::Type::getInt64Ty(*TheContext), _line, false);
+      return Builder->getInt64(_line);
    }
    llvm::Value* __BuiltinColumnAST::codegen() {
-      return llvm::ConstantInt::get(llvm::Type::getInt64Ty(*TheContext), _column, false);
+      return Builder->getInt64(_column);
    }
    llvm::Value* __BuiltinFileAST::codegen() {
       return Builder->CreateGlobalString(_file, "strtmp");
