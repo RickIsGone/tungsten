@@ -856,8 +856,9 @@ export namespace tungsten {
          return LogErrorV("unknown variable or type '" + _variable + "'");
       }
 
-      llvm::Type* type = VariableTypes[_variable];
-      return Builder->getInt8(type->getPrimitiveSizeInBits());
+      uint64_t size = TheModule->getDataLayout().getTypeAllocSize(VariableTypes[_variable]);
+
+      return Builder->getInt8(size);
    }
 
    llvm::Value* __BuiltinFunctionAST::codegen() {
