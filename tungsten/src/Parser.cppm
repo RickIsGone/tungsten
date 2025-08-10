@@ -465,6 +465,7 @@ namespace tungsten {
 
    std::unique_ptr<ExpressionAST> Parser::_parseStringExpression() {
       std::string string = _lexeme(_peek());
+      string = string.substr(1, string.size() - 2); // remove quotes
       _consume();
       return std::make_unique<StringExpression>(string);
    }

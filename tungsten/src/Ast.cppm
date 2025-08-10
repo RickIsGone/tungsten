@@ -590,7 +590,7 @@ export namespace tungsten {
    }
 
    llvm::Value* StringExpression::codegen() {
-      return Builder->CreateGlobalString(_value, "strtmp");
+      return Builder->CreateGlobalStringPtr(_value, "strtmp");
    }
 
    llvm::Value* BinaryExpressionAST::codegen() { // TODO: fix
@@ -840,13 +840,13 @@ export namespace tungsten {
          return LogErrorV("unknown variable '" + _variable + "'");
 
       llvm::Type* type = VariableTypes[_variable];
-      return nullptr; // Builder->CreateGlobalString() TODO: fix
+      return nullptr; // Builder->CreateGlobalStringPtr() TODO: fix
    }
    llvm::Value* NameOfStatementAST::codegen() {
       if (!NamedValues.contains(_name))
          return LogErrorV("unknown variable '" + _name + "'");
 
-      return Builder->CreateGlobalString(_name, "strtmp");
+      return Builder->CreateGlobalStringPtr(_name, "strtmp");
    }
    llvm::Value* SizeOfStatementAST::codegen() {
       if (!NamedValues.contains(_variable) || !VariableTypes.contains(_variable)) {
@@ -862,7 +862,7 @@ export namespace tungsten {
    }
 
    llvm::Value* __BuiltinFunctionAST::codegen() {
-      return Builder->CreateGlobalString(_function, "strtmp");
+      return Builder->CreateGlobalStringPtr(_function, "strtmp");
    }
    llvm::Value* __BuiltinLineAST::codegen() {
       return Builder->getInt64(_line);
@@ -871,7 +871,7 @@ export namespace tungsten {
       return Builder->getInt64(_column);
    }
    llvm::Value* __BuiltinFileAST::codegen() {
-      return Builder->CreateGlobalString(_file, "strtmp");
+      return Builder->CreateGlobalStringPtr(_file, "strtmp");
    }
 
    llvm::Value* StaticCastAST::codegen() {
@@ -1072,7 +1072,10 @@ export namespace tungsten {
       }
 
       if (Builder->GetInsertBlock()->getTerminator() == nullptr) {
-         return LogErrorF("missing return statement in function: '" + name() + "'");
+         if (_prototype->type() == "Void")
+            Builder->CreateRetVoid();
+         else
+            return LogErrorF("missing return statement in function: '" + name() + "'");
       }
 
       llvm::verifyFunction(*function, &llvm::errs());
