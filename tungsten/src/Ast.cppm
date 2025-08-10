@@ -852,13 +852,13 @@ export namespace tungsten {
       if (!NamedValues.contains(_variable) || !VariableTypes.contains(_variable)) {
          llvm::Type* type = LLVMType(_variable);
          if (type)
-            return Builder->getInt8(type->getPrimitiveSizeInBits());
+            return Builder->getInt64(TheModule->getDataLayout().getTypeAllocSize(type));
          return LogErrorV("unknown variable or type '" + _variable + "'");
       }
 
       uint64_t size = TheModule->getDataLayout().getTypeAllocSize(VariableTypes[_variable]);
 
-      return Builder->getInt8(size);
+      return Builder->getInt64(size);
    }
 
    llvm::Value* __BuiltinFunctionAST::codegen() {
