@@ -599,7 +599,7 @@ export namespace tungsten {
       llvm::Value* V = NamedValues[_name];
       if (!V)
          return LogErrorV("unknown variable '" + _name + "'");
-      return Builder->CreateLoad(VariableTypes[_name], V, "varval");
+      return V;
    }
 
    llvm::Value* StringExpression::codegen() {
@@ -611,25 +611,31 @@ export namespace tungsten {
       if (!operandValue)
          return nullptr;
 
-      llvm::Type* operandType = operandValue->getType();
+      llvm::Value* result;
+      if (_op == "++" || _op == "--") {
+         llvm::Value* loadedOperand = Builder->CreateLoad(VariableTypes[static_cast<VariableExpressionAST*>(_operand.get())->name()], operandValue, "loadedoperand");
+         llvm::Type* operandType = loadedOperand->getType();
+         if (_op == "++") {
+            if (operandType->isIntegerTy())
+               result = Builder->CreateAdd(loadedOperand, llvm::ConstantInt::get(operandType, 1), "increment");
+            else if (operandType->isFloatingPointTy())
+               result = Builder->CreateFAdd(loadedOperand, llvm::ConstantFP::get(operandType, 1.0), "increment");
+            else
+               return LogErrorV("unsupported type for increment operation");
+            Builder->CreateStore(result, operandValue);
+            return result;
+         }
 
-      if (_op == "++") {
          if (operandType->isIntegerTy())
-            return Builder->CreateAdd(operandValue, llvm::ConstantInt::get(operandType, 1), "increment");
-         if (operandType->isFloatingPointTy())
-            return Builder->CreateFAdd(operandValue, llvm::ConstantFP::get(operandType, 1.0), "increment");
-
-         return LogErrorV("unsupported type for increment operation");
-      }
-      if (_op == "--") {
-         if (operandType->isIntegerTy())
-            return Builder->CreateSub(operandValue, llvm::ConstantInt::get(operandType, 1), "decrement");
-         if (operandType->isFloatingPointTy())
-            return Builder->CreateFSub(operandValue, llvm::ConstantFP::get(operandType, 1.0), "decrement");
-
-         return LogErrorV("unsupported type for decrement operation");
+            result = Builder->CreateSub(loadedOperand, llvm::ConstantInt::get(operandType, 1), "decrement");
+         else if (operandType->isFloatingPointTy())
+            result = Builder->CreateFSub(loadedOperand, llvm::ConstantFP::get(operandType, 1.0), "decrement");
+         else
+            return LogErrorV("unsupported type for decrement operation");
+         return Builder->CreateStore(result, operandValue);
       }
 
+      llvm::Type* operandType = operandValue->getType(); // TODO: make it work with both L and R values
       if (_op == "!") {
          if (operandType->isIntegerTy())
             return Builder->CreateICmpEQ(operandValue, llvm::ConstantInt::get(operandType, 0), "nottmp");
