@@ -800,6 +800,11 @@ namespace tungsten {
          if (_peek().type == TokenType::CloseBrace)
             _consume(); // consume '}'
       }
+      if (auto* expr = dynamic_cast<NumberExpressionAST*>(initExpr.get())) {
+         expr->setType(type);
+      } else if (auto* expr = dynamic_cast<BinaryExpressionAST*>(initExpr.get())) {
+         expr->setType(type);
+      }
 
       utils::debugLog("definition of variable '{}' with type '{}'", name, type);
 

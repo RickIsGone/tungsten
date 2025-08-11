@@ -164,6 +164,7 @@ export namespace tungsten {
       TheModule->setSourceFileName(fileName);
    }
    void dumpIR() {
+      llvm::verifyModule(*TheModule, &llvm::outs());
 #ifdef TUNGSTEN_DEBUG
 
       std::error_code EC;
@@ -184,17 +185,20 @@ export namespace tungsten {
       virtual llvm::Value* codegen() = 0;
       virtual bool isLValue() { return true; }
    };
-
    // expression for numbers
    using Number = std::variant<int, int8_t, int16_t, int64_t, uint8_t, uint16_t, uint32_t, uint64_t, float, double>;
    class NumberExpressionAST : public ExpressionAST {
    public:
       NumberExpressionAST(Number value) : _value{value} {}
       llvm::Value* codegen() override;
+
+      void setType(const std::string& type) { _type = type; }
       bool isLValue() override { return false; }
+      _NODISCARD const std::string& type() const { return _type; }
 
    private:
-      Number _value{};
+      Number _value;
+      std::string _type;
    };
 
    // expression for variables
@@ -237,11 +241,13 @@ export namespace tungsten {
       BinaryExpressionAST(const std::string& op, std::unique_ptr<ExpressionAST> LHS, std::unique_ptr<ExpressionAST> RHS)
           : _op{op}, _LHS{std::move(LHS)}, _RHS{std::move(RHS)} {}
       llvm::Value* codegen() override;
+      void setType(const std::string& type) { _type = type; }
 
    private:
       std::string _op;
       std::unique_ptr<ExpressionAST> _LHS;
       std::unique_ptr<ExpressionAST> _RHS;
+      std::string _type;
    };
 
    class VariableDeclarationAST : public ExpressionAST {
@@ -565,6 +571,8 @@ export namespace tungsten {
    //  ========================================== implementation ==========================================
 
    llvm::Value* NumberExpressionAST::codegen() {
+      if (_type == "Int")
+         return Builder->getInt32(std::get<uint64_t>(_value));
       return std::visit([](auto&& val) -> llvm::Value* {
          using T = std::decay_t<decltype(val)>;
 
@@ -593,6 +601,24 @@ export namespace tungsten {
          }
       },
                         _value);
+      //    if (_type == "Int" || _type == "Int32")
+      //       return Builder->getInt32(std::get<uint64_t>(_value));
+      //    if (_type == "Uint" || _type == "Uint32")
+      //       return Builder->getInt32(std::get<uint>(_value));
+      //    if (_type == "Int8" || _type == "Uint8")
+      //       return Builder->getInt8(std::get<int8_t>(_value));
+      //    if (_type == "Int16" || _type == "Uint16")
+      //       return Builder->getInt16(std::get<int16_t>(_value));
+      //    if (_type == "Int64" || _type == "Uint64")
+      //       return Builder->getInt64(std::get<uint64_t>(_value));
+      //    if (_type == "Int128" || _type == "Uint128")
+      //       return Builder->getIntN(128, std::get<int64_t>(_value));
+      //    if (_type == "Float")
+      //       return llvm::ConstantFP::get(llvm::Type::getFloatTy(*TheContext), std::get<float>(_value));
+      //    if (_type == "Double")
+      //       return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*TheContext), std::get<double>(_value));
+
+      //    return Builder->getInt64(std::get<uint64_t>(_value)); // fallback to uint64_t
    }
 
    llvm::Value* VariableExpressionAST::codegen() {
@@ -1142,7 +1168,7 @@ export namespace tungsten {
             return LogErrorF("missing return statement in function: '" + name() + "'");
       }
 
-      llvm::verifyFunction(*function, &llvm::errs());
+      llvm::verifyFunction(*function, &llvm::outs());
       return function;
    }
 
