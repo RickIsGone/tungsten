@@ -95,6 +95,7 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parseExpression();
       std::unique_ptr<ExpressionAST> _parseBinaryOperationRHS(int exprPrecedence, std::unique_ptr<ExpressionAST> lhs);
       std::unique_ptr<ExpressionAST> _parsePrimaryExpression();
+      std::unique_ptr<ExpressionAST> _parseUnaryExpression();
       std::unique_ptr<ExpressionAST> _parseBuiltinFunction();
       std::unique_ptr<ExpressionAST> _parseBuiltinColumn();
       std::unique_ptr<ExpressionAST> _parseBuiltinLine();
@@ -614,12 +615,28 @@ namespace tungsten {
          case TokenType::Sizeof:
             return _parseSizeof();
 
+         case TokenType::Minus:
+         case TokenType::MinusMinus:
+         case TokenType::PlusPlus:
+         case TokenType::LogicalNot:
+            return _parseUnaryExpression();
+
          default:
             _consume();
             return _logError("unknown token when expecting an expression");
       }
    }
+   std::unique_ptr<ExpressionAST> Parser::_parseUnaryExpression() {
+      TokenType opType = _peek().type;
+      std::string op = _lexeme(_peek());
+      _consume(); // consume operator
 
+      std::unique_ptr<ExpressionAST> operand = _parsePrimaryExpression();
+      if (!operand)
+         return nullptr;
+
+      return std::make_unique<UnaryExpressionAST>(op, std::move(operand));
+   }
    std::unique_ptr<ExpressionAST> Parser::_parseBuiltinFunction() {
       if (_peek(1).type != TokenType::OpenParen) {
          _consume(2);

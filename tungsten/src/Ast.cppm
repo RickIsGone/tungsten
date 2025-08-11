@@ -218,6 +218,19 @@ export namespace tungsten {
       std::string _value{};
    };
 
+   class UnaryExpressionAST : public ExpressionAST {
+   public:
+      UnaryExpressionAST(const std::string& op, std::unique_ptr<ExpressionAST> operand)
+          : _op{op}, _operand{std::move(operand)} {}
+      llvm::Value* codegen() override;
+
+      _NODISCARD const std::string& op() const { return _op; }
+
+   private:
+      std::string _op;
+      std::unique_ptr<ExpressionAST> _operand;
+   };
+
    // expression for binary operations
    class BinaryExpressionAST : public ExpressionAST {
    public:
@@ -593,6 +606,48 @@ export namespace tungsten {
       return Builder->CreateGlobalStringPtr(_value, "strtmp");
    }
 
+   llvm::Value* UnaryExpressionAST::codegen() {
+      llvm::Value* operandValue = _operand->codegen();
+      if (!operandValue)
+         return nullptr;
+
+      llvm::Type* operandType = operandValue->getType();
+
+      if (_op == "++") {
+         if (operandType->isIntegerTy())
+            return Builder->CreateAdd(operandValue, llvm::ConstantInt::get(operandType, 1), "increment");
+         if (operandType->isFloatingPointTy())
+            return Builder->CreateFAdd(operandValue, llvm::ConstantFP::get(operandType, 1.0), "increment");
+
+         return LogErrorV("unsupported type for increment operation");
+      }
+      if (_op == "--") {
+         if (operandType->isIntegerTy())
+            return Builder->CreateSub(operandValue, llvm::ConstantInt::get(operandType, 1), "decrement");
+         if (operandType->isFloatingPointTy())
+            return Builder->CreateFSub(operandValue, llvm::ConstantFP::get(operandType, 1.0), "decrement");
+
+         return LogErrorV("unsupported type for decrement operation");
+      }
+
+      if (_op == "!") {
+         if (operandType->isIntegerTy())
+            return Builder->CreateICmpEQ(operandValue, llvm::ConstantInt::get(operandType, 0), "nottmp");
+
+         if (operandType->isFloatingPointTy())
+            return Builder->CreateFCmpOEQ(operandValue, llvm::ConstantFP::get(operandType, 0.0), "nottmp");
+
+         return LogErrorV("unsupported type for logical not operation");
+      }
+
+      if (operandType->isIntegerTy())
+         return Builder->CreateNeg(operandValue, "negtmp");
+      if (operandType->isFloatingPointTy())
+         return Builder->CreateFNeg(operandValue, "negtmp");
+
+      return LogErrorV("unsupported type for unary operation");
+   }
+
    llvm::Value* BinaryExpressionAST::codegen() { // TODO: fix
       llvm::Value* L = _LHS->codegen();
       llvm::Value* R = _RHS->codegen();
@@ -919,6 +974,9 @@ export namespace tungsten {
       return nullptr;
    }
    llvm::Value* ReturnStatementAST::codegen() {
+      if (_value == nullptr)
+         return Builder->CreateRetVoid();
+
       llvm::Value* returnValue = _value->codegen();
       return Builder->CreateRet(returnValue);
    }
