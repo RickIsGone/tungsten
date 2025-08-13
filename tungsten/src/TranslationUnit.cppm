@@ -5,6 +5,7 @@ module;
 export module Tungsten.translationUnit;
 import Tungsten.lexer;
 import Tungsten.parser;
+import Tungsten.semanticAnalyzer;
 namespace fs = std::filesystem;
 
 export namespace tungsten {
@@ -26,9 +27,13 @@ export namespace tungsten {
    //  ========================================== implementation ==========================================
 
    void TranslationUnit::compile(const fs::path& path) {
-      Lexer _lexer{path, _raw};
-      Parser _parser{path, _lexer.tokenize(), _raw};
-      _parser.parse();
+      Lexer lexer{path, _raw};
+      Parser parser{path, lexer.tokenize(), _raw};
+      parser.parse();
+      SemanticAnalyzer analyzer{parser.functions(), parser.classes(), parser.globalVariables()};
+      if (analyzer.analyze()) {
+         // codegen();
+      }
    }
 
 } // namespace tungsten

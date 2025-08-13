@@ -258,6 +258,7 @@ export namespace tungsten {
 
       _NODISCARD const std::string& name() const { return _name; }
       _NODISCARD const std::string& type() const { return _type; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& initializer() { return _init; }
 
    private:
       std::string _type;
@@ -415,6 +416,8 @@ export namespace tungsten {
           : _statements{std::move(statements)} {}
       llvm::Value* codegen() override;
 
+      _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& statements() { return _statements; }
+
    private:
       std::vector<std::unique_ptr<ExpressionAST>> _statements;
    };
@@ -473,6 +476,7 @@ export namespace tungsten {
 
       _NODISCARD const std::string& name() const { return _prototype->name(); }
       _NODISCARD const std::string& type() const { return _prototype->type(); }
+      _NODISCARD std::unique_ptr<ExpressionAST>& body() { return _body; }
 
    private:
       std::unique_ptr<FunctionPrototypeAST> _prototype;
@@ -738,21 +742,21 @@ export namespace tungsten {
       };
 
       if (_op == "=" || _op == "+=" || _op == "-=" || _op == "*=" || _op == "/=" || _op == "%=" || _op == "|=" || _op == "&=") {
-         if (/*!L->getType()->isPointerTy() || */ !_LHS->isLValue())
+         if (!L->getType()->isPointerTy() || !_LHS->isLValue())
             return LogErrorV("left side of assignment must be a variable or assignable expression");
 
          llvm::Value* loadedL = L;
          if (_op != "=" && _op != "+=" && _op != "-=" && _op != "*=" && _op != "/=" && _op != "%=" && _op != "|=" && _op != "&=") {
             if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_LHS.get())) {
                llvm::Type* ltype = VariableTypes[varExpr->name()];
-               // loadedL = Builder->CreateLoad(ltype, L, "lval");
+               loadedL = Builder->CreateLoad(ltype, L, "lval");
             }
          }
 
          if (R->getType()->isPointerTy() && !_RHS->isLValue()) {
             if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_RHS.get())) {
                llvm::Type* rtype = VariableTypes[varExpr->name()];
-               // R = Builder->CreateLoad(rtype, R, "rval");
+               R = Builder->CreateLoad(rtype, R, "rval");
             }
          }
 
@@ -783,13 +787,13 @@ export namespace tungsten {
       if (L->getType()->isPointerTy() && !_LHS->isLValue()) {
          if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_LHS.get())) {
             llvm::Type* ltype = VariableTypes[varExpr->name()];
-            // L = Builder->CreateLoad(ltype, L, "lval");
+            L = Builder->CreateLoad(ltype, L, "lval");
          }
       }
       if (R->getType()->isPointerTy() && !_RHS->isLValue()) {
          if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_RHS.get())) {
             llvm::Type* rtype = VariableTypes[varExpr->name()];
-            // R = Builder->CreateLoad(rtype, R, "rval");
+            R = Builder->CreateLoad(rtype, R, "rval");
          }
       }
 
@@ -914,7 +918,7 @@ export namespace tungsten {
       }
       if (!areParamsOk) {
          if (callee->arg_size() == 0)
-            return LogErrorV("no instance of function " + _callee + " with no args");
+            return LogErrorV("no instance of function " + _callee + " with zero args");
 
          return LogErrorV("no instance of function " + _callee + " with args '" + argsTypes + "'");
       }

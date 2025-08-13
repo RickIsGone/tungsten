@@ -71,6 +71,10 @@ namespace tungsten {
 
       void parse();
 
+      _NODISCARD std::vector<std::unique_ptr<FunctionAST>> functions() { return std::move(_functions); }
+      _NODISCARD std::vector<std::unique_ptr<ClassAST>> classes() { return std::move(_classes); }
+      _NODISCARD std::vector<std::unique_ptr<ExpressionAST>> globalVariables() { return std::move(_globalVariables); }
+
    private:
       _NODISCARD Token _peek(size_t offset = 0) const;
       void _consume(const size_t amount = 1) { _index += amount; }
@@ -124,6 +128,10 @@ namespace tungsten {
       const std::filesystem::path& _filePath{};
       const std::vector<Token> _tokens{};
       const std::string& _raw;
+
+      std::vector<std::unique_ptr<FunctionAST>> _functions;
+      std::vector<std::unique_ptr<ClassAST>> _classes;
+      std::vector<std::unique_ptr<ExpressionAST>> _globalVariables;
    };
 
    //  ========================================== implementation ==========================================
@@ -232,27 +240,27 @@ namespace tungsten {
             case TokenType::String:
             case TokenType::Void:
                if (_peek(2).type == TokenType::OpenParen) {
-                  func = _parseFunctionDeclaration();
-                  func->codegen();
+                  _functions.push_back(_parseFunctionDeclaration());
+                  // func->codegen();
                } else {
                   expr = _parseVariableDeclaration();
                   if (_peek().type != TokenType::Semicolon)
                      _logError("expected ';' after variable declaration");
                   _consume(); // consume ';'
-                  expr->codegen();
+                  _globalVariables.push_back(std::move(expr));
                }
                break;
             case TokenType::Identifier:
                if (_symbolTable.contains(_lexeme(_peek())) && _symbolTable.at(_lexeme(_peek())) == SymbolType::Class) {
                   if (_peek(2).type == TokenType::OpenParen) {
-                     func = _parseFunctionDeclaration();
-                     func->codegen();
+                     _functions.push_back(_parseFunctionDeclaration());
+                     // func->codegen();
                   } else {
                      expr = _parseVariableDeclaration();
                      if (_peek().type != TokenType::Semicolon)
                         _logError("expected ';' after variable declaration");
                      _consume(); // consume ';'
-                     expr->codegen();
+                     _globalVariables.push_back(std::move(expr));
                   }
                } else {
                   _logError("'" + _lexeme(_peek()) + "' is not a known type or class");
@@ -264,8 +272,8 @@ namespace tungsten {
             //    _parseNamespace();
             //    break;
             case TokenType::Class: {
-               std::unique_ptr<ClassAST> cls = _parseClass();
-               cls->codegen();
+               _classes.push_back(_parseClass());
+               // cls->codegen();
                break;
             }
             default:
