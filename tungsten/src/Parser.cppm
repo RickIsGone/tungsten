@@ -16,7 +16,7 @@ import Tungsten.ast;
 import Tungsten.utils;
 
 namespace tungsten {
-   enum class SymbolType {
+   export enum class SymbolType {
       Function,
       Variable,
       Class,

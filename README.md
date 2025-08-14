@@ -175,6 +175,54 @@ To free the array:
 free[] myArray;
 ```
 
+## Control flow statements
+
+### If
+
+If statements are written just like in C++ 
+```cpp
+if (condition) {
+    // do stuff
+} else {
+    // do other stuff
+}
+```
+And just like in C++ you can avoid using brackets for single instructions
+```cpp
+if (condition)
+    // do stuff
+else 
+    // do other stuff
+```
+
+### While
+
+Unlike in C++, while statements require brackets to work
+```cpp
+while (condition) {
+    // do stuff
+
+}
+```
+
+### Do while
+
+Do whiles instead are just like in C++
+```cpp
+do {
+    // do stuff
+} while(condition);
+```
+
+### For 
+
+For statements just like while statements require brackets to work
+```Java
+for(Uint64 i; i < 10; ++i) {
+    // do stuff
+}
+```
+
 ## Functions
 
 Just like in C++, functions are declared like this:
