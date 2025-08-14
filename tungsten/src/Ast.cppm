@@ -218,10 +218,17 @@ export namespace tungsten {
    // base for all nodes in the AST
    class ExpressionAST {
    public:
+      ExpressionAST(const std::string ty) { _Type = ty; }
+      ExpressionAST() = default;
       virtual ~ExpressionAST() = default;
       virtual llvm::Value* codegen() = 0;
       virtual bool isLValue() { return true; }
       virtual void accept(ASTVisitor& v) = 0;
+
+      _NODISCARD virtual const std::string type() const { return _Type; }
+
+   protected:
+      std::string _Type;
    };
    // expression for numbers
    using Number = std::variant<int, int8_t, int16_t, int64_t, uint8_t, uint16_t, uint32_t, uint64_t, float, double>;
@@ -230,14 +237,12 @@ export namespace tungsten {
       NumberExpressionAST(Number value) : _value{value} {}
       llvm::Value* codegen() override;
 
-      void setType(const std::string& type) { _type = type; }
+      void setType(const std::string& type) { _Type = type; }
       bool isLValue() override { return false; }
-      _NODISCARD const std::string& type() const { return _type; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
 
    private:
       Number _value;
-      std::string _type;
    };
 
    // expression for variables
@@ -248,6 +253,7 @@ export namespace tungsten {
 
       _NODISCARD const std::string& name() const { return _name; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      void setType(const std::string& type) { _Type = type; }
 
    private:
       std::string _name{};
@@ -260,6 +266,7 @@ export namespace tungsten {
 
       bool isLValue() override { return false; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD const std::string type() const override { return "String"; }
 
    private:
       std::string _value{};
@@ -273,6 +280,7 @@ export namespace tungsten {
 
       _NODISCARD const std::string& op() const { return _op; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      void setType(const std::string& type) { _Type = type; }
 
    private:
       std::string _op;
@@ -285,29 +293,27 @@ export namespace tungsten {
       BinaryExpressionAST(const std::string& op, std::unique_ptr<ExpressionAST> LHS, std::unique_ptr<ExpressionAST> RHS)
           : _op{op}, _LHS{std::move(LHS)}, _RHS{std::move(RHS)} {}
       llvm::Value* codegen() override;
-      void setType(const std::string& type) { _type = type; }
+      void setType(const std::string& type) { _Type = type; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
 
    private:
       std::string _op;
       std::unique_ptr<ExpressionAST> _LHS;
       std::unique_ptr<ExpressionAST> _RHS;
-      std::string _type;
    };
 
    class VariableDeclarationAST : public ExpressionAST {
    public:
+      using Base = ExpressionAST;
       VariableDeclarationAST(const std::string& type, const std::string& name, std::unique_ptr<ExpressionAST> init)
-          : _type{type}, _name{name}, _init{std::move(init)} {}
+          : Base{type}, _name{name}, _init{std::move(init)} {}
       llvm::Value* codegen() override;
 
       _NODISCARD const std::string& name() const { return _name; }
-      _NODISCARD const std::string& type() const { return _type; }
       _NODISCARD std::unique_ptr<ExpressionAST>& initializer() { return _init; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
 
    private:
-      std::string _type;
       std::string _name;
       std::unique_ptr<ExpressionAST> _init;
    };
@@ -320,6 +326,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      void setType(const std::string& type) { _Type = type; }
 
    private:
       std::string _callee;
@@ -332,6 +339,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD const std::string type() const override { return "String"; }
 
    private:
       std::string _variable;
@@ -343,6 +351,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD const std::string type() const override { return "String"; }
 
    private:
       std::string _name;
@@ -354,6 +363,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      void setType(const std::string& type) { _Type = type; }
 
    private:
       std::string _variable;
@@ -365,6 +375,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD const std::string type() const override { return "String"; }
 
    private:
       std::string _function;
@@ -375,6 +386,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      void setType(const std::string& type) { _Type = type; }
 
    private:
       size_t _line;
@@ -385,6 +397,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      void setType(const std::string& type) { _Type = type; }
 
    private:
       size_t _column;
@@ -395,6 +408,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD const std::string type() const override { return "String"; }
 
    private:
       std::string _file;
@@ -403,28 +417,28 @@ export namespace tungsten {
    // cast expressions
    class StaticCastAST : public ExpressionAST {
    public:
+      using Base = ExpressionAST;
       StaticCastAST(const std::string& type, std::unique_ptr<ExpressionAST> value)
-          : _type{type}, _value{std::move(value)} {}
+          : Base{type}, _value{std::move(value)} {}
       llvm::Value* codegen() override;
 
-      _NODISCARD const std::string& type() const { return _type; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      void setType(const std::string& type) { _Type = type; }
 
    private:
-      std::string _type;
       std::unique_ptr<ExpressionAST> _value;
    };
    class ConstCastAST : public ExpressionAST {
    public:
+      using Base = ExpressionAST;
       ConstCastAST(const std::string& type, std::unique_ptr<ExpressionAST> value)
-          : _type{type}, _value{std::move(value)} {}
+          : Base{type}, _value{std::move(value)} {}
       llvm::Value* codegen() override;
 
-      _NODISCARD const std::string& type() const { return _type; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      void setType(const std::string& type) { _Type = type; }
 
    private:
-      std::string _type;
       std::unique_ptr<ExpressionAST> _value;
    };
 
@@ -436,6 +450,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD const std::string type() const override { return ""; }
 
    private:
       std::unique_ptr<ExpressionAST> _condition;
@@ -450,6 +465,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD const std::string type() const override { return ""; }
 
    private:
       std::unique_ptr<ExpressionAST> _condition;
@@ -462,6 +478,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD const std::string type() const override { return ""; }
 
    private:
       std::unique_ptr<ExpressionAST> _condition;
@@ -474,6 +491,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD const std::string type() const override { return ""; }
 
    private:
       std::unique_ptr<ExpressionAST> _init;
@@ -490,6 +508,7 @@ export namespace tungsten {
 
       _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& statements() { return _statements; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD const std::string type() const override { return ""; }
 
    private:
       std::vector<std::unique_ptr<ExpressionAST>> _statements;
@@ -501,6 +520,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      void setType(const std::string& ty) { _Type = ty; }
 
    private:
       std::unique_ptr<ExpressionAST> _value;
@@ -512,6 +532,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD const std::string type() const override { return "Int32"; }
 
    private:
       std::unique_ptr<ExpressionAST> _value;
@@ -664,7 +685,7 @@ export namespace tungsten {
    //  ========================================== implementation ==========================================
 
    llvm::Value* NumberExpressionAST::codegen() { // TODO: fix
-      if (_type == "Int")
+      if (_Type == "Int")
          return Builder->getInt32(std::get<uint64_t>(_value));
       return std::visit([](auto&& val) -> llvm::Value* {
          using T = std::decay_t<decltype(val)>;
@@ -958,9 +979,9 @@ export namespace tungsten {
    }
 
    llvm::Value* VariableDeclarationAST::codegen() {
-      llvm::Type* type = LLVMType(_type);
+      llvm::Type* type = LLVMType(_Type);
       if (!type)
-         return LogErrorV("unknown type '" + _type + "'");
+         return LogErrorV("unknown type '" + _Type + "'");
 
       llvm::Function* function = Builder->GetInsertBlock()->getParent();
       llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
@@ -1055,9 +1076,9 @@ export namespace tungsten {
    }
 
    llvm::Value* StaticCastAST::codegen() {
-      llvm::Type* type = LLVMType(_type);
+      llvm::Type* type = LLVMType(_Type);
       if (!type)
-         return LogErrorV("unknown type '" + _type + "'");
+         return LogErrorV("unknown type '" + _Type + "'");
 
       if (!_value)
          return nullptr;
@@ -1068,13 +1089,13 @@ export namespace tungsten {
       if (castedValue->getType()->isPointerTy()) // didn't add pointers yet so this check is ok
          castedValue = Builder->CreateLoad(VariableTypes[static_cast<VariableExpressionAST*>(_value.get())->name()], castedValue, "lval");
 
-      if (isSignedType(_type)) {
+      if (isSignedType(_Type)) {
          return Builder->CreateIntCast(castedValue, type, true, "staticCast");
       }
-      if (isUnsignedType(_type)) {
+      if (isUnsignedType(_Type)) {
          return Builder->CreateIntCast(castedValue, type, false, "staticCast");
       }
-      if (isFloatingPointType(_type)) {
+      if (isFloatingPointType(_Type)) {
          return Builder->CreateFPCast(castedValue, type, "staticCast");
       }
 

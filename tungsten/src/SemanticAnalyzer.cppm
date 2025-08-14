@@ -5,6 +5,7 @@ module;
 #include <iostream>
 #include <string>
 #include <map>
+#include <sstream>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
 #endif
@@ -36,7 +37,7 @@ namespace tungsten {
       void visit(StringExpression&) override {}
       void visit(UnaryExpressionAST&) override {}
       void visit(BinaryExpressionAST&) override {}
-      void visit(VariableDeclarationAST&) override {}
+      void visit(VariableDeclarationAST&) override;
       void visit(CallExpressionAST&) override {}
       void visit(TypeOfStatementAST&) override {}
       void visit(NameOfStatementAST&) override {}
@@ -58,7 +59,7 @@ namespace tungsten {
       void visit(NamespaceAST&) override {}
 
       void visit(FunctionPrototypeAST&) override {}
-      void visit(FunctionAST&) override {}
+      void visit(FunctionAST&) override;
 
       void visit(ClassMethodAST&) override {}
       void visit(ClassVariableAST&) override {}
@@ -68,18 +69,25 @@ namespace tungsten {
 
    private:
       void _analyzeVariableDeclaration(VariableDeclarationAST* var);
-      void _analyzeClass(ClassAST* cls);
       void _analyzeFunction(FunctionAST* fun);
+
+      void _logError(const std::string& err) { _errors << "error: " << err << "\n"; }
+      void _logWarn(const std::string& warn) { _warnings << "warning: " << warn << "\n"; }
+      void _print() { std::cerr << _errors.str() << _warnings.str(); }
 
       bool _isSignedType(const std::string& type);
       bool _isUnsignedType(const std::string& type);
       bool _isFloatingPointType(const std::string& type);
       bool _isNumberType(const std::string& type);
+      bool _isBaseType(const std::string& type);
+      bool _isClass(const std::string& cls);
 
       std::vector<std::unique_ptr<FunctionAST>> _functions;
       std::vector<std::unique_ptr<ClassAST>> _classes;
       std::vector<std::unique_ptr<ExpressionAST>> _globalVariables;
       std::map<std::string, ElementType> _symbolTable;
+      std::stringstream _errors;
+      std::stringstream _warnings;
       bool _hasErrors{false};
    };
 
@@ -95,10 +103,9 @@ namespace tungsten {
       for (auto& fun : _functions) {
          fun->accept(*this);
       }
-      return !_hasErrors;
-   }
+      _print();
 
-   void SemanticAnalyzer::_analyzeClass(ClassAST* cls) {
+      return !_hasErrors;
    }
 
    void SemanticAnalyzer::_analyzeFunction(FunctionAST* fun) {
@@ -118,6 +125,31 @@ namespace tungsten {
          } else
             _hasErrors = true;
       }
+   }
+
+   void SemanticAnalyzer::visit(VariableDeclarationAST& var) {
+      if (!_isBaseType(var.type()) && !_isClass(var.type()))
+         return _logError("unknown type '" + var.type() + "' in variable declaration '" + var.type() + " " + var.name() + "'");
+
+      if (var.initializer()) {
+         var.initializer()->accept(*this);
+         if (!_isNumberType(var.type()) || !_isNumberType(var.initializer()->type())) {
+            if (var.type() != var.initializer()->type())
+               return _logError("type mismatch: cannot assign '" + var.initializer()->type() + "' to variable of type '" + var.type() + "'");
+         }
+      }
+
+      _symbolTable[var.name()] = {SymbolType::Variable, var.type()};
+   }
+   void SemanticAnalyzer::visit(FunctionAST& fun) {
+      if (_symbolTable.contains(fun.name()) && _symbolTable[fun.name()].symbolType != SymbolType::Function)
+         return _logError(std::string(_symbolTable[fun.name()].symbolType == SymbolType::Variable ? "Variable" : "Class") + " with name " + fun.name() + "' already exists");
+
+      for (auto& expr : static_cast<BlockStatementAST*>(fun.body().get())->statements()) {
+         expr->accept(*this);
+      }
+
+      _symbolTable[fun.name()] = {SymbolType::Function, fun.type()};
    }
 
    void SemanticAnalyzer::_analyzeVariableDeclaration(VariableDeclarationAST* var) {
@@ -162,6 +194,20 @@ namespace tungsten {
    }
    bool SemanticAnalyzer::_isNumberType(const std::string& type) {
       return _isSignedType(type) || _isUnsignedType(type) || _isFloatingPointType(type);
+   }
+   bool SemanticAnalyzer::_isBaseType(const std::string& type) {
+      return _isNumberType(type) || type == "String" || type == "Char" || type == "Void";
+   }
+   bool SemanticAnalyzer::_isClass(const std::string& cls) {
+      if (!_symbolTable.contains(cls))
+         return false;
+      if (_symbolTable[cls].symbolType != SymbolType::Class) {
+         for (auto& clss : _classes) {
+            if (clss->name() == cls)
+               return true;
+         }
+      }
+      return false;
    }
 
 } // namespace tungsten
