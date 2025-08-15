@@ -34,8 +34,7 @@ export namespace tungsten {
       SemanticAnalyzer analyzer{parser.functions(), parser.classes(), parser.globalVariables()};
       if (analyzer.analyze()) {
          // codegen();
-      } else
-         std::cout << "error during semantic analysis\n";
+      }
    }
 
 } // namespace tungsten
