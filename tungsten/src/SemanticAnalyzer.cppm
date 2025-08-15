@@ -188,7 +188,7 @@ namespace tungsten {
          auto bitSize = [](const std::string& t) -> int {
             if (t == "Int8" || t == "Uint8") return 8;
             if (t == "Int16" || t == "Uint16") return 16;
-            if (t == "Int32" || t == "Uint32" || t == "Int") return 32;
+            if (t == "Int32" || t == "Uint32" || t == "Int" || t == "Uint") return 32;
             if (t == "Int64" || t == "Uint64") return 64;
             if (t == "Int128" || t == "Uint128") return 128;
             if (t == "Float") return 32;
