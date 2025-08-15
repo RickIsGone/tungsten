@@ -228,11 +228,13 @@ namespace tungsten {
             case TokenType::Int16:
             case TokenType::Int32:
             case TokenType::Int64:
+            case TokenType::Int128:
             case TokenType::Uint:
             case TokenType::Uint8:
             case TokenType::Uint16:
             case TokenType::Uint32:
             case TokenType::Uint64:
+            case TokenType::Uint128:
             case TokenType::Float:
             case TokenType::Double:
             case TokenType::Bool:
@@ -320,13 +322,13 @@ namespace tungsten {
    std::unique_ptr<FunctionAST> Parser::_parseConstructorOrDestructor(const std::string& className) {
       std::string name = _lexeme(_peek());
       _consume();
-      utils::debugLog(name[0] == '~' ? "definition of class '{}' destructor" : "definition of class '{}' constructor", className);
+      // utils::debugLog(name[0] == '~' ? "definition of class '{}' destructor" : "definition of class '{}' constructor", className);
       std::vector<std::unique_ptr<ExpressionAST>> args;
       // check already handled in _parseClass()
       _consume(); // consumes (
       while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile) {
          args.push_back(_parseArgument());
-         utils::debugLog("argument {}: {} {}", args.size(), _lexeme(_peek(-2)), _lexeme(_peek(-1)));
+         // utils::debugLog("argument {}: {} {}", args.size(), _lexeme(_peek(-2)), _lexeme(_peek(-1)));
          if (_peek().type == TokenType::Comma)
             _consume(); // consume ,
       }
@@ -497,7 +499,7 @@ namespace tungsten {
          return _logError("expected ')' after function call");
       _consume(); // consume )
 
-      utils::debugLog("function call: '{}', args number: {}", identifier, args.size());
+      // utils::debugLog("function call: '{}', args number: {}", identifier, args.size());
       // if (!_symbolTable.contains(identifier))
       //    return _logError("unknown function: '" + identifier + "'");
 
@@ -595,11 +597,13 @@ namespace tungsten {
          case TokenType::Int16:
          case TokenType::Int32:
          case TokenType::Int64:
+         case TokenType::Int128:
          case TokenType::Uint:
          case TokenType::Uint8:
          case TokenType::Uint16:
          case TokenType::Uint32:
          case TokenType::Uint64:
+         case TokenType::Uint128:
          case TokenType::Float:
          case TokenType::Double:
          case TokenType::Bool:
@@ -814,7 +818,7 @@ namespace tungsten {
          expr->setType(type);
       }
 
-      utils::debugLog("definition of variable '{}' with type '{}'", name, type);
+      // utils::debugLog("definition of variable '{}' with type '{}'", name, type);
 
       return std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr));
    }
@@ -867,7 +871,7 @@ namespace tungsten {
       if (_symbolTable.contains(name))
          return _logError<FunctionPrototypeAST>("redefinition of '" + name + "'");
 
-      utils::debugLog("definition of function prototype '{}' with type '{}'", name, type);
+      // utils::debugLog("definition of function prototype '{}' with type '{}'", name, type);
       std::vector<std::unique_ptr<ExpressionAST>> args;
       // check already handled in _parsePrimaryExpression()
       _consume(); // consumes (
@@ -876,7 +880,7 @@ namespace tungsten {
          tok.position = _peek().position;
          args.push_back(_parseArgument());
          tok.length = _peek().position - tok.position;
-         utils::debugLog("argument {}: {}", args.size(), _lexeme(tok));
+         // utils::debugLog("argument {}: {}", args.size(), _lexeme(tok));
          if (_peek().type == TokenType::Comma)
             _consume(); // consume ,
       }
@@ -1006,7 +1010,7 @@ namespace tungsten {
       std::string module = _lexeme(_peek());
       _consume(); // consume identifier
       // TODO: Implement module import logic
-      utils::debugLog("Importing module: {}", module);
+      // utils::debugLog("Importing module: {}", module);
 
       return std::make_unique<ImportStatementAST>(module);
    }
