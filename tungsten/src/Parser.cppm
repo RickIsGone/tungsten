@@ -898,6 +898,10 @@ namespace tungsten {
          return _logError<FunctionAST>("expected '{'");
 
       std::unique_ptr<BlockStatementAST> body = _parseBlock();
+      for (auto& expr : body->statements()) {
+         if (auto ret = dynamic_cast<ReturnStatementAST*>(expr.get()))
+            ret->setType(proto->type());
+      }
       return std::make_unique<FunctionAST>(std::move(proto), std::move(body));
    }
 

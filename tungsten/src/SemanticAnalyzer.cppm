@@ -53,8 +53,8 @@ namespace tungsten {
       void visit(DoWhileStatementAST&) override {}
       void visit(ForStatementAST&) override {}
       void visit(BlockStatementAST&) override {}
-      void visit(ReturnStatementAST&) override {}
-      void visit(ExitStatement&) override {}
+      void visit(ReturnStatementAST&) override;
+      void visit(ExitStatement&) override;
       void visit(ExternStatementAST&) override {}
       void visit(NamespaceAST&) override {}
       void visit(ImportStatementAST&) override {}
@@ -146,6 +146,23 @@ namespace tungsten {
       _symbolTable[fun.name()] = {SymbolType::Function, fun.type()};
    }
 
+   void SemanticAnalyzer::visit(ExitStatement& ext) {
+      ext.value()->accept(*this);
+      if (!_isSignedType(ext.value()->type()) && !_isUnsignedType(ext.value()->type()))
+         return _logError("exit statement expects a numeric value");
+   }
+
+   void SemanticAnalyzer::visit(ReturnStatementAST& ret) {
+      ret.value()->accept(*this);
+      if (ret.type() == "Void" && ret.value() != nullptr)
+         return _logError("'Void' function cannot return '" + ret.value()->type() + "'");
+
+      if (!_isNumberType(ret.type()) || !_isNumberType(ret.value()->type())) {
+         if (ret.type() != ret.value()->type())
+            return _logError("'" + ret.type() + "' function cannot return '" + ret.value()->type() + "'");
+      }
+   }
+
    bool SemanticAnalyzer::_isSignedType(const std::string& type) {
       return type == "Int" || type == "Int8" || type == "Int16" || type == "Int32" || type == "Int64" || type == "Int128";
    }
@@ -172,7 +189,6 @@ namespace tungsten {
       }
       return false;
    }
-
    bool SemanticAnalyzer::_checkNumericConversionLoss(const std::string& fromType, const std::string& toType) {
       if (fromType == toType) return false;
 

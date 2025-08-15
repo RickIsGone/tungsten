@@ -522,6 +522,7 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(const std::string& ty) { _Type = ty; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& value() { return _value; }
 
    private:
       std::unique_ptr<ExpressionAST> _value;
@@ -534,6 +535,7 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD const std::string type() const override { return "Int32"; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& value() { return _value; }
 
    private:
       std::unique_ptr<ExpressionAST> _value;
