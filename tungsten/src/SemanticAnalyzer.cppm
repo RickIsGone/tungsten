@@ -33,7 +33,7 @@ namespace tungsten {
       bool analyze();
 
       void visit(NumberExpressionAST&) override {}
-      void visit(VariableExpressionAST&) override {}
+      void visit(VariableExpressionAST&) override;
       void visit(StringExpression&) override {}
       void visit(UnaryExpressionAST&) override {}
       void visit(BinaryExpressionAST&) override {}
@@ -57,6 +57,7 @@ namespace tungsten {
       void visit(ExitStatement&) override {}
       void visit(ExternStatementAST&) override {}
       void visit(NamespaceAST&) override {}
+      void visit(ImportStatementAST&) override {}
 
       void visit(FunctionPrototypeAST&) override {}
       void visit(FunctionAST&) override;
@@ -68,10 +69,10 @@ namespace tungsten {
       void visit(ClassAST&) override {}
 
    private:
-      void _analyzeVariableDeclaration(VariableDeclarationAST* var);
-      void _analyzeFunction(FunctionAST* fun);
-
-      void _logError(const std::string& err) { _errors << "error: " << err << "\n"; }
+      void _logError(const std::string& err) {
+         _errors << "error: " << err << "\n";
+         _hasErrors = true;
+      }
       void _logWarn(const std::string& warn) { _warnings << "warning: " << warn << "\n"; }
       void _print() { std::cerr << _errors.str() << _warnings.str(); }
 
@@ -81,6 +82,7 @@ namespace tungsten {
       bool _isNumberType(const std::string& type);
       bool _isBaseType(const std::string& type);
       bool _isClass(const std::string& cls);
+      bool _checkNumericConversionLoss(const std::string& fromType, const std::string& toType);
 
       std::vector<std::unique_ptr<FunctionAST>> _functions;
       std::vector<std::unique_ptr<ClassAST>> _classes;
@@ -108,25 +110,6 @@ namespace tungsten {
       return !_hasErrors;
    }
 
-   void SemanticAnalyzer::_analyzeFunction(FunctionAST* fun) {
-      for (auto& expr : static_cast<BlockStatementAST*>(fun->body().get())->statements()) {
-         if (auto var = dynamic_cast<VariableDeclarationAST*>(expr.get())) {
-            _analyzeVariableDeclaration(var);
-         } else if (auto binop = dynamic_cast<BinaryExpressionAST*>(expr.get())) {
-         } else if (auto ifStatement = dynamic_cast<IfStatementAST*>(expr.get())) {
-         } else if (auto whileStatement = dynamic_cast<WhileStatementAST*>(expr.get())) {
-         } else if (auto doWhileStatement = dynamic_cast<DoWhileStatementAST*>(expr.get())) {
-         } else if (auto forStatement = dynamic_cast<ForStatementAST*>(expr.get())) {
-         } else if (auto funcCall = dynamic_cast<CallExpressionAST*>(expr.get())) {
-         } else if (auto blockStatement = dynamic_cast<BlockStatementAST*>(expr.get())) {
-         } else if (auto returnStatement = dynamic_cast<ReturnStatementAST*>(expr.get())) {
-         } else if (auto exitStatement = dynamic_cast<ExitStatement*>(expr.get())) {
-         } else if (auto unaryop = dynamic_cast<UnaryExpressionAST*>(expr.get())) {
-         } else
-            _hasErrors = true;
-      }
-   }
-
    void SemanticAnalyzer::visit(VariableDeclarationAST& var) {
       if (!_isBaseType(var.type()) && !_isClass(var.type()))
          return _logError("unknown type '" + var.type() + "' in variable declaration '" + var.type() + " " + var.name() + "'");
@@ -136,11 +119,22 @@ namespace tungsten {
          if (!_isNumberType(var.type()) || !_isNumberType(var.initializer()->type())) {
             if (var.type() != var.initializer()->type())
                return _logError("type mismatch: cannot assign '" + var.initializer()->type() + "' to variable of type '" + var.type() + "'");
+
+         } else if (_checkNumericConversionLoss(var.initializer()->type(), var.type())) {
+            _logWarn("possible data loss converting from '" + var.initializer()->type() + "' to '" + var.type() + "' in variable '" + var.name() + "'");
          }
       }
 
       _symbolTable[var.name()] = {SymbolType::Variable, var.type()};
    }
+
+   void SemanticAnalyzer::visit(VariableExpressionAST& var) {
+      if (!_symbolTable.contains(var.name()))
+         return _logError("unkown variable '" + var.name() + "'");
+
+      var.setType(_symbolTable[var.name()].type);
+   }
+
    void SemanticAnalyzer::visit(FunctionAST& fun) {
       if (_symbolTable.contains(fun.name()) && _symbolTable[fun.name()].symbolType != SymbolType::Function)
          return _logError(std::string(_symbolTable[fun.name()].symbolType == SymbolType::Variable ? "Variable" : "Class") + " with name " + fun.name() + "' already exists");
@@ -150,37 +144,6 @@ namespace tungsten {
       }
 
       _symbolTable[fun.name()] = {SymbolType::Function, fun.type()};
-   }
-
-   void SemanticAnalyzer::_analyzeVariableDeclaration(VariableDeclarationAST* var) {
-      if (var->initializer().get()) {
-         if (auto num = dynamic_cast<NumberExpressionAST*>(var->initializer().get())) {
-            if (_isNumberType(var->type()))
-               num->setType(var->type());
-            else
-               _hasErrors = true;
-         } else if (auto str = dynamic_cast<StringExpression*>(var->initializer().get())) {
-            if (var->type() != "String")
-               _hasErrors = true;
-         } else if (auto binop = dynamic_cast<BinaryExpressionAST*>(var->initializer().get())) {
-            binop->setType(var->type());
-         } else if (auto staticCast = dynamic_cast<StaticCastAST*>(var->initializer().get())) {
-         } else if (auto constCast = dynamic_cast<ConstCastAST*>(var->initializer().get())) {
-         } else if (auto call = dynamic_cast<CallExpressionAST*>(var->initializer().get())) {
-         } else if (auto other = dynamic_cast<VariableExpressionAST*>(var->initializer().get())) {
-            if (_symbolTable.contains(other->name())) {
-               if (!_isNumberType(var->type()) || !_isNumberType(_symbolTable[other->name()].type)) {
-                  _hasErrors = true;
-               } else if (var->type() != _symbolTable[other->name()].type) { // strings and classes
-                  _hasErrors = true;
-               }
-            } else {
-               _hasErrors = true;
-            }
-         }
-      }
-
-      _symbolTable[var->name()] = {SymbolType::Variable, var->type()};
    }
 
    bool SemanticAnalyzer::_isSignedType(const std::string& type) {
@@ -207,6 +170,42 @@ namespace tungsten {
                return true;
          }
       }
+      return false;
+   }
+
+   bool SemanticAnalyzer::_checkNumericConversionLoss(const std::string& fromType, const std::string& toType) {
+      if (fromType == toType) return false;
+
+      if (_isNumberType(fromType) && _isNumberType(toType)) {
+         // Float/Double → non floating point
+         if (_isFloatingPointType(fromType) && !_isFloatingPointType(toType))
+            return true;
+
+         // Double → Float
+         if (fromType == "Double" && toType == "Float")
+            return true;
+
+         auto bitSize = [](const std::string& t) -> int {
+            if (t == "Int8" || t == "Uint8") return 8;
+            if (t == "Int16" || t == "Uint16") return 16;
+            if (t == "Int32" || t == "Uint32" || t == "Int") return 32;
+            if (t == "Int64" || t == "Uint64") return 64;
+            if (t == "Int128" || t == "Uint128") return 128;
+            if (t == "Float") return 32;
+            if (t == "Double") return 64;
+            return 0; // unknown
+         };
+
+         int fromBits = bitSize(fromType);
+         int toBits = bitSize(toType);
+
+         if (fromBits > toBits) return true;
+
+         // Signed → Unsigned
+         if (_isSignedType(fromType) && _isUnsignedType(toType))
+            return true;
+      }
+
       return false;
    }
 

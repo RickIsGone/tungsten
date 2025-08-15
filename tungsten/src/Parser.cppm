@@ -1008,6 +1008,6 @@ namespace tungsten {
       // TODO: Implement module import logic
       utils::debugLog("Importing module: {}", module);
 
-      return nullptr;
+      return std::make_unique<ImportStatementAST>(module);
    }
 } // namespace tungsten

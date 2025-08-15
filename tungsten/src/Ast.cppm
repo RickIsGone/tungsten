@@ -204,6 +204,7 @@ export namespace tungsten {
       virtual void visit(class ExitStatement&) = 0;
       virtual void visit(class ExternStatementAST&) = 0;
       virtual void visit(class NamespaceAST&) = 0;
+      virtual void visit(class ImportStatementAST&) = 0;
 
       virtual void visit(class FunctionPrototypeAST&) = 0;
       virtual void visit(class FunctionAST&) = 0;
@@ -682,6 +683,19 @@ export namespace tungsten {
       std::vector<std::unique_ptr<FunctionAST>> _functions;
       std::vector<std::unique_ptr<ClassAST>> _classes;
    };
+
+   class ImportStatementAST : public ExpressionAST {
+   public:
+      ImportStatementAST(const std::string& module) : _module{module} {}
+      llvm::Value* codegen() override;
+      void accept(ASTVisitor& v) override { v.visit(*this); }
+
+      _NODISCARD const std::string type() const override { return ""; }
+
+   private:
+      std::string _module;
+   };
+
    //  ========================================== implementation ==========================================
 
    llvm::Value* NumberExpressionAST::codegen() { // TODO: fix
@@ -1289,7 +1303,9 @@ export namespace tungsten {
    llvm::Value* NamespaceAST::codegen() {
       return nullptr;
    }
-
+   llvm::Value* ImportStatementAST::codegen() {
+      return nullptr;
+   }
    llvm::Value* ClassMethodAST::codegen() {
       return nullptr;
    }
