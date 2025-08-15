@@ -71,9 +71,9 @@ namespace tungsten {
 
       void parse();
 
-      _NODISCARD std::vector<std::unique_ptr<FunctionAST>> functions() { return std::move(_functions); }
-      _NODISCARD std::vector<std::unique_ptr<ClassAST>> classes() { return std::move(_classes); }
-      _NODISCARD std::vector<std::unique_ptr<ExpressionAST>> globalVariables() { return std::move(_globalVariables); }
+      _NODISCARD std::vector<std::unique_ptr<FunctionAST>>& functions() { return _functions; }
+      _NODISCARD std::vector<std::unique_ptr<ClassAST>>& classes() { return _classes; }
+      _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& globalVariables() { return _globalVariables; }
 
    private:
       _NODISCARD Token _peek(size_t offset = 0) const;

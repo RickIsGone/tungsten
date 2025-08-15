@@ -1,6 +1,7 @@
 module;
 
 #include <filesystem>
+#include <iostream>
 
 export module Tungsten.translationUnit;
 import Tungsten.lexer;
@@ -32,15 +33,18 @@ export namespace tungsten {
       parser.parse();
       SemanticAnalyzer analyzer{parser.functions(), parser.classes(), parser.globalVariables()};
       if (analyzer.analyze()) {
-         // for (auto& cls : parser.classes()) {
-         //    cls->codegen();
-         // }
-         // for (auto& var : parser.globalVariables()) {
-         //    var->codegen();
-         // }
-         // for (auto& fun : parser.functions()) {
-         //    fun->codegen();
-         // }
+         for (auto& cls : parser.classes()) {
+            cls->codegen();
+            std::cout << "class codegen\n";
+         }
+         for (auto& var : parser.globalVariables()) {
+            var->codegen();
+            std::cout << "variable codegen\n";
+         }
+         for (auto& fun : parser.functions()) {
+            fun->codegen();
+            std::cout << "function codegen\n";
+         }
       }
    }
 

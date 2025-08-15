@@ -23,9 +23,9 @@ namespace tungsten {
 
    export class SemanticAnalyzer : public ASTVisitor {
    public:
-      SemanticAnalyzer(std::vector<std::unique_ptr<FunctionAST>> functions,
-                       std::vector<std::unique_ptr<ClassAST>> classes, std::vector<std::unique_ptr<ExpressionAST>> globVars)
-          : _functions{std::move(functions)}, _classes{std::move(classes)}, _globalVariables{std::move(globVars)} {}
+      SemanticAnalyzer(std::vector<std::unique_ptr<FunctionAST>>& functions,
+                       std::vector<std::unique_ptr<ClassAST>>& classes, std::vector<std::unique_ptr<ExpressionAST>>& globVars)
+          : _functions{functions}, _classes{classes}, _globalVariables{globVars} {}
       ~SemanticAnalyzer() = default;
       SemanticAnalyzer operator=(SemanticAnalyzer&) = delete;
       SemanticAnalyzer(SemanticAnalyzer&) = delete;
@@ -84,9 +84,9 @@ namespace tungsten {
       bool _isClass(const std::string& cls);
       bool _checkNumericConversionLoss(const std::string& fromType, const std::string& toType);
 
-      std::vector<std::unique_ptr<FunctionAST>> _functions;
-      std::vector<std::unique_ptr<ClassAST>> _classes;
-      std::vector<std::unique_ptr<ExpressionAST>> _globalVariables;
+      std::vector<std::unique_ptr<FunctionAST>>& _functions;
+      std::vector<std::unique_ptr<ClassAST>>& _classes;
+      std::vector<std::unique_ptr<ExpressionAST>>& _globalVariables;
       std::map<std::string, ElementType> _symbolTable;
       std::stringstream _errors;
       std::stringstream _warnings;

@@ -1294,6 +1294,8 @@ export namespace tungsten {
       if (Builder->GetInsertBlock()->getTerminator() == nullptr) {
          if (_prototype->type() == "Void")
             Builder->CreateRetVoid();
+         else if (_prototype->name() == "main")
+            Builder->CreateRet(Builder->getInt32(0)); // returning 0 by default in main function
          else
             return LogErrorF("missing return statement in function: '" + name() + "'");
       }
