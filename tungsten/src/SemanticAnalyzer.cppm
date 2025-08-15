@@ -153,13 +153,15 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(ReturnStatementAST& ret) {
-      ret.value()->accept(*this);
       if (ret.type() == "Void") {
-         if (ret.value() != nullptr)
+         if (ret.value() != nullptr) {
+            ret.value()->accept(*this);
             return _logError("'Void' function cannot return '" + ret.value()->type() + "'");
+         }
          return;
       }
 
+      ret.value()->accept(*this);
       if (!_isNumberType(ret.type()) || !_isNumberType(ret.value()->type())) {
          if (ret.type() != ret.value()->type())
             return _logError("'" + ret.type() + "' function cannot return '" + ret.value()->type() + "'");
