@@ -846,18 +846,18 @@ namespace tungsten {
       while (_peek().type == TokenType::Multiply || _peek().type == TokenType::OpenBracket) {
          switch (_peek().type) {
             case TokenType::Multiply:
-               type = makePointer(std::move(type));
+               type = makePointer(type);
                break;
             case TokenType::OpenBracket:
                _consume(); // consume '['
                if (std::unique_ptr<ExpressionAST> expr = _parseExpression()) {
                   if (_peek().type == TokenType::CloseBracket)
                      _consume(); // consume ']'
-                  type = makeArray(std::move(type), std::move(expr));
+                  type = makeArray(type, std::move(expr));
                }
          }
       }
-      return std::move(type);
+      return type;
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseVariableDeclaration() {
