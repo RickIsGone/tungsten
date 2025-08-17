@@ -18,7 +18,7 @@ import Tungsten.parser;
 namespace tungsten {
    struct ElementType {
       SymbolType symbolType;
-      std::string type;
+      std::shared_ptr<Type> type;
    };
 
    export class SemanticAnalyzer : public ASTVisitor {
@@ -111,17 +111,17 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(VariableDeclarationAST& var) {
-      if (!_isBaseType(var.type()) && !_isClass(var.type()))
-         return _logError("unknown type '" + var.type() + "' in variable declaration '" + var.type() + " " + var.name() + "'");
+      if (!_isBaseType(var.type()->type()) && !_isClass(var.type()->type()))
+         return _logError("unknown type '" + var.type()->type() + "' in variable declaration '" + var.type()->type() + " " + var.name() + "'");
 
       if (var.initializer()) {
          var.initializer()->accept(*this);
-         if (!_isNumberType(var.type()) || !_isNumberType(var.initializer()->type())) {
+         if (!_isNumberType(var.type()->type()) || !_isNumberType(var.initializer()->type()->type())) {
             if (var.type() != var.initializer()->type())
-               return _logError("type mismatch: cannot assign '" + var.initializer()->type() + "' to variable of type '" + var.type() + "'");
+               return _logError("type mismatch: cannot assign '" + var.initializer()->type()->type() + "' to variable of type '" + var.type()->type() + "'");
 
-         } else if (_checkNumericConversionLoss(var.initializer()->type(), var.type())) {
-            _logWarn("possible data loss converting from '" + var.initializer()->type() + "' to '" + var.type() + "' in variable '" + var.name() + "'");
+         } else if (_checkNumericConversionLoss(var.initializer()->type()->type(), var.type()->type())) {
+            _logWarn("possible data loss converting from '" + var.initializer()->type()->type() + "' to '" + var.type()->type() + "' in variable '" + var.name() + "'");
          }
       }
 
@@ -148,23 +148,23 @@ namespace tungsten {
 
    void SemanticAnalyzer::visit(ExitStatement& ext) {
       ext.value()->accept(*this);
-      if (!_isSignedType(ext.value()->type()) && !_isUnsignedType(ext.value()->type()))
+      if (!_isSignedType(ext.value()->type()->type()) && !_isUnsignedType(ext.value()->type()->type()))
          return _logError("exit statement expects a numeric value");
    }
 
    void SemanticAnalyzer::visit(ReturnStatementAST& ret) {
-      if (ret.type() == "Void") {
+      if (ret.type()->type() == "Void") {
          if (ret.value() != nullptr) {
             ret.value()->accept(*this);
-            return _logError("'Void' function cannot return '" + ret.value()->type() + "'");
+            return _logError("'Void' function cannot return '" + ret.value()->type()->type() + "'");
          }
          return;
       }
 
       ret.value()->accept(*this);
-      if (!_isNumberType(ret.type()) || !_isNumberType(ret.value()->type())) {
+      if (!_isNumberType(ret.type()->type()) || !_isNumberType(ret.value()->type()->type())) {
          if (ret.type() != ret.value()->type())
-            return _logError("'" + ret.type() + "' function cannot return '" + ret.value()->type() + "'");
+            return _logError("'" + ret.type()->type() + "' function cannot return '" + ret.value()->type()->type() + "'");
       }
    }
 

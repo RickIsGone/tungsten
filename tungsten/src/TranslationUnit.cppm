@@ -35,15 +35,12 @@ export namespace tungsten {
       if (analyzer.analyze()) {
          for (auto& cls : parser.classes()) {
             cls->codegen();
-            std::cout << "class codegen\n";
          }
          for (auto& var : parser.globalVariables()) {
             var->codegen();
-            std::cout << "variable codegen\n";
          }
          for (auto& fun : parser.functions()) {
             fun->codegen();
-            std::cout << "function codegen\n";
          }
       }
    }
