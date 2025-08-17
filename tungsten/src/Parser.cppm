@@ -842,6 +842,7 @@ namespace tungsten {
          default:
             return nullptr;
       };
+      _consume(); // consume type
       while (_peek().type == TokenType::Multiply || _peek().type == TokenType::OpenBracket) {
          switch (_peek().type) {
             case TokenType::Multiply:
