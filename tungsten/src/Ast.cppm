@@ -223,7 +223,6 @@ export namespace tungsten {
       _NODISCARD bool operator==(Type& other) {
          return kind() == other.kind();
       }
-      operator std::string();
    };
 
    // base for all nodes in the AST
@@ -956,21 +955,6 @@ namespace tungsten {
 }; // namespace tungsten
 
 export namespace tungsten {
-   Type::operator std::string() {
-      std::string str{};
-      Type* contained = this;
-      while (kind() == TypeKind::Pointer || kind() == TypeKind::Array) {
-         if (kind() == TypeKind::Pointer)
-            str += "*";
-         else
-            str += "[]";
-         if (auto tmp = dynamic_cast<ArrayTy*>(contained))
-            contained = tmp->arrayType().get();
-         else if (auto tmp = dynamic_cast<PointerTy*>(contained))
-            contained = tmp->pointee().get();
-      }
-      return contained->type() + str;
-   }
 
    llvm::Value* NumberExpressionAST::codegen() { // TODO: fix
       if (_Type->type() == "Int")
