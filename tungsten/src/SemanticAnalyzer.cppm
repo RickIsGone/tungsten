@@ -117,7 +117,7 @@ namespace tungsten {
       if (var.initializer()) {
          var.initializer()->accept(*this);
          if (!_isNumberType(var.type()->type()) || !_isNumberType(var.initializer()->type()->type())) {
-            if (var.type() != var.initializer()->type())
+            if (var.type()->type() != var.initializer()->type()->type())
                return _logError("type mismatch: cannot assign '" + var.initializer()->type()->type() + "' to variable of type '" + var.type()->type() + "'");
 
          } else if (_checkNumericConversionLoss(var.initializer()->type()->type(), var.type()->type())) {

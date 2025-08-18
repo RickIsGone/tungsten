@@ -544,6 +544,9 @@ namespace tungsten {
          case TokenType::CodeFailure:
             _consume();
             return std::make_unique<NumberExpressionAST>(1);
+         case TokenType::Null:
+            _consume();
+            return std::make_unique<NumberExpressionAST>(0);
 
          case TokenType::OpenBrace:
             return _parseBlock();

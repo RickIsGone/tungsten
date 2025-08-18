@@ -219,10 +219,6 @@ export namespace tungsten {
       virtual ~Type() = default;
       _NODISCARD virtual TypeKind kind() const noexcept = 0;
       _NODISCARD virtual const std::string type() const = 0;
-
-      _NODISCARD bool operator==(Type& other) {
-         return kind() == other.kind();
-      }
    };
 
    // base for all nodes in the AST
