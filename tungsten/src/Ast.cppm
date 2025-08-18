@@ -218,7 +218,7 @@ export namespace tungsten {
    public:
       virtual ~Type() = default;
       _NODISCARD virtual TypeKind kind() const noexcept = 0;
-      _NODISCARD virtual const std::string type() const = 0;
+      _NODISCARD virtual const std::string string() const = 0;
    };
 
    // base for all nodes in the AST
@@ -242,7 +242,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Void;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Void";
       }
    };
@@ -251,7 +251,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Char;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Char";
       }
    };
@@ -260,7 +260,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Bool;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Bool";
       }
    };
@@ -269,7 +269,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::String;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "String";
       }
    };
@@ -278,7 +278,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Int8;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Int8";
       }
    };
@@ -287,7 +287,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Int16;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Int16";
       }
    };
@@ -296,7 +296,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Int32;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Int32";
       }
    };
@@ -305,7 +305,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Int64;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Int64";
       }
    };
@@ -314,7 +314,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Int128;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Int128";
       }
    };
@@ -323,7 +323,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Uint8;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Uint8";
       }
    };
@@ -332,7 +332,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Uint16;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Uint16";
       }
    };
@@ -341,7 +341,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Uint32;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Uint32";
       }
    };
@@ -350,7 +350,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Uint64;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Uint64";
       }
    };
@@ -359,7 +359,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Uint128;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Uint128";
       }
    };
@@ -368,7 +368,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Float;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Float";
       }
    };
@@ -377,7 +377,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Double;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Double";
       }
    };
@@ -388,7 +388,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Pointer;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Pointer";
       }
       _NODISCARD std::shared_ptr<Type>& pointee() { return _pointee; }
@@ -404,7 +404,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Array;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Array";
       }
       _NODISCARD std::shared_ptr<Type>& arrayType() { return _arrayType; }
@@ -419,7 +419,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Class;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "Class";
       }
    };
@@ -428,7 +428,7 @@ export namespace tungsten {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Null;
       }
-      _NODISCARD const std::string type() const override {
+      _NODISCARD const std::string string() const override {
          return "NullTy";
       }
    };
@@ -924,27 +924,27 @@ export namespace tungsten {
 
 namespace tungsten {
    llvm::Type* LLVMType(std::shared_ptr<Type>& type) {
-      if (type->type() == "Void")
+      if (type->string() == "Void")
          return Builder->getVoidTy();
-      if (type->type() == "Bool")
+      if (type->string() == "Bool")
          return Builder->getInt1Ty();
-      if (type->type() == "Char")
+      if (type->string() == "Char")
          return Builder->getInt8Ty();
-      if (type->type() == "String")
+      if (type->string() == "String")
          return Builder->getInt8Ty()->getPointerTo();
-      if (type->type() == "Int" || type->type() == "Int32" || type->type() == "Uint" || type->type() == "Uint32")
+      if (type->string() == "Int" || type->string() == "Int32" || type->string() == "Uint" || type->string() == "Uint32")
          return Builder->getInt32Ty();
-      if (type->type() == "Int8" || type->type() == "Uint8")
+      if (type->string() == "Int8" || type->string() == "Uint8")
          return Builder->getInt8Ty();
-      if (type->type() == "Int16" || type->type() == "Uint16")
+      if (type->string() == "Int16" || type->string() == "Uint16")
          return Builder->getInt16Ty();
-      if (type->type() == "Int64" || type->type() == "Uint64")
+      if (type->string() == "Int64" || type->string() == "Uint64")
          return Builder->getInt64Ty();
-      if (type->type() == "Int128" || type->type() == "Uint128")
+      if (type->string() == "Int128" || type->string() == "Uint128")
          return Builder->getInt128Ty();
-      if (type->type() == "Float")
+      if (type->string() == "Float")
          return Builder->getFloatTy();
-      if (type->type() == "Double")
+      if (type->string() == "Double")
          return Builder->getDoubleTy();
       return nullptr;
    }
@@ -953,7 +953,7 @@ namespace tungsten {
 export namespace tungsten {
 
    llvm::Value* NumberExpressionAST::codegen() { // TODO: fix
-      if (_Type->type() == "Int")
+      if (_Type->string() == "Int")
          return Builder->getInt32(std::get<uint64_t>(_value));
       return std::visit([](auto&& val) -> llvm::Value* {
          using T = std::decay_t<decltype(val)>;
@@ -1354,13 +1354,13 @@ export namespace tungsten {
       if (castedValue->getType()->isPointerTy()) // didn't add pointers yet so this check is ok
          castedValue = Builder->CreateLoad(VariableTypes[static_cast<VariableExpressionAST*>(_value.get())->name()], castedValue, "lval");
 
-      if (isSignedType(_Type->type())) {
+      if (isSignedType(_Type->string())) {
          return Builder->CreateIntCast(castedValue, type, true, "staticCast");
       }
-      if (isUnsignedType(_Type->type())) {
+      if (isUnsignedType(_Type->string())) {
          return Builder->CreateIntCast(castedValue, type, false, "staticCast");
       }
-      if (isFloatingPointType(_Type->type())) {
+      if (isFloatingPointType(_Type->string())) {
          return Builder->CreateFPCast(castedValue, type, "staticCast");
       }
 
@@ -1537,7 +1537,7 @@ export namespace tungsten {
       }
 
       if (Builder->GetInsertBlock()->getTerminator() == nullptr) {
-         if (_prototype->type()->type() == "Void")
+         if (_prototype->type()->string() == "Void")
             Builder->CreateRetVoid();
          else if (_prototype->name() == "main")
             Builder->CreateRet(Builder->getInt32(0)); // returning 0 by default in main function
