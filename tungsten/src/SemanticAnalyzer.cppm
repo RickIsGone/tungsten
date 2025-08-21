@@ -4,7 +4,7 @@ module;
 #include <vector>
 #include <iostream>
 #include <string>
-#include <map>
+#include <unordered_map>
 #include <sstream>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
@@ -16,16 +16,18 @@ import Tungsten.ast;
 import Tungsten.parser;
 
 namespace tungsten {
-   struct ElementType {
-      SymbolType symbolType;
+   using Scope = std::unordered_map<std::string, std::shared_ptr<Type>>;
+   struct Overload {
       std::shared_ptr<Type> type;
+      std::vector<std::pair<std::string, std::shared_ptr<Type>>> args;
    };
+   constexpr size_t GlobalScope = 0;
 
    export class SemanticAnalyzer : public ASTVisitor {
    public:
       SemanticAnalyzer(std::vector<std::unique_ptr<FunctionAST>>& functions,
                        std::vector<std::unique_ptr<ClassAST>>& classes, std::vector<std::unique_ptr<ExpressionAST>>& globVars)
-          : _functions{functions}, _classes{classes}, _globalVariables{globVars} {}
+          : _functions{functions}, _classes{classes}, _globalVariables{globVars} { _scopes.push_back({}); }
       ~SemanticAnalyzer() = default;
       SemanticAnalyzer operator=(SemanticAnalyzer&) = delete;
       SemanticAnalyzer(SemanticAnalyzer&) = delete;
@@ -52,14 +54,14 @@ namespace tungsten {
       void visit(WhileStatementAST&) override {}
       void visit(DoWhileStatementAST&) override {}
       void visit(ForStatementAST&) override {}
-      void visit(BlockStatementAST&) override {}
+      void visit(BlockStatementAST&) override;
       void visit(ReturnStatementAST&) override;
       void visit(ExitStatement&) override;
       void visit(ExternStatementAST&) override {}
       void visit(NamespaceAST&) override {}
       void visit(ImportStatementAST&) override {}
 
-      void visit(FunctionPrototypeAST&) override {}
+      void visit(FunctionPrototypeAST&) override;
       void visit(FunctionAST&) override;
 
       void visit(ClassMethodAST&) override {}
@@ -82,14 +84,20 @@ namespace tungsten {
       bool _isNumberType(const std::string& type);
       bool _isBaseType(const std::string& type);
       bool _isClass(const std::string& cls);
+      bool _isFunction(const std::string& fn);
       bool _checkNumericConversionLoss(const std::string& fromType, const std::string& toType);
+      bool _doesVariableExist(const std::string& var);
+      std::string _fullTypeString(const std::shared_ptr<Type>& ty);
+      std::string _baseType(const std::shared_ptr<Type>& ty);
 
       std::vector<std::unique_ptr<FunctionAST>>& _functions;
       std::vector<std::unique_ptr<ClassAST>>& _classes;
       std::vector<std::unique_ptr<ExpressionAST>>& _globalVariables;
-      std::map<std::string, ElementType> _symbolTable;
+      std::vector<Scope> _scopes;
+      std::unordered_map<std::string, std::vector<Overload>> _declaredFunctions;
       std::stringstream _errors;
       std::stringstream _warnings;
+      size_t _currentScope{GlobalScope};
       bool _hasErrors{false};
    };
 
@@ -111,39 +119,88 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(VariableDeclarationAST& var) {
-      if (!_isBaseType(var.type()->string()) && !_isClass(var.type()->string()))
-         return _logError("unknown type '" + var.type()->string() + "' in variable declaration '" + var.type()->string() + " " + var.name() + "'");
+      if (_doesVariableExist(var.name()))
+         return _logError("variable '" + var.name() + "' already exists");
+
+      switch (var.type()->kind()) {
+         case TypeKind::Array: {
+            auto array = static_cast<ArrayTy*>(var.type().get());
+            if (!_isBaseType(_baseType(array->arrayType())) && !_isClass(_baseType(array->arrayType())))
+               return _logError("unknown type '" + _baseType(array->arrayType()) + "' in variable declaration '" + _fullTypeString(var.type()) + " " + var.name() + "'");
+         } break;
+         case TypeKind::Pointer: {
+            auto ptr = dynamic_cast<PointerTy*>(var.type().get());
+            if (!_isBaseType(_baseType(ptr->pointee())) && !_isClass(_baseType(ptr->pointee())))
+               return _logError("unknown type '" + _baseType(ptr->pointee()) + "' in variable declaration '" + _fullTypeString(var.type()) + " " + var.name() + "'");
+         } break;
+         default:
+            if (!_isBaseType(var.type()->string()) && !_isClass(var.type()->string()))
+               return _logError("unknown type '" + var.type()->string() + "' in variable declaration '" + var.type()->string() + " " + var.name() + "'");
+            break;
+      }
 
       if (var.initializer()) {
          var.initializer()->accept(*this);
          if (!_isNumberType(var.type()->string()) || !_isNumberType(var.initializer()->type()->string())) {
-            if (var.type()->string() != var.initializer()->type()->string())
-               return _logError("type mismatch: cannot assign '" + var.initializer()->type()->string() + "' to variable of type '" + var.type()->string() + "'");
+            if (_fullTypeString(var.type()) != _fullTypeString(var.initializer()->type()))
+               return _logError("type mismatch: cannot assign '" + _fullTypeString(var.initializer()->type()) + "' to variable of type '" + _fullTypeString(var.type()) + "'");
 
-         } else if (_checkNumericConversionLoss(var.initializer()->type()->string(), var.type()->string())) {
-            _logWarn("possible data loss converting from '" + var.initializer()->type()->string() + "' to '" + var.type()->string() + "' in variable '" + var.name() + "'");
+         } else if (_checkNumericConversionLoss(_baseType(var.initializer()->type()), _baseType(var.type()))) {
+            _logWarn("possible data loss converting from '" + _baseType(var.initializer()->type()) + "' to '" + _baseType(var.type()) + "' in variable '" + var.name() + "'");
          }
       }
 
-      _symbolTable[var.name()] = {SymbolType::Variable, var.type()};
+      _scopes.at(_currentScope)[var.name()] = var.type();
    }
 
    void SemanticAnalyzer::visit(VariableExpressionAST& var) {
-      if (!_symbolTable.contains(var.name()))
+      if (!_doesVariableExist(var.name()))
          return _logError("unkown variable '" + var.name() + "'");
 
-      var.setType(_symbolTable[var.name()].type);
+      var.setType(_scopes.at(_currentScope).at(var.name()));
    }
 
-   void SemanticAnalyzer::visit(FunctionAST& fun) {
-      if (_symbolTable.contains(fun.name()) && _symbolTable[fun.name()].symbolType != SymbolType::Function)
-         return _logError(std::string(_symbolTable[fun.name()].symbolType == SymbolType::Variable ? "Variable" : "Class") + " with name " + fun.name() + "' already exists");
-
-      for (auto& expr : static_cast<BlockStatementAST*>(fun.body().get())->statements()) {
+   void SemanticAnalyzer::visit(BlockStatementAST& block) {
+      _scopes.push_back({});
+      ++_currentScope;
+      for (auto& expr : block.statements()) {
          expr->accept(*this);
       }
+      _scopes.pop_back();
+      --_currentScope;
+   }
 
-      _symbolTable[fun.name()] = {SymbolType::Function, fun.type()};
+   void SemanticAnalyzer::visit(FunctionPrototypeAST& proto) {
+      if (_scopes.at(GlobalScope).contains(proto.name()) || _isClass(proto.name()))
+         return _logError(std::string(_isClass(proto.name()) ? "class" : "variable") + " with name " + proto.name() + "' already exists");
+
+      Overload over;
+      over.type = proto.type();
+      for (auto& arg : proto.args()) {
+         auto cast = static_cast<VariableDeclarationAST*>(arg.get());
+         cast->accept(*this);
+         over.args.push_back({cast->name(), cast->type()});
+      }
+      auto& overloads = _declaredFunctions[proto.name()];
+
+      auto sameSignature = [&](const Overload& o) {
+         if (o.args.size() != over.args.size()) return false;
+         for (size_t i = 0; i < o.args.size(); i++) {
+            if (_fullTypeString(o.args[i].second) != _fullTypeString(over.args[i].second))
+               return false;
+         }
+         return true;
+      };
+
+      for (auto& existing : overloads) {
+         if (sameSignature(existing)) {
+            return _logError("function '" + proto.name() + "' with the same signature already exists");
+         }
+      }
+   }
+   void SemanticAnalyzer::visit(FunctionAST& fun) {
+      fun.prototype()->accept(*this);
+      fun.body()->accept(*this);
    }
 
    void SemanticAnalyzer::visit(ExitStatement& ext) {
@@ -153,10 +210,10 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(ReturnStatementAST& ret) {
-      if (ret.type()->string() == "Void") {
+      if (ret.type()->kind() == TypeKind::Void) {
          if (ret.value() != nullptr) {
             ret.value()->accept(*this);
-            return _logError("'Void' function cannot return '" + ret.value()->type()->string() + "'");
+            return _logError("'Void' function cannot return '" + _fullTypeString(ret.value()->type()) + "'");
          }
          return;
       }
@@ -164,7 +221,7 @@ namespace tungsten {
       ret.value()->accept(*this);
       if (!_isNumberType(ret.type()->string()) || !_isNumberType(ret.value()->type()->string())) {
          if (ret.type()->string() != ret.value()->type()->string())
-            return _logError("'" + ret.type()->string() + "' function cannot return '" + ret.value()->type()->string() + "'");
+            return _logError("'" + _fullTypeString(ret.type()) + "' function cannot return '" + _fullTypeString(ret.value()->type()) + "'");
       }
    }
 
@@ -181,16 +238,19 @@ namespace tungsten {
       return _isSignedType(type) || _isUnsignedType(type) || _isFloatingPointType(type);
    }
    bool SemanticAnalyzer::_isBaseType(const std::string& type) {
-      return _isNumberType(type) || type == "String" || type == "Char" || type == "Void";
+      return _isNumberType(type) || type == "String" || type == "Char" || type == "Void" || type == "Bool";
    }
    bool SemanticAnalyzer::_isClass(const std::string& cls) {
-      if (!_symbolTable.contains(cls))
-         return false;
-      if (_symbolTable[cls].symbolType != SymbolType::Class) {
-         for (auto& clss : _classes) {
-            if (clss->name() == cls)
-               return true;
-         }
+      for (auto& clss : _classes) {
+         if (clss->name() == cls)
+            return true;
+      }
+      return false;
+   }
+   bool SemanticAnalyzer::_isFunction(const std::string& fn) {
+      for (auto& fun : _functions) {
+         if (fun->name() == fn)
+            return true;
       }
       return false;
    }
@@ -229,5 +289,39 @@ namespace tungsten {
 
       return false;
    }
-
+   bool SemanticAnalyzer::_doesVariableExist(const std::string& var) {
+      for (auto scope : _scopes) {
+         if (scope.contains(var))
+            return true;
+      }
+      return false;
+   }
+   std::string SemanticAnalyzer::_fullTypeString(const std::shared_ptr<Type>& ty) {
+      switch (ty->kind()) {
+         case TypeKind::Pointer: {
+            auto ptrTy = std::static_pointer_cast<PointerTy>(ty);
+            return _fullTypeString(ptrTy->pointee()) + "*";
+         }
+         case TypeKind::Array: {
+            auto arrTy = std::static_pointer_cast<ArrayTy>(ty);
+            return _fullTypeString(arrTy->arrayType()) + "[]";
+         }
+         default:
+            return ty->string();
+      }
+   }
+   std::string SemanticAnalyzer::_baseType(const std::shared_ptr<Type>& ty) {
+      switch (ty->kind()) {
+         case TypeKind::Pointer: {
+            auto ptrTy = std::static_pointer_cast<PointerTy>(ty);
+            return _baseType(ptrTy->pointee());
+         }
+         case TypeKind::Array: {
+            auto arrTy = std::static_pointer_cast<ArrayTy>(ty);
+            return _baseType(arrTy->arrayType());
+         }
+         default:
+            return ty->string();
+      }
+   }
 } // namespace tungsten

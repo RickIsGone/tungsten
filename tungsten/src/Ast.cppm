@@ -4,7 +4,7 @@ module;
 #include <string>
 #include <variant>
 #include <vector>
-#include <map>
+#include <unordered_map>
 #include <iostream>
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Function.h>
@@ -32,8 +32,8 @@ namespace tungsten {
    std::unique_ptr<llvm::LLVMContext> TheContext{};
    std::unique_ptr<llvm::IRBuilder<>> Builder{};
    std::unique_ptr<llvm::Module> TheModule{};
-   std::map<std::string, llvm::Value*> NamedValues{};
-   std::map<std::string, llvm::Type*> VariableTypes{};
+   std::unordered_map<std::string, llvm::Value*> NamedValues{};
+   std::unordered_map<std::string, llvm::Type*> VariableTypes{};
    llvm::Value* LogErrorV(const std::string& Str) {
       std::cerr << "error: " << Str << "\n";
       return nullptr;
@@ -802,6 +802,8 @@ export namespace tungsten {
 
       _NODISCARD const std::string& name() const { return _prototype->name(); }
       _NODISCARD std::shared_ptr<Type>& type() const { return _prototype->type(); }
+      _NODISCARD const std::vector<std::unique_ptr<ExpressionAST>>& args() const { return _prototype->args(); }
+      _NODISCARD std::unique_ptr<FunctionPrototypeAST>& prototype() { return _prototype; }
       _NODISCARD std::unique_ptr<ExpressionAST>& body() { return _body; }
       void accept(ASTVisitor& v) { v.visit(*this); }
 
