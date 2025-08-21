@@ -199,8 +199,12 @@ namespace tungsten {
       }
    }
    void SemanticAnalyzer::visit(FunctionAST& fun) {
+      _scopes.push_back({}); // scope already created inside BlockStatementAST::accept() but i need to make one for the function argouments
+      ++_currentScope;
       fun.prototype()->accept(*this);
       fun.body()->accept(*this);
+      _scopes.pop_back();
+      --_currentScope;
    }
 
    void SemanticAnalyzer::visit(ExitStatement& ext) {
