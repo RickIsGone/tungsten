@@ -199,7 +199,7 @@ namespace tungsten {
       }
    }
    void SemanticAnalyzer::visit(FunctionAST& fun) {
-      _scopes.push_back({}); // scope already created inside BlockStatementAST::accept() but i need to make one for the function argouments
+      _scopes.push_back({}); // scope already created inside visit(BlockStatementAST&) but i need to make one for the function argouments
       ++_currentScope;
       fun.prototype()->accept(*this);
       fun.body()->accept(*this);
@@ -209,6 +209,11 @@ namespace tungsten {
 
    void SemanticAnalyzer::visit(ExitStatement& ext) {
       ext.value()->accept(*this);
+      if (!ext.value()->type()) {
+         if (auto num = dynamic_cast<NumberExpressionAST*>(ext.value().get())) {
+            num->setType(makeInt32());
+         }
+      }
       if (!_isSignedType(ext.value()->type()->string()) && !_isUnsignedType(ext.value()->type()->string()))
          return _logError("exit statement expects a numeric value");
    }
@@ -223,6 +228,14 @@ namespace tungsten {
       }
 
       ret.value()->accept(*this);
+      if (!ret.value()->type()) {
+         if (auto num = dynamic_cast<NumberExpressionAST*>(ret.value().get())) {
+            if (_isNumberType(ret.type()->string()))
+               num->setType(ret.type());
+            else
+               num->setType(makeInt32());
+         }
+      }
       if (!_isNumberType(ret.type()->string()) || !_isNumberType(ret.value()->type()->string())) {
          if (ret.type()->string() != ret.value()->type()->string())
             return _logError("'" + _fullTypeString(ret.type()) + "' function cannot return '" + _fullTypeString(ret.value()->type()) + "'");
