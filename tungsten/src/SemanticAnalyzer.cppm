@@ -155,7 +155,7 @@ namespace tungsten {
 
    void SemanticAnalyzer::visit(VariableExpressionAST& var) {
       if (!_doesVariableExist(var.name()))
-         return _logError("unkown variable '" + var.name() + "'");
+         return _logError("unknown variable '" + var.name() + "'");
 
       var.setType(_scopes.at(_currentScope).at(var.name()));
    }
