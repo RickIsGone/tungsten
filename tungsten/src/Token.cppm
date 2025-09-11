@@ -39,6 +39,7 @@ namespace tungsten {
       Namespace,
       StaticCast,
       ConstCast,
+      Alias,
 
       // operators
       Plus,
@@ -165,6 +166,7 @@ namespace tungsten {
        {"namespace", TokenType::Namespace},
        {"staticCast", TokenType::StaticCast},
        {"constCast", TokenType::ConstCast},
+       // {"alias", TokenType::Alias},
 
        // types
        {"Num", TokenType::Num},

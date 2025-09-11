@@ -2,11 +2,11 @@ cmake_minimum_required(VERSION 3.28)
 project(tungsten_language VERSION 0.1.0)
 
 add_subdirectory(tungsten)
-add_subdirectory(tpkg)
+#add_subdirectory(tpkg) # will continue working on after shipping the language
 
 # === CPack ===
-install(DIRECTORY "build/tungsten/tungsten" DESTINATION ".")
-install(DIRECTORY "build/tpkg/tpkg" DESTINATION ".")
+install(DIRECTORY "build/${CMAKE_BUILD_TYPE}/tungsten/tungsten" DESTINATION ".")
+#install(DIRECTORY "build/${CMAKE_BUILD_TYPE}/tpkg/tpkg" DESTINATION ".")
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set(CPACK_GENERATOR "ZIP;7Z;WIX")

@@ -28,7 +28,6 @@ namespace tungsten {
       SemanticAnalyzer(std::vector<std::unique_ptr<FunctionAST>>& functions,
                        std::vector<std::unique_ptr<ClassAST>>& classes, std::vector<std::unique_ptr<ExpressionAST>>& globVars)
           : _functions{functions}, _classes{classes}, _globalVariables{globVars} { _scopes.push_back({}); }
-      ~SemanticAnalyzer() = default;
       SemanticAnalyzer operator=(SemanticAnalyzer&) = delete;
       SemanticAnalyzer(SemanticAnalyzer&) = delete;
 
@@ -40,7 +39,7 @@ namespace tungsten {
       void visit(UnaryExpressionAST&) override {}
       void visit(BinaryExpressionAST&) override {}
       void visit(VariableDeclarationAST&) override;
-      void visit(CallExpressionAST&) override {}
+      void visit(CallExpressionAST&) override;
       void visit(TypeOfStatementAST&) override {}
       void visit(NameOfStatementAST&) override {}
       void visit(SizeOfStatementAST&) override {}
@@ -76,7 +75,7 @@ namespace tungsten {
          _hasErrors = true;
       }
       void _logWarn(const std::string& warn) { _warnings << "warning: " << warn << "\n"; }
-      void _print() { std::cerr << _errors.str() << _warnings.str(); }
+      void _print() const { std::cerr << _errors.str() << _warnings.str(); }
 
       bool _isSignedType(const std::string& type);
       bool _isUnsignedType(const std::string& type);
@@ -93,10 +92,10 @@ namespace tungsten {
       std::vector<std::unique_ptr<FunctionAST>>& _functions;
       std::vector<std::unique_ptr<ClassAST>>& _classes;
       std::vector<std::unique_ptr<ExpressionAST>>& _globalVariables;
-      std::vector<Scope> _scopes;
-      std::unordered_map<std::string, std::vector<Overload>> _declaredFunctions;
-      std::stringstream _errors;
-      std::stringstream _warnings;
+      std::vector<Scope> _scopes{};
+      std::unordered_map<std::string, std::vector<Overload>> _declaredFunctions{};
+      std::stringstream _errors{};
+      std::stringstream _warnings{};
       size_t _currentScope{GlobalScope};
       bool _hasErrors{false};
    };
@@ -129,7 +128,7 @@ namespace tungsten {
                return _logError("unknown type '" + _baseType(array->arrayType()) + "' in variable declaration '" + _fullTypeString(var.type()) + " " + var.name() + "'");
          } break;
          case TypeKind::Pointer: {
-            auto ptr = dynamic_cast<PointerTy*>(var.type().get());
+            auto ptr = static_cast<PointerTy*>(var.type().get());
             if (!_isBaseType(_baseType(ptr->pointee())) && !_isClass(_baseType(ptr->pointee())))
                return _logError("unknown type '" + _baseType(ptr->pointee()) + "' in variable declaration '" + _fullTypeString(var.type()) + " " + var.name() + "'");
          } break;
@@ -200,14 +199,65 @@ namespace tungsten {
             return _logError("function '" + proto.name() + "' with the same signature already exists");
          }
       }
+      overloads.push_back(over);
    }
+
    void SemanticAnalyzer::visit(FunctionAST& fun) {
-      _scopes.push_back({}); // scope already created inside visit(BlockStatementAST&) but i need to make one for the function argouments
+      _scopes.push_back({}); // scope already created inside visit(BlockStatementAST&) but i need to make one for the function arguments
       ++_currentScope;
       fun.prototype()->accept(*this);
       fun.body()->accept(*this);
       _scopes.pop_back();
       --_currentScope;
+   }
+
+   void SemanticAnalyzer::visit(CallExpressionAST& call) {
+      auto overloadsIt = _declaredFunctions.find(call.callee());
+      std::vector<Overload> overloads;
+      if (overloadsIt != _declaredFunctions.end()) {
+         overloads = overloadsIt->second;
+      } else {
+         for (auto& fun : _functions) {
+            if (fun->name() == call.callee()) {
+               Overload over;
+               over.type = fun->prototype()->type();
+               for (auto& arg : fun->prototype()->args()) {
+                  auto cast = static_cast<VariableDeclarationAST*>(arg.get());
+                  over.args.push_back({cast->name(), cast->type()});
+               }
+               overloads.push_back(over);
+            }
+         }
+         if (overloads.empty())
+            return _logError("unknown function '" + call.callee() + "'");
+      }
+
+      bool valid = false;
+      for (auto& overload : overloads) {
+         if (overload.args.size() != call.args().size())
+            continue;
+         bool match = true;
+         for (size_t i = 0; i < call.args().size(); ++i) {
+            if (_fullTypeString(call.args()[i]->type()) != _fullTypeString(overload.args[i].second)) {
+               match = false;
+               break;
+            }
+         }
+         if (match) {
+            valid = true;
+            break;
+         }
+      }
+
+      if (!valid) {
+         std::string args;
+         for (size_t i = 0; i < call.args().size(); ++i) {
+            args += _fullTypeString(call.args().at(i)->type()) + (i == call.args().size() - 1 ? "" : ", ");
+         }
+         if (args.empty())
+            return _logError("no overload of function '" + call.callee() + "' with no arguments");
+         return _logError("no overload of function '" + call.callee() + "' with arguments '" + args + "'");
+      }
    }
 
    void SemanticAnalyzer::visit(ExitStatement& ext) {

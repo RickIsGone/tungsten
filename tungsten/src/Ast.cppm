@@ -612,6 +612,8 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
+      _NODISCARD const std::string& callee() const { return _callee; }
+      _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& args() { return _args; }
 
    private:
       std::string _callee;
@@ -636,7 +638,6 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
-      _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
 
    private:
       std::string _name;
@@ -660,14 +661,13 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
-      _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
 
    private:
       std::string _function;
    };
    class __BuiltinLineAST : public ExpressionAST {
    public:
-      __BuiltinLineAST(size_t line) : _line{line} {}
+      __BuiltinLineAST(size_t line) : _line{line}, ExpressionAST{makeInt64()} {}
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
@@ -678,7 +678,7 @@ export namespace tungsten {
    };
    class __BuiltinColumnAST : public ExpressionAST {
    public:
-      __BuiltinColumnAST(size_t column) : _column{column} {}
+      __BuiltinColumnAST(size_t column) : _column{column}, ExpressionAST{makeInt64()} {}
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
@@ -693,7 +693,6 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
-      _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
 
    private:
       std::string _file;
@@ -724,6 +723,14 @@ export namespace tungsten {
    private:
       std::unique_ptr<ExpressionAST> _value;
    };
+
+   // class AliasAST : public ExpressionAST {
+   // public:
+   //    AliasAST(std::shared_ptr<Type> alias, std::shared_ptr<Type> type) : _alias{alias}, ExpressionAST{type} {}
+   //
+   // private:
+   //    std::shared_ptr<Type> _alias;
+   // };
 
    // expression for if statements
    class IfStatementAST : public ExpressionAST {

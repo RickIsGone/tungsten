@@ -90,6 +90,7 @@ namespace tungsten {
       template <typename Ty = ExpressionAST>
       std::unique_ptr<Ty> _logError(const std::string& str);
       std::shared_ptr<Type> _parseType();
+      // std::unique_ptr<ExpressionAST> _parseAlias();
       std::unique_ptr<ExpressionAST> _parseNumberExpression();
       std::unique_ptr<ExpressionAST> _parseIdentifierExpression();
       std::unique_ptr<ExpressionAST> _parseStringExpression();
@@ -871,6 +872,9 @@ namespace tungsten {
       return type;
    }
 
+   // std::unique_ptr<ExpressionAST> Parser::_parseAlias() {
+   // }
+
    std::unique_ptr<ExpressionAST> Parser::_parseVariableDeclaration() {
       std::shared_ptr<Type> type = _parseType();
 
@@ -879,7 +883,6 @@ namespace tungsten {
 
       std::string name = _lexeme(_peek());
       _consume(); // consume identifier
-
 
       std::unique_ptr<ExpressionAST> initExpr = nullptr;
 
