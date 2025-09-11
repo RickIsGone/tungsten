@@ -635,11 +635,10 @@ namespace tungsten {
 
          default:
             _consume();
-            return _logError("unknown token when expecting an expression");
+            return _logError("unexpected token '" + _lexeme(_peek()) + "' when expecting an expression");
       }
    }
    std::unique_ptr<ExpressionAST> Parser::_parseUnaryExpression() {
-      TokenType opType = _peek().type;
       std::string op = _lexeme(_peek());
       _consume(); // consume operator
 

@@ -174,6 +174,9 @@ namespace tungsten {
       if (_scopes.at(GlobalScope).contains(proto.name()) || _isClass(proto.name()))
          return _logError(std::string(_isClass(proto.name()) ? "class" : "variable") + " with name " + proto.name() + "' already exists");
 
+      if (_declaredFunctions.contains("main") && proto.name() == "main")
+         return _logError("redefinition of main function");
+
       Overload over;
       over.type = proto.type();
       for (auto& arg : proto.args()) {
