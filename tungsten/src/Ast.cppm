@@ -219,12 +219,13 @@ export namespace tungsten {
       virtual ~Type() = default;
       _NODISCARD virtual TypeKind kind() const noexcept = 0;
       _NODISCARD virtual const std::string string() const = 0;
+      _NODISCARD virtual const llvm::Type* llvmType() const = 0;
    };
 
    // base for all nodes in the AST
    class ExpressionAST {
    public:
-      ExpressionAST(std::unique_ptr<Type> ty) { _Type = std::move(ty); }
+      ExpressionAST(std::shared_ptr<Type> ty) : _Type{ty} {}
       ExpressionAST() = default;
       virtual ~ExpressionAST() = default;
       virtual llvm::Value* codegen() = 0;
@@ -245,6 +246,9 @@ export namespace tungsten {
       _NODISCARD const std::string string() const override {
          return "Void";
       }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getVoidTy();
+      }
    };
 
    class Char : public Type {
@@ -253,6 +257,9 @@ export namespace tungsten {
       }
       _NODISCARD const std::string string() const override {
          return "Char";
+      }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getInt8Ty();
       }
    };
 
@@ -263,6 +270,9 @@ export namespace tungsten {
       _NODISCARD const std::string string() const override {
          return "Bool";
       }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getInt1Ty();
+      }
    };
 
    class String : public Type {
@@ -271,6 +281,9 @@ export namespace tungsten {
       }
       _NODISCARD const std::string string() const override {
          return "String";
+      }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getPtrTy();
       }
    };
 
@@ -281,6 +294,9 @@ export namespace tungsten {
       _NODISCARD const std::string string() const override {
          return "Int8";
       }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getInt8Ty();
+      }
    };
 
    class Int16 : public Type {
@@ -289,6 +305,9 @@ export namespace tungsten {
       }
       _NODISCARD const std::string string() const override {
          return "Int16";
+      }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getInt16Ty();
       }
    };
 
@@ -299,6 +318,9 @@ export namespace tungsten {
       _NODISCARD const std::string string() const override {
          return "Int32";
       }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getInt32Ty();
+      }
    };
 
    class Int64 : public Type {
@@ -307,6 +329,9 @@ export namespace tungsten {
       }
       _NODISCARD const std::string string() const override {
          return "Int64";
+      }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getInt64Ty();
       }
    };
 
@@ -317,6 +342,9 @@ export namespace tungsten {
       _NODISCARD const std::string string() const override {
          return "Int128";
       }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getInt128Ty();
+      }
    };
 
    class Uint8 : public Type {
@@ -325,6 +353,9 @@ export namespace tungsten {
       }
       _NODISCARD const std::string string() const override {
          return "Uint8";
+      }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getInt8Ty();
       }
    };
 
@@ -335,6 +366,9 @@ export namespace tungsten {
       _NODISCARD const std::string string() const override {
          return "Uint16";
       }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getInt16Ty();
+      }
    };
 
    class Uint32 : public Type {
@@ -343,6 +377,9 @@ export namespace tungsten {
       }
       _NODISCARD const std::string string() const override {
          return "Uint32";
+      }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getInt32Ty();
       }
    };
 
@@ -353,6 +390,9 @@ export namespace tungsten {
       _NODISCARD const std::string string() const override {
          return "Uint64";
       }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getInt64Ty();
+      }
    };
 
    class Uint128 : public Type {
@@ -361,6 +401,9 @@ export namespace tungsten {
       }
       _NODISCARD const std::string string() const override {
          return "Uint128";
+      }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getInt128Ty();
       }
    };
 
@@ -371,6 +414,9 @@ export namespace tungsten {
       _NODISCARD const std::string string() const override {
          return "Float";
       }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getFloatTy();
+      }
    };
 
    class Double : public Type {
@@ -379,6 +425,9 @@ export namespace tungsten {
       }
       _NODISCARD const std::string string() const override {
          return "Double";
+      }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getDoubleTy();
       }
    };
 
@@ -392,6 +441,9 @@ export namespace tungsten {
          return "Pointer";
       }
       _NODISCARD std::shared_ptr<Type>& pointee() { return _pointee; }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return Builder->getPtrTy();
+      }
 
    private:
       std::shared_ptr<Type> _pointee;
@@ -410,6 +462,10 @@ export namespace tungsten {
       _NODISCARD std::shared_ptr<Type>& arrayType() { return _arrayType; }
       _NODISCARD std::unique_ptr<ExpressionAST>& size() { return _arraySize; }
 
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return nullptr; // llvm::ArrayType::get();
+      }
+
    private:
       std::shared_ptr<Type> _arrayType;
       std::unique_ptr<ExpressionAST> _arraySize;
@@ -422,6 +478,9 @@ export namespace tungsten {
       _NODISCARD const std::string string() const override {
          return "Class";
       }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return nullptr; // llvm::StructType::create(*TheContext, elements, "MyStruct");
+      }
    };
 
    class NullTy : public Type {
@@ -430,6 +489,9 @@ export namespace tungsten {
       }
       _NODISCARD const std::string string() const override {
          return "NullTy";
+      }
+      _NODISCARD const llvm::Type* llvmType() const override {
+         return nullptr;
       }
    };
 
@@ -458,7 +520,7 @@ export namespace tungsten {
    using Number = std::variant<int, int8_t, int16_t, int64_t, uint8_t, uint16_t, uint32_t, uint64_t, float, double>;
    class NumberExpressionAST : public ExpressionAST {
    public:
-      NumberExpressionAST(Number value) : _value{value} {}
+      NumberExpressionAST(Number value, std::shared_ptr<Type> type) : _value{value}, ExpressionAST{type} {}
       llvm::Value* codegen() override;
 
       void setType(std::shared_ptr<Type> type) { _Type = type; }
@@ -737,7 +799,7 @@ export namespace tungsten {
 
    class ReturnStatementAST : public ExpressionAST {
    public:
-      ReturnStatementAST(std::unique_ptr<ExpressionAST> value) : _value{std::move(value)} {}
+      ReturnStatementAST(std::unique_ptr<ExpressionAST> value, std::shared_ptr<Type> type) : _value{std::move(value)}, ExpressionAST{type} {}
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }

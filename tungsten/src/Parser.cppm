@@ -135,6 +135,7 @@ namespace tungsten {
       std::vector<std::unique_ptr<FunctionAST>> _functions;
       std::vector<std::unique_ptr<ClassAST>> _classes;
       std::vector<std::unique_ptr<ExpressionAST>> _globalVariables;
+      std::shared_ptr<Type> _currentFunctionReturnType;
    };
 
    //  ========================================== implementation ==========================================
@@ -233,6 +234,7 @@ namespace tungsten {
                _consume(); // consume ';'
                break;
             }
+            case TokenType::Num:
             case TokenType::Int:
             case TokenType::Int8:
             case TokenType::Int16:
@@ -455,9 +457,9 @@ namespace tungsten {
       _consume();
 
       if (type == TokenType::IntLiteral)
-         return std::make_unique<NumberExpressionAST>(std::stoull(lex));
+         return std::make_unique<NumberExpressionAST>(std::stoull(lex), makeInt32());
 
-      return std::make_unique<NumberExpressionAST>(std::stod(lex));
+      return std::make_unique<NumberExpressionAST>(std::stod(lex), makeDouble());
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseIdentifierExpression() {
@@ -515,9 +517,9 @@ namespace tungsten {
    std::unique_ptr<ExpressionAST> Parser::_parseReturnStatement() {
       _consume(); // consume return
       if (_peek().type == TokenType::Semicolon)
-         return std::make_unique<ReturnStatementAST>(nullptr);
+         return std::make_unique<ReturnStatementAST>(nullptr, makeNullType());
 
-      return std::make_unique<ReturnStatementAST>(_parseExpression());
+      return std::make_unique<ReturnStatementAST>(_parseExpression(), _currentFunctionReturnType);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseExitStatement() {
       _consume(); // consume exit
@@ -534,19 +536,19 @@ namespace tungsten {
             return nullptr;
          case TokenType::True:
             _consume();
-            return std::make_unique<NumberExpressionAST>(1);
+            return std::make_unique<NumberExpressionAST>(1, makeBool());
          case TokenType::False:
             _consume();
-            return std::make_unique<NumberExpressionAST>(0);
+            return std::make_unique<NumberExpressionAST>(0, makeBool());
          case TokenType::CodeSuccess:
             _consume();
-            return std::make_unique<NumberExpressionAST>(0);
+            return std::make_unique<NumberExpressionAST>(0, makeInt32());
          case TokenType::CodeFailure:
             _consume();
-            return std::make_unique<NumberExpressionAST>(1);
+            return std::make_unique<NumberExpressionAST>(1, makeInt32());
          case TokenType::Null:
             _consume();
-            return std::make_unique<NumberExpressionAST>(0);
+            return std::make_unique<NumberExpressionAST>(0, makeInt32());
 
          case TokenType::OpenBrace:
             return _parseBlock();
@@ -592,6 +594,7 @@ namespace tungsten {
          case TokenType::For:
             return _parseForStatement();
 
+         case TokenType::Num:
          case TokenType::Int:
          case TokenType::Int8:
          case TokenType::Int16:
@@ -785,6 +788,9 @@ namespace tungsten {
       std::shared_ptr<Type> type;
       switch (baseType.type) {
          using enum TokenType;
+         case Num:
+            type = makeDouble();
+            break;
          case Void:
             type = makeVoid();
             break;
@@ -857,6 +863,9 @@ namespace tungsten {
                      _consume(); // consume ']'
                   type = makeArray(type, std::move(expr));
                }
+               break;
+            default:
+               break;
          }
       }
       return type;
@@ -879,11 +888,14 @@ namespace tungsten {
          initExpr = _parseExpression();
          if (_peek().type == TokenType::CloseBrace)
             _consume(); // consume '}'
-      }
-      if (auto* expr = dynamic_cast<NumberExpressionAST*>(initExpr.get())) {
-         expr->setType(type);
-      } else if (auto* expr = dynamic_cast<BinaryExpressionAST*>(initExpr.get())) {
-         expr->setType(type);
+
+         // if (initExpr) {
+         //    if (auto* expr = dynamic_cast<NumberExpressionAST*>(initExpr.get())) {
+         //       expr->setType(type);
+         //    } else if (auto* expr = dynamic_cast<BinaryExpressionAST*>(initExpr.get())) {
+         //       expr->setType(type);
+         //    }
+         // }
       }
 
       // utils::debugLog("definition of variable '{}' with type '{}'", name, type);
@@ -907,11 +919,14 @@ namespace tungsten {
             initExpr = _parseExpression();
             if (_peek().type == TokenType::CloseBrace)
                _consume(); // consume '}'
-         }
-         if (auto* expr = dynamic_cast<NumberExpressionAST*>(initExpr.get())) {
-            expr->setType(type);
-         } else if (auto* expr = dynamic_cast<BinaryExpressionAST*>(initExpr.get())) {
-            expr->setType(type);
+
+            // if (initExpr) {
+            //    if (auto* expr = dynamic_cast<NumberExpressionAST*>(initExpr.get())) {
+            //       expr->setType(type);
+            //    } else if (auto* expr = dynamic_cast<BinaryExpressionAST*>(initExpr.get())) {
+            //       expr->setType(type);
+            //    }
+            // }
          }
 
          return std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr));
@@ -934,11 +949,8 @@ namespace tungsten {
       if (_peek().type != TokenType::OpenBrace)
          return _logError<FunctionAST>("expected '{'");
 
+      _currentFunctionReturnType = type;
       std::unique_ptr<BlockStatementAST> body = _parseBlock();
-      for (auto& expr : body->statements()) {
-         if (auto ret = dynamic_cast<ReturnStatementAST*>(expr.get()))
-            ret->setType(proto->type());
-      }
       return std::make_unique<FunctionAST>(std::move(proto), std::move(body));
    }
 
