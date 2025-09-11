@@ -231,6 +231,9 @@ namespace tungsten {
          if (overloads.empty())
             return _logError("unknown function '" + call.callee() + "'");
       }
+      for (auto& arg : call.args()) {
+         arg->accept(*this);
+      }
 
       bool valid = false;
       for (auto& overload : overloads) {
@@ -245,6 +248,7 @@ namespace tungsten {
          }
          if (match) {
             valid = true;
+            call.setType(overload.type);
             break;
          }
       }
