@@ -193,17 +193,28 @@ namespace tungsten {
          }
          return true;
       };
+      auto sameParams = [&](const Overload& o) {
+         if (o.args.size() != over.args.size()) return false;
+         for (size_t i = 0; i < o.args.size(); i++) {
+            if (_fullTypeString(o.args[i].second) != _fullTypeString(over.args[i].second))
+               return false;
+         }
+         return true;
+      };
 
       for (auto& existing : overloads) {
          if (sameSignature(existing)) {
             return _logError("function '" + proto.name() + "' with the same signature already exists");
+         }
+         if (sameParams(existing) && _fullTypeString(existing.type) != _fullTypeString(over.type)) {
+            return _logError("function '" + proto.name() + "' with same parameters but different return type already exists");
          }
       }
       overloads.push_back(over);
    }
 
    void SemanticAnalyzer::visit(FunctionAST& fun) {
-      _scopes.push_back({}); // scope already created inside visit(BlockStatementAST&) but i need to make one for the function arguments
+      _scopes.push_back({}); // scope already created inside visit(BlockStatementAST&) but I need to make one for the function arguments
       ++_currentScope;
       fun.prototype()->accept(*this);
       fun.body()->accept(*this);
@@ -228,8 +239,10 @@ namespace tungsten {
                overloads.push_back(over);
             }
          }
-         if (overloads.empty())
+         if (overloads.empty()) {
+            call.setType(makeNullType()); // temporary fix (if I don't fucking forget to fix it *again*)
             return _logError("unknown function '" + call.callee() + "'");
+         }
       }
       for (auto& arg : call.args()) {
          arg->accept(*this);
@@ -258,6 +271,7 @@ namespace tungsten {
          for (size_t i = 0; i < call.args().size(); ++i) {
             args += _fullTypeString(call.args().at(i)->type()) + (i == call.args().size() - 1 ? "" : ", ");
          }
+         call.setType(makeNullType());
          if (args.empty())
             return _logError("no overload of function '" + call.callee() + "' with no arguments");
          return _logError("no overload of function '" + call.callee() + "' with arguments '" + args + "'");
