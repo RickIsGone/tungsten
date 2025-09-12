@@ -34,9 +34,10 @@ Int main(String[] args) {
 # Trying the language
 
 if you want to try *Tungsten* before installing the compiler, feel free to do so on
-the [online tungsten compiler](https://rickisgone.github.io/tungsten-sandbox/) 
+the [online tungsten compiler](https://rickisgone.github.io/tungsten-sandbox/)
 > [!WARNING]  
-> currently not working 
+> currently not working
+
 # VSCode Extension
 
 You can install the VSCode extension for *Tungsten* from
@@ -152,7 +153,8 @@ To free the pointer:
 ```c++
 free myPointer;
 ```
->[!WARNING]  
+
+> [!WARNING]  
 > Tungsten doesn't have a garbage collector so you have to manually free the pointers
 
 ## Arrays
@@ -179,7 +181,8 @@ free[] myArray;
 
 ### If
 
-If statements are written just like in C++ 
+If statements are written just like in C++
+
 ```cpp
 if (condition) {
     // do stuff
@@ -187,7 +190,9 @@ if (condition) {
     // do other stuff
 }
 ```
+
 And just like in C++ you can avoid using brackets for single instructions
+
 ```cpp
 if (condition)
     // do stuff
@@ -198,6 +203,7 @@ else
 ### While
 
 Unlike in C++, while statements require brackets to work
+
 ```cpp
 while (condition) {
     // do stuff
@@ -208,15 +214,17 @@ while (condition) {
 ### Do while
 
 Do whiles instead are just like in C++
+
 ```cpp
 do {
     // do stuff
 } while(condition);
 ```
 
-### For 
+### For
 
 For statements just like while statements require brackets to work
+
 ```Java
 for(Uint64 i; i < 10; ++i) {
     // do stuff
@@ -274,7 +282,8 @@ Int main() {
 
 ## Building a project
 
-To build a project, you can either compile via cmd by calling the `tungsten` compiler or you can make a `build.tgs` file and use the integrated buildsystem
+To build a project, you can either compile via cmd by calling the `tungsten` compiler or you can make a `build.tgs` file
+and use the integrated buildsystem
 
 ### Compiling via cmd
 
@@ -292,21 +301,22 @@ import build;
 
 Project myProject{Executable, "myProject"};
 
-Void main() {
+Int main() {
     myProject.addSource("main.tgs");
     myProject.build();
 }
 ```
 
 To build the file, you'll then have to call the compiler in the directory where the build file is located
- 
+
 ```shell
 cd projectDirectory
 tungsten tgs-build [flags] 
 ```
 
 The compiler will then automatically compile the `build.tgs` file.  
-After compiling the file, the compiler will automatically execute the `build` executable which will compile the project following the rules set by the `build.tgs` file.  
+After compiling the file, the compiler will automatically execute the `build` executable which will compile the project
+following the rules set by the `build.tgs` file.  
 The build output will then be put into the `projectDirectory/build` directory
 
 # TPKG
@@ -333,7 +343,7 @@ package files are written in **json**, and a simple package file looks like this
   "build": {
     "type": "cmd/buildsystem",
     "args": [
-        "myargs"
+      "myargs"
     ]
   }
 }

@@ -157,7 +157,7 @@ namespace tungsten {
             ++column;
          }
       }
-      return std::filesystem::absolute(_filePath).string() + ":" + std::to_string(line) + ":" + std::to_string(column) + ":";
+      return _filePath.string() + ":" + std::to_string(line) + ":" + std::to_string(column) + ":"; // std::filesystem::absolute(_filePath).string()
    }
    size_t Parser::_column(const Token& token) {
       size_t column = 1;
@@ -982,20 +982,21 @@ namespace tungsten {
 
    std::unique_ptr<BlockStatementAST> Parser::_parseBlock() {
       _consume(); // consume {
-      std::vector<std::unique_ptr<ExpressionAST>> statements;
+      std::vector<std::unique_ptr<ExpressionAST>> statements{};
       while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile) {
-         auto expr = _parseExpression();
-         if (expr)
+         if (auto expr = _parseExpression())
             statements.push_back(std::move(expr));
-         if (_peek().type != TokenType::Semicolon && _peekBack().type != TokenType::CloseBrace)
-            return _logError<BlockStatementAST>("expected ';' before '" + _lexeme(_peek()) + "'");
-         if (_peekBack().type != TokenType::CloseBrace)
-            _consume(); // consume ;
-      }
-      if (_peek().type == TokenType::EndOFFile)
-         return _logError<BlockStatementAST>("expected '}'");
 
+         if (_peekBack().type != TokenType::CloseBrace) {
+            if (_peek().type != TokenType::Semicolon)
+               return _logError<BlockStatementAST>("expected ';' before '" + _lexeme(_peek()) + "'");
+            _consume(); // consume ';'
+         }
+      }
+      if (_peek().type != TokenType::CloseBrace)
+         return _logError<BlockStatementAST>("expected '}'");
       _consume(); // consume }
+
       return std::make_unique<BlockStatementAST>(std::move(statements));
    }
 

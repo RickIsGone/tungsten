@@ -86,6 +86,7 @@ namespace tungsten {
       bool _isFunction(const std::string& fn);
       bool _checkNumericConversionLoss(const std::string& fromType, const std::string& toType);
       bool _doesVariableExist(const std::string& var);
+      std::shared_ptr<Type> _variableType(const std::string& var);
       std::string _fullTypeString(const std::shared_ptr<Type>& ty);
       std::string _baseType(const std::shared_ptr<Type>& ty);
 
@@ -156,7 +157,7 @@ namespace tungsten {
       if (!_doesVariableExist(var.name()))
          return _logError("unknown variable '" + var.name() + "'");
 
-      var.setType(_scopes.at(_currentScope).at(var.name()));
+      var.setType(_variableType(var.name()));
    }
 
    void SemanticAnalyzer::visit(BlockStatementAST& block) {
@@ -231,8 +232,8 @@ namespace tungsten {
          for (auto& fun : _functions) {
             if (fun->name() == call.callee()) {
                Overload over;
-               over.type = fun->prototype()->type();
-               for (auto& arg : fun->prototype()->args()) {
+               over.type = fun->type();
+               for (auto& arg : fun->args()) {
                   auto cast = static_cast<VariableDeclarationAST*>(arg.get());
                   over.args.push_back({cast->name(), cast->type()});
                }
@@ -384,7 +385,17 @@ namespace tungsten {
       }
       return false;
    }
+   std::shared_ptr<Type> SemanticAnalyzer::_variableType(const std::string& var) {
+      for (auto& scope : _scopes) {
+         if (scope.contains(var))
+            return scope.at(var);
+      }
+      return nullptr;
+   }
    std::string SemanticAnalyzer::_fullTypeString(const std::shared_ptr<Type>& ty) {
+      if (!ty)
+         return "";
+
       switch (ty->kind()) {
          case TypeKind::Pointer: {
             auto ptrTy = std::static_pointer_cast<PointerTy>(ty);
