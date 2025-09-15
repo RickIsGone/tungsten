@@ -1,5 +1,6 @@
 module;
 
+#include <format>
 #include <memory>
 #include <vector>
 #include <iostream>
@@ -70,11 +71,13 @@ namespace tungsten {
       void visit(ClassAST&) override {}
 
    private:
-      void _logError(const std::string& err) {
-         _errors << "error: " << err << "\n";
+      template <typename... Ty>
+      void _logError(const std::string& err, Ty&&... args) {
+         _errors << "error: " << std::vformat(err, std::make_format_args(args...)) << "\n";
          _hasErrors = true;
       }
-      void _logWarn(const std::string& warn) { _warnings << "warning: " << warn << "\n"; }
+      template <typename... Ty>
+      void _logWarn(const std::string& warn, Ty&&... args) { _warnings << "warning: " << std::vformat(warn, std::make_format_args(args...)) << "\n"; }
       void _print() const { std::cerr << _errors.str() << _warnings.str(); }
 
       bool _isSignedType(const std::string& type);
@@ -105,13 +108,22 @@ namespace tungsten {
 
    bool SemanticAnalyzer::analyze() {
       for (auto& var : _globalVariables) {
-         var->accept(*this);
+         if (var)
+            var->accept(*this);
+         else
+            _hasErrors = true;
       }
       for (auto& cls : _classes) {
-         cls->accept(*this);
+         if (cls)
+            cls->accept(*this);
+         else
+            _hasErrors = true;
       }
       for (auto& fun : _functions) {
-         fun->accept(*this);
+         if (fun)
+            fun->accept(*this);
+         else
+            _hasErrors = true;
       }
       _print();
 
@@ -119,23 +131,25 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(VariableDeclarationAST& var) {
+      if (_isFunction(var.name()) || _isClass(var.name()))
+         return _logError("{} with name '{}' already exists", _isFunction(var.name()) ? "function" : "class", var.name());
       if (_doesVariableExist(var.name()))
-         return _logError("variable '" + var.name() + "' already exists");
+         return _logError("variable '{}' already exists", var.name());
 
       switch (var.type()->kind()) {
          case TypeKind::Array: {
             auto array = static_cast<ArrayTy*>(var.type().get());
             if (!_isBaseType(_baseType(array->arrayType())) && !_isClass(_baseType(array->arrayType())))
-               return _logError("unknown type '" + _baseType(array->arrayType()) + "' in variable declaration '" + _fullTypeString(var.type()) + " " + var.name() + "'");
+               return _logError("unknown type '{}' in variable declaration '{} {}'", _baseType(array->arrayType()), _fullTypeString(var.type()), var.name());
          } break;
          case TypeKind::Pointer: {
             auto ptr = static_cast<PointerTy*>(var.type().get());
             if (!_isBaseType(_baseType(ptr->pointee())) && !_isClass(_baseType(ptr->pointee())))
-               return _logError("unknown type '" + _baseType(ptr->pointee()) + "' in variable declaration '" + _fullTypeString(var.type()) + " " + var.name() + "'");
+               return _logError("unknown type '{}' in variable declaration '{} {}'", _baseType(ptr->pointee()), _fullTypeString(var.type()), var.name());
          } break;
          default:
             if (!_isBaseType(var.type()->string()) && !_isClass(var.type()->string()))
-               return _logError("unknown type '" + var.type()->string() + "' in variable declaration '" + var.type()->string() + " " + var.name() + "'");
+               return _logError("unknown type '{}' in variable declaration '{} {}'", var.type()->string(), _fullTypeString(var.type()), var.name());
             break;
       }
 
@@ -143,10 +157,10 @@ namespace tungsten {
          var.initializer()->accept(*this);
          if (!_isNumberType(var.type()->string()) || !_isNumberType(var.initializer()->type()->string())) {
             if (_fullTypeString(var.type()) != _fullTypeString(var.initializer()->type()))
-               return _logError("type mismatch: cannot assign '" + _fullTypeString(var.initializer()->type()) + "' to variable of type '" + _fullTypeString(var.type()) + "'");
+               return _logError("type mismatch: cannot assign '{}' to variable of type '{}'", _fullTypeString(var.initializer()->type()), _fullTypeString(var.type()));
 
          } else if (_checkNumericConversionLoss(_baseType(var.initializer()->type()), _baseType(var.type()))) {
-            _logWarn("possible data loss converting from '" + _baseType(var.initializer()->type()) + "' to '" + _baseType(var.type()) + "' in variable '" + var.name() + "'");
+            _logWarn("possible data loss converting from '{}' to '{}' in variable ''", _baseType(var.initializer()->type()), _baseType(var.type()), var.name());
          }
       }
 
@@ -155,7 +169,7 @@ namespace tungsten {
 
    void SemanticAnalyzer::visit(VariableExpressionAST& var) {
       if (!_doesVariableExist(var.name()))
-         return _logError("unknown variable '" + var.name() + "'");
+         return _logError("unknown variable '{}'", var.name());
 
       var.setType(_variableType(var.name()));
    }
@@ -172,7 +186,7 @@ namespace tungsten {
 
    void SemanticAnalyzer::visit(FunctionPrototypeAST& proto) {
       if (_scopes.at(GlobalScope).contains(proto.name()) || _isClass(proto.name()))
-         return _logError(std::string(_isClass(proto.name()) ? "class" : "variable") + " with name " + proto.name() + "' already exists");
+         return _logError("{} with name {}' already exists", _isClass(proto.name()) ? "class" : "variable", proto.name());
 
       if (_declaredFunctions.contains("main") && proto.name() == "main")
          return _logError("redefinition of main function");
@@ -205,10 +219,10 @@ namespace tungsten {
 
       for (auto& existing : overloads) {
          if (sameSignature(existing)) {
-            return _logError("function '" + proto.name() + "' with the same signature already exists");
+            return _logError("function '{}' with the same signature already exists", proto.name());
          }
          if (sameParams(existing) && _fullTypeString(existing.type) != _fullTypeString(over.type)) {
-            return _logError("function '" + proto.name() + "' with same parameters but different return type already exists");
+            return _logError("function '{}' with same parameters but different return type already exists", proto.name());
          }
       }
       overloads.push_back(over);
@@ -242,7 +256,7 @@ namespace tungsten {
          }
          if (overloads.empty()) {
             call.setType(makeNullType()); // temporary fix (if I don't fucking forget to fix it *again*)
-            return _logError("unknown function '" + call.callee() + "'");
+            return _logError("unknown function '{}'", call.callee());
          }
       }
       for (auto& arg : call.args()) {
@@ -274,19 +288,18 @@ namespace tungsten {
          }
          call.setType(makeNullType());
          if (args.empty())
-            return _logError("no overload of function '" + call.callee() + "' with no arguments");
-         return _logError("no overload of function '" + call.callee() + "' with arguments '" + args + "'");
+            return _logError("no overload of function '{}' with no arguments", call.callee());
+         return _logError("no overload of function '{}' with arguments '{}'", call.callee(), args);
       }
    }
 
    void SemanticAnalyzer::visit(ExitStatement& ext) {
       ext.value()->accept(*this);
       if (!ext.value()->type()) {
-         if (auto num = dynamic_cast<NumberExpressionAST*>(ext.value().get())) {
-            num->setType(makeInt32());
-         }
+         if (ext.value()->astType() == ASTType::NumberExpression)
+            static_cast<NumberExpressionAST*>(ext.value().get())->setType(makeInt32());
       }
-      if (!_isSignedType(ext.value()->type()->string()) && !_isUnsignedType(ext.value()->type()->string()))
+      if (!_isSignedType(ext.value()->type()->string()) && !_isUnsignedType(ext.value()->type()->string()) && !_isFloatingPointType(ext.value()->type()->string()))
          return _logError("exit statement expects a numeric value");
    }
 
@@ -294,23 +307,23 @@ namespace tungsten {
       if (ret.type()->kind() == TypeKind::Void) {
          if (ret.value() != nullptr) {
             ret.value()->accept(*this);
-            return _logError("'Void' function cannot return '" + _fullTypeString(ret.value()->type()) + "'");
+            return _logError("'Void' function cannot return '{}'", _fullTypeString(ret.value()->type()));
          }
          return;
       }
 
       ret.value()->accept(*this);
       if (!ret.value()->type()) {
-         if (auto num = dynamic_cast<NumberExpressionAST*>(ret.value().get())) {
+         if (ret.value()->astType() == ASTType::NumberExpression) {
             if (_isNumberType(ret.type()->string()))
-               num->setType(ret.type());
+               static_cast<NumberExpressionAST*>(ret.value().get())->setType(ret.type());
             else
-               num->setType(makeInt32());
+               static_cast<NumberExpressionAST*>(ret.value().get())->setType(makeInt32());
          }
       }
       if (!_isNumberType(ret.type()->string()) || !_isNumberType(ret.value()->type()->string())) {
          if (ret.type()->string() != ret.value()->type()->string())
-            return _logError("'" + _fullTypeString(ret.type()) + "' function cannot return '" + _fullTypeString(ret.value()->type()) + "'");
+            return _logError("'{}' function cannot return '{}'", _fullTypeString(ret.type()), _fullTypeString(ret.value()->type()));
       }
    }
 
