@@ -242,23 +242,23 @@ namespace tungsten {
       std::vector<Overload> overloads;
       if (overloadsIt != _declaredFunctions.end()) {
          overloads = overloadsIt->second;
-      } else {
-         for (auto& fun : _functions) {
-            if (fun->name() == call.callee()) {
-               Overload over;
-               over.type = fun->type();
-               for (auto& arg : fun->args()) {
-                  auto cast = static_cast<VariableDeclarationAST*>(arg.get());
-                  over.args.push_back({cast->name(), cast->type()});
-               }
-               overloads.push_back(over);
+      }
+      for (auto& fun : _functions) {
+         if (fun->name() == call.callee()) {
+            Overload over;
+            over.type = fun->type();
+            for (auto& arg : fun->args()) {
+               auto cast = static_cast<VariableDeclarationAST*>(arg.get());
+               over.args.push_back({cast->name(), cast->type()});
             }
-         }
-         if (overloads.empty()) {
-            call.setType(makeNullType()); // temporary fix (if I don't fucking forget to fix it *again*)
-            return _logError("unknown function '{}'", call.callee());
+            overloads.push_back(over);
          }
       }
+      if (overloads.empty()) {
+         call.setType(makeNullType()); // temporary fix (if I don't fucking forget to fix it *again*)
+         return _logError("unknown function '{}'", call.callee());
+      }
+
       for (auto& arg : call.args()) {
          arg->accept(*this);
       }
