@@ -214,6 +214,43 @@ export namespace tungsten {
       Null
    };
 
+   enum class ASTType {
+      Expression,
+      NumberExpression,
+      VariableExpression,
+      StringExpression,
+      UnaryExpression,
+      BinaryExpression,
+      VariableDeclaration,
+      CallExpression,
+      TypeOfStatement,
+      NameOfStatement,
+      SizeOfStatement,
+      BuiltinFunction,
+      BuiltinLine,
+      BuiltinColumn,
+      BuiltinFile,
+      StaticCast,
+      ConstCast,
+      IfStatement,
+      WhileStatement,
+      DoWhileStatement,
+      ForStatement,
+      BlockStatement,
+      ReturnStatement,
+      ExitStatement,
+      ExternStatement,
+      Namespace,
+      ImportStatement,
+      FunctionPrototype,
+      Function,
+      ClassMethod,
+      ClassVariable,
+      ClassConstructor,
+      ClassDestructor,
+      Class
+   };
+
    class Type { // base class for all types
    public:
       virtual ~Type() = default;
@@ -232,6 +269,7 @@ export namespace tungsten {
       virtual bool isLValue() { return true; }
       virtual void accept(ASTVisitor& v) = 0;
 
+      _NODISCARD virtual ASTType astType() const noexcept { return ASTType::Expression; }
       _NODISCARD virtual std::shared_ptr<Type>& type() { return _Type; }
 
    protected:
@@ -526,6 +564,7 @@ export namespace tungsten {
       void setType(std::shared_ptr<Type> type) { _Type = type; }
       bool isLValue() override { return false; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::NumberExpression; }
 
    private:
       Number _value;
@@ -540,6 +579,7 @@ export namespace tungsten {
       _NODISCARD const std::string& name() const { return _name; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::VariableExpression; }
 
    private:
       std::string _name{};
@@ -553,6 +593,7 @@ export namespace tungsten {
       bool isLValue() override { return false; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::StringExpression; }
 
    private:
       std::string _value{};
@@ -567,6 +608,7 @@ export namespace tungsten {
       _NODISCARD const std::string& op() const { return _op; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::UnaryExpression; }
 
    private:
       std::string _op;
@@ -581,6 +623,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
       void setType(std::shared_ptr<Type> type) { _Type = type; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::BinaryExpression; }
 
    private:
       std::string _op;
@@ -597,6 +640,7 @@ export namespace tungsten {
       _NODISCARD const std::string& name() const { return _name; }
       _NODISCARD std::unique_ptr<ExpressionAST>& initializer() { return _init; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::VariableDeclaration; }
 
    private:
       std::string _name;
@@ -614,6 +658,7 @@ export namespace tungsten {
       void setType(std::shared_ptr<Type> type) { _Type = type; }
       _NODISCARD const std::string& callee() const { return _callee; }
       _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& args() { return _args; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::CallExpression; }
 
    private:
       std::string _callee;
@@ -627,6 +672,7 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::TypeOfStatement; }
 
    private:
       std::string _variable;
@@ -638,6 +684,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::NameOfStatement; }
 
    private:
       std::string _name;
@@ -650,6 +697,7 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::SizeOfStatement; }
 
    private:
       std::string _variable;
@@ -661,6 +709,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::BuiltinFunction; }
 
    private:
       std::string _function;
@@ -672,6 +721,7 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::BuiltinLine; }
 
    private:
       size_t _line;
@@ -683,6 +733,7 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::BuiltinColumn; }
 
    private:
       size_t _column;
@@ -693,6 +744,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::BuiltinFile; }
 
    private:
       std::string _file;
@@ -707,6 +759,7 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::StaticCast; }
 
    private:
       std::unique_ptr<ExpressionAST> _value;
@@ -719,6 +772,7 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::ConstCast; }
 
    private:
       std::unique_ptr<ExpressionAST> _value;
@@ -741,6 +795,10 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::IfStatement; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& condition() { return _condition; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& thenBranch() { return _thenBranch; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& elseBranch() { return _elseBranch; }
 
    private:
       std::unique_ptr<ExpressionAST> _condition;
@@ -756,6 +814,7 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::WhileStatement; }
 
    private:
       std::unique_ptr<ExpressionAST> _condition;
@@ -769,6 +828,7 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::DoWhileStatement; }
 
    private:
       std::unique_ptr<ExpressionAST> _condition;
@@ -782,6 +842,7 @@ export namespace tungsten {
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::ForStatement; }
 
    private:
       std::unique_ptr<ExpressionAST> _init;
@@ -799,6 +860,7 @@ export namespace tungsten {
       _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& statements() { return _statements; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::BlockStatement; }
 
    private:
       std::vector<std::unique_ptr<ExpressionAST>> _statements;
@@ -812,6 +874,7 @@ export namespace tungsten {
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
       _NODISCARD std::unique_ptr<ExpressionAST>& value() { return _value; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::ReturnStatement; }
 
    private:
       std::unique_ptr<ExpressionAST> _value;
@@ -825,6 +888,7 @@ export namespace tungsten {
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
       _NODISCARD std::unique_ptr<ExpressionAST>& value() { return _value; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::ExitStatement; }
 
    private:
       std::unique_ptr<ExpressionAST> _value;
@@ -842,6 +906,7 @@ export namespace tungsten {
       _NODISCARD std::shared_ptr<Type>& type() { return _type; }
       _NODISCARD const std::vector<std::unique_ptr<ExpressionAST>>& args() const { return _args; }
       void accept(ASTVisitor& v) { v.visit(*this); }
+      _NODISCARD ASTType astType() const noexcept { return ASTType::FunctionPrototype; }
 
    private:
       std::shared_ptr<Type> _type;
@@ -856,6 +921,7 @@ export namespace tungsten {
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::ExternStatement; }
 
    private:
       std::unique_ptr<FunctionPrototypeAST> _value;
@@ -874,6 +940,7 @@ export namespace tungsten {
       _NODISCARD const std::vector<std::unique_ptr<ExpressionAST>>& args() const { return _prototype->args(); }
       _NODISCARD std::unique_ptr<FunctionPrototypeAST>& prototype() { return _prototype; }
       _NODISCARD std::unique_ptr<ExpressionAST>& body() { return _body; }
+      _NODISCARD ASTType astType() const noexcept { return ASTType::Function; }
       void accept(ASTVisitor& v) { v.visit(*this); }
 
    private:
@@ -985,6 +1052,7 @@ export namespace tungsten {
       void accept(ASTVisitor& v) override { v.visit(*this); }
 
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::ImportStatement; }
 
    private:
       std::string _module;

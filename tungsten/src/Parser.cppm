@@ -454,11 +454,11 @@ namespace tungsten {
 
    std::unique_ptr<ExpressionAST> Parser::_parseNumberExpression() {
       auto lex = _lexeme(_peek());
-      auto type = _peek().type;
+      // auto type = _peek().type;
       _consume();
-
-      if (type == TokenType::IntLiteral)
-         return std::make_unique<NumberExpressionAST>(std::stoull(lex), makeInt32());
+      // TODO: go back to uint64 and double after first ship
+      // if (type == TokenType::IntLiteral)
+      //    return std::make_unique<NumberExpressionAST>(std::stoull(lex), makeInt32());
 
       return std::make_unique<NumberExpressionAST>(std::stod(lex), makeDouble());
    }
@@ -543,13 +543,14 @@ namespace tungsten {
             return std::make_unique<NumberExpressionAST>(0, makeBool());
          case TokenType::CodeSuccess:
             _consume();
-            return std::make_unique<NumberExpressionAST>(0, makeInt32());
+            // TODO: go back to Int32 after first ship
+            return std::make_unique<NumberExpressionAST>(0, makeDouble()); // makeInt32()
          case TokenType::CodeFailure:
             _consume();
-            return std::make_unique<NumberExpressionAST>(1, makeInt32());
+            return std::make_unique<NumberExpressionAST>(1, makeDouble()); // makeInt32()
          case TokenType::Null:
             _consume();
-            return std::make_unique<NumberExpressionAST>(0, makeInt32());
+            return std::make_unique<NumberExpressionAST>(0, makeDouble()); // makeInt32()
 
          case TokenType::OpenBrace:
             return _parseBlock();
@@ -987,10 +988,20 @@ namespace tungsten {
          if (auto expr = _parseExpression())
             statements.push_back(std::move(expr));
 
-         if (_peekBack().type != TokenType::CloseBrace) {
-            if (_peek().type != TokenType::Semicolon)
-               return _logError<BlockStatementAST>("expected ';' before '" + _lexeme(_peek()) + "'");
-            _consume(); // consume ';'
+         switch (statements.back()->astType()) {
+            case ASTType::BlockStatement:
+            case ASTType::ForStatement:
+            case ASTType::WhileStatement:
+            case ASTType::IfStatement:
+               break;
+            // case ASTType::IfStatement:
+            //    if (auto* ifStmnt = static_cast<IfStatementAST*>(statements.back().get())) {
+            //       if (!ifStmnt->elseBranch())
+            //    }
+            default:
+               if (_peek().type != TokenType::Semicolon)
+                  return _logError<BlockStatementAST>("expected ';' before '" + _lexeme(_peek()) + "'");
+               _consume(); // consume ';'
          }
       }
       if (_peek().type != TokenType::CloseBrace)
@@ -1049,33 +1060,40 @@ namespace tungsten {
       _consume(); // consume )
       std::unique_ptr<ExpressionAST> thenBranch;
       std::unique_ptr<ExpressionAST> elseBranch = nullptr;
-      if (_peek().type == TokenType::OpenBrace)
-         thenBranch = _parseBlock();
-      else {
-         if (_peek().type == TokenType::If)
-            thenBranch = _parseExpression();
-         else {
-            thenBranch = _parseExpression();
+
+      thenBranch = _parseExpression();
+      if (!thenBranch)
+         return nullptr; // error already logged
+      switch (thenBranch->astType()) {
+         case ASTType::BlockStatement:
+         case ASTType::ForStatement:
+         case ASTType::WhileStatement:
+         case ASTType::IfStatement:
+            break;
+         default:
             if (_peek().type != TokenType::Semicolon)
                return _logError("expected ';' before '" + _lexeme(_peek()) + "'");
-         }
-         // not consuming the ';' because if the 'if' doesn't have an 'else' the semicolon is automatically consumed in the _parseBlock() which calls this function
+            _consume(); // consume ';'
       }
-      if (_peek(1).type == TokenType::Else) {
-         _consume(2);
-         if (_peek().type == TokenType::OpenBrace)
-            elseBranch = _parseBlock();
-         else {
-            if (_peek().type == TokenType::If)
-               elseBranch = _parseExpression();
-            else {
-               elseBranch = _parseExpression();
+
+      if (_peek().type == TokenType::Else) {
+         _consume(); // consume else
+         elseBranch = _parseExpression();
+         if (!elseBranch)
+            return nullptr; // error already logged
+         switch (elseBranch->astType()) {
+            case ASTType::BlockStatement:
+            case ASTType::ForStatement:
+            case ASTType::WhileStatement:
+            case ASTType::IfStatement:
+               break;
+            default:
                if (_peek().type != TokenType::Semicolon)
                   return _logError("expected ';' before '" + _lexeme(_peek()) + "'");
-            }
-            // not consuming the ';' because if the 'if' doesn't have an 'else' the semicolon is automatically consumed in the _parseBlock() which calls this function
+               _consume(); // consume ';'
          }
       }
+
       return std::make_unique<IfStatementAST>(std::move(condition), std::move(thenBranch), std::move(elseBranch));
    }
 

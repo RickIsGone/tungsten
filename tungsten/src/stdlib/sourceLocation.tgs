@@ -1,27 +1,27 @@
 module sourceLocation;
 
 export namespace std {
-    class SourceLocation {
-    public:
-        SourceLocation() {}
-        static SourceLocation current(String file = __builtinFile(), String function = __builtinFunction(), Uint64 column = __builtinColumn(), Uint64 line = __builtinLine()) {
-            SourceLocation sl;
-            sl._file = file;
-            sl._function = function;
-            sl._column = column;
-            sl._line = line;
-            return sl;
-        }
+   class SourceLocation {
+   public:
+      SourceLocation() {}
+      static SourceLocation current(String file = __builtinFile(), String function = __builtinFunction(), Uint64 column = __builtinColumn(), Uint64 line = __builtinLine()) {
+         SourceLocation sl;
+         sl._file = file;
+         sl._function = function;
+         sl._column = column;
+         sl._line = line;
+         return sl;
+      }
 
-        String file() { return _file; }
-        String function() { return _function; }
-        Uint64 column() { return _column; }
-        Uint64 line() { return _line; }
+      String file() { return _file; }
+      String function() { return _function; }
+      Uint64 column() { return _column; }
+      Uint64 line() { return _line; }
 
-    private:
-        String _file;
-        String _function;
-        Uint64 _column;
-        Uint64 _line;
-    };
+   private:
+      String _file;
+      String _function;
+      Uint64 _column;
+      Uint64 _line;
+   };
 }
