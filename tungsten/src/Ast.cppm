@@ -847,6 +847,8 @@ export namespace tungsten {
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::WhileStatement; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& condition() { return _condition; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& body() { return _body; }
 
    private:
       std::unique_ptr<ExpressionAST> _condition;
@@ -861,6 +863,8 @@ export namespace tungsten {
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::DoWhileStatement; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& condition() { return _condition; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& body() { return _body; }
 
    private:
       std::unique_ptr<ExpressionAST> _condition;
@@ -875,6 +879,10 @@ export namespace tungsten {
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::ForStatement; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& init() { return _init; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& condition() { return _condition; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& increment() { return _increment; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& body() { return _body; }
 
    private:
       std::unique_ptr<ExpressionAST> _init;

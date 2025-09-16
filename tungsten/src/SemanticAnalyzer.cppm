@@ -50,10 +50,10 @@ namespace tungsten {
       void visit(__BuiltinFileAST&) override {}
       void visit(StaticCastAST&) override {}
       void visit(ConstCastAST&) override {}
-      void visit(IfStatementAST&) override {}
-      void visit(WhileStatementAST&) override {}
-      void visit(DoWhileStatementAST&) override {}
-      void visit(ForStatementAST&) override {}
+      void visit(IfStatementAST&) override;
+      void visit(WhileStatementAST&) override;
+      void visit(DoWhileStatementAST&) override;
+      void visit(ForStatementAST&) override;
       void visit(BlockStatementAST&) override;
       void visit(ReturnStatementAST&) override;
       void visit(ExitStatement&) override;
@@ -324,6 +324,112 @@ namespace tungsten {
             return _logError("no overload of function '{}' with no arguments", call.callee());
          return _logError("no overload of function '{}' with arguments '{}'", call.callee(), args);
       }
+   }
+
+   void SemanticAnalyzer::visit(IfStatementAST& ifStmnt) {
+      ifStmnt.condition()->accept(*this);
+      switch (ifStmnt.condition()->astType()) {
+         case ASTType::NumberExpression:
+         case ASTType::VariableExpression:
+         case ASTType::CallExpression:
+         case ASTType::UnaryExpression:
+         case ASTType::BinaryExpression:
+         case ASTType::VariableDeclaration:
+            break;
+
+         default:
+            return _logError("if statement condition must be a numeric or boolean expression");
+      }
+      if (ifStmnt.thenBranch()->astType() != ASTType::BlockStatement) {
+         _scopes.push_back({});
+         ++_currentScope;
+         ifStmnt.thenBranch()->accept(*this);
+         _scopes.pop_back();
+         --_currentScope;
+      } else
+         ifStmnt.thenBranch()->accept(*this);
+
+      if (ifStmnt.elseBranch()) {
+         if (ifStmnt.elseBranch()->astType() != ASTType::BlockStatement) {
+            _scopes.push_back({});
+            ++_currentScope;
+            ifStmnt.elseBranch()->accept(*this);
+            _scopes.pop_back();
+            --_currentScope;
+         } else
+            ifStmnt.elseBranch()->accept(*this);
+      }
+   }
+   void SemanticAnalyzer::visit(WhileStatementAST& whileStmnt) {
+      whileStmnt.condition()->accept(*this);
+      switch (whileStmnt.condition()->astType()) {
+         case ASTType::NumberExpression:
+         case ASTType::VariableExpression:
+         case ASTType::CallExpression:
+         case ASTType::UnaryExpression:
+         case ASTType::BinaryExpression:
+         case ASTType::VariableDeclaration:
+            break;
+
+         default:
+            return _logError("while statement condition must be a numeric or boolean expression");
+      }
+
+      whileStmnt.body()->accept(*this);
+   }
+   void SemanticAnalyzer::visit(DoWhileStatementAST& doWhile) {
+      doWhile.condition()->accept(*this);
+      switch (doWhile.condition()->astType()) {
+         case ASTType::NumberExpression:
+         case ASTType::VariableExpression:
+         case ASTType::CallExpression:
+         case ASTType::UnaryExpression:
+         case ASTType::BinaryExpression:
+         case ASTType::VariableDeclaration:
+            break;
+
+         default:
+            return _logError("while statement condition must be a numeric or boolean expression");
+      }
+
+      doWhile.body()->accept(*this);
+   }
+   void SemanticAnalyzer::visit(ForStatementAST& forStmnt) {
+      _scopes.push_back({});
+      ++_currentScope;
+      forStmnt.init()->accept(*this);
+      switch (forStmnt.init()->astType()) {
+         case ASTType::VariableDeclaration:
+         case ASTType::VariableExpression:
+            break;
+         default:
+            return _logError("for statement initialization must be a variable declaration or a binary expression");
+      }
+      forStmnt.condition()->accept(*this);
+      switch (forStmnt.condition()->astType()) {
+         case ASTType::NumberExpression:
+         case ASTType::VariableExpression:
+         case ASTType::CallExpression:
+         case ASTType::UnaryExpression:
+         case ASTType::BinaryExpression:
+         case ASTType::VariableDeclaration:
+            if (forStmnt.condition()->type()->kind() != TypeKind::Bool && !_isNumberType(forStmnt.condition()->type()->string()))
+               return _logError("while statement condition must be a numeric or boolean expression");
+            break;
+         default:
+            return _logError("for statement condition must be a numeric or boolean expression");
+      }
+      forStmnt.increment()->accept(*this);
+      switch (forStmnt.increment()->astType()) {
+         case ASTType::BinaryExpression:
+         case ASTType::UnaryExpression:
+            break;
+         default:
+            return _logError("for statement increment must be a binary expression");
+      }
+      forStmnt.body()->accept(*this);
+      _scopes.pop_back();
+      --_currentScope;
    }
 
    void SemanticAnalyzer::visit(ExitStatement& ext) {
