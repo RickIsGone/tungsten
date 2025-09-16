@@ -34,10 +34,10 @@ namespace tungsten {
 
       bool analyze();
 
-      void visit(NumberExpressionAST&) override {}
+      void visit(NumberExpressionAST&) override;
       void visit(VariableExpressionAST&) override;
       void visit(StringExpression&) override {}
-      void visit(UnaryExpressionAST&) override {}
+      void visit(UnaryExpressionAST&) override;
       void visit(BinaryExpressionAST&) override {}
       void visit(VariableDeclarationAST&) override;
       void visit(CallExpressionAST&) override;
@@ -90,8 +90,6 @@ namespace tungsten {
       bool _checkNumericConversionLoss(const std::string& fromType, const std::string& toType);
       bool _doesVariableExist(const std::string& var);
       std::shared_ptr<Type> _variableType(const std::string& var);
-      std::string _fullTypeString(const std::shared_ptr<Type>& ty);
-      std::string _baseType(const std::shared_ptr<Type>& ty);
 
       std::vector<std::unique_ptr<FunctionAST>>& _functions;
       std::vector<std::unique_ptr<ClassAST>>& _classes;
@@ -139,32 +137,51 @@ namespace tungsten {
       switch (var.type()->kind()) {
          case TypeKind::Array: {
             auto array = static_cast<ArrayTy*>(var.type().get());
-            if (!_isBaseType(_baseType(array->arrayType())) && !_isClass(_baseType(array->arrayType())))
-               return _logError("unknown type '{}' in variable declaration '{} {}'", _baseType(array->arrayType()), _fullTypeString(var.type()), var.name());
+            if (!_isBaseType(baseType(array->arrayType())) && !_isClass(baseType(array->arrayType())))
+               return _logError("unknown type '{}' in variable declaration '{} {}'", baseType(array->arrayType()), fullTypeString(var.type()), var.name());
          } break;
          case TypeKind::Pointer: {
             auto ptr = static_cast<PointerTy*>(var.type().get());
-            if (!_isBaseType(_baseType(ptr->pointee())) && !_isClass(_baseType(ptr->pointee())))
-               return _logError("unknown type '{}' in variable declaration '{} {}'", _baseType(ptr->pointee()), _fullTypeString(var.type()), var.name());
+            if (!_isBaseType(baseType(ptr->pointee())) && !_isClass(baseType(ptr->pointee())))
+               return _logError("unknown type '{}' in variable declaration '{} {}'", baseType(ptr->pointee()), fullTypeString(var.type()), var.name());
          } break;
          default:
             if (!_isBaseType(var.type()->string()) && !_isClass(var.type()->string()))
-               return _logError("unknown type '{}' in variable declaration '{} {}'", var.type()->string(), _fullTypeString(var.type()), var.name());
+               return _logError("unknown type '{}' in variable declaration '{} {}'", var.type()->string(), fullTypeString(var.type()), var.name());
             break;
       }
 
       if (var.initializer()) {
          var.initializer()->accept(*this);
          if (!_isNumberType(var.type()->string()) || !_isNumberType(var.initializer()->type()->string())) {
-            if (_fullTypeString(var.type()) != _fullTypeString(var.initializer()->type()))
-               return _logError("type mismatch: cannot assign '{}' to variable of type '{}'", _fullTypeString(var.initializer()->type()), _fullTypeString(var.type()));
+            if (fullTypeString(var.type()) != fullTypeString(var.initializer()->type()))
+               return _logError("type mismatch: cannot assign '{}' to variable of type '{}'", fullTypeString(var.initializer()->type()), fullTypeString(var.type()));
 
-         } else if (_checkNumericConversionLoss(_baseType(var.initializer()->type()), _baseType(var.type()))) {
-            _logWarn("possible data loss converting from '{}' to '{}' in variable ''", _baseType(var.initializer()->type()), _baseType(var.type()), var.name());
-         }
+         } /*else if (_checkNumericConversionLoss(baseType(var.initializer()->type()), baseType(var.type()))) {
+            _logWarn("possible data loss converting from '{}' to '{}' in variable ''", baseType(var.initializer()->type()), baseType(var.type()), var.name());
+         }*/
       }
 
       _scopes.at(_currentScope)[var.name()] = var.type();
+   }
+
+   void SemanticAnalyzer::visit(NumberExpressionAST& num) {
+      if (!num.type())
+         num.setType(makeDouble()); // only for now, will be changed later
+   }
+
+   void SemanticAnalyzer::visit(UnaryExpressionAST& op) {
+      op.operand()->accept(*this);
+
+      if (op.op() == "--" || op.op() == "++") {
+         if (op.operand()->astType() != ASTType::VariableExpression)
+            return _logError("cannot use operator '{}' on non-variable expression", op.op());
+      }
+      if (op.op() == "-") {
+         if (op.operand()->astType() != ASTType::NumberExpression)
+            return _logError("cannot use operator '-' on non-numeric expression");
+      }
+      // if (op.operand()->astType() !=)
    }
 
    void SemanticAnalyzer::visit(VariableExpressionAST& var) {
@@ -203,7 +220,7 @@ namespace tungsten {
       auto sameSignature = [&](const Overload& o) {
          if (o.args.size() != over.args.size()) return false;
          for (size_t i = 0; i < o.args.size(); i++) {
-            if (_fullTypeString(o.args[i].second) != _fullTypeString(over.args[i].second))
+            if (fullTypeString(o.args[i].second) != fullTypeString(over.args[i].second))
                return false;
          }
          return true;
@@ -211,7 +228,7 @@ namespace tungsten {
       auto sameParams = [&](const Overload& o) {
          if (o.args.size() != over.args.size()) return false;
          for (size_t i = 0; i < o.args.size(); i++) {
-            if (_fullTypeString(o.args[i].second) != _fullTypeString(over.args[i].second))
+            if (fullTypeString(o.args[i].second) != fullTypeString(over.args[i].second))
                return false;
          }
          return true;
@@ -221,10 +238,17 @@ namespace tungsten {
          if (sameSignature(existing)) {
             return _logError("function '{}' with the same signature already exists", proto.name());
          }
-         if (sameParams(existing) && _fullTypeString(existing.type) != _fullTypeString(over.type)) {
+         if (sameParams(existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
             return _logError("function '{}' with same parameters but different return type already exists", proto.name());
          }
       }
+
+      if (proto.name() == "main") {
+         if (fullTypeString(proto.type()) != "Double")
+            return _logError("main function must have return type 'Num'"); // will replace with Int32 after reintroducing numeric types
+         proto.setType(makeInt32());
+      }
+
       overloads.push_back(over);
    }
 
@@ -232,6 +256,15 @@ namespace tungsten {
       _scopes.push_back({}); // scope already created inside visit(BlockStatementAST&) but I need to make one for the function arguments
       ++_currentScope;
       fun.prototype()->accept(*this);
+      // temporary fix because of the single numeric type being a double
+      if (fun.name() == "main") {
+         if (fun.body()) {
+            for (auto& expr : static_cast<BlockStatementAST*>(fun.body().get())->statements()) {
+               if (expr->astType() == ASTType::ReturnStatement)
+                  static_cast<ReturnStatementAST*>(expr.get())->setType(makeInt32());
+            }
+         }
+      }
       fun.body()->accept(*this);
       _scopes.pop_back();
       --_currentScope;
@@ -269,7 +302,7 @@ namespace tungsten {
             continue;
          bool match = true;
          for (size_t i = 0; i < call.args().size(); ++i) {
-            if (_fullTypeString(call.args()[i]->type()) != _fullTypeString(overload.args[i].second)) {
+            if (fullTypeString(call.args()[i]->type()) != fullTypeString(overload.args[i].second)) {
                match = false;
                break;
             }
@@ -284,7 +317,7 @@ namespace tungsten {
       if (!valid) {
          std::string args;
          for (size_t i = 0; i < call.args().size(); ++i) {
-            args += _fullTypeString(call.args().at(i)->type()) + (i == call.args().size() - 1 ? "" : ", ");
+            args += fullTypeString(call.args().at(i)->type()) + (i == call.args().size() - 1 ? "" : ", ");
          }
          call.setType(makeNullType());
          if (args.empty())
@@ -299,7 +332,7 @@ namespace tungsten {
          if (ext.value()->astType() == ASTType::NumberExpression)
             static_cast<NumberExpressionAST*>(ext.value().get())->setType(makeInt32());
       }
-      if (!_isSignedType(ext.value()->type()->string()) && !_isUnsignedType(ext.value()->type()->string()) && !_isFloatingPointType(ext.value()->type()->string()))
+      if (!_isNumberType(ext.value()->type()->string()))
          return _logError("exit statement expects a numeric value");
    }
 
@@ -307,7 +340,7 @@ namespace tungsten {
       if (ret.type()->kind() == TypeKind::Void) {
          if (ret.value() != nullptr) {
             ret.value()->accept(*this);
-            return _logError("'Void' function cannot return '{}'", _fullTypeString(ret.value()->type()));
+            return _logError("'Void' function cannot return '{}'", fullTypeString(ret.value()->type()));
          }
          return;
       }
@@ -323,7 +356,11 @@ namespace tungsten {
       }
       if (!_isNumberType(ret.type()->string()) || !_isNumberType(ret.value()->type()->string())) {
          if (ret.type()->string() != ret.value()->type()->string())
-            return _logError("'{}' function cannot return '{}'", _fullTypeString(ret.type()), _fullTypeString(ret.value()->type()));
+            return _logError("'{}' function cannot return '{}'", fullTypeString(ret.type()), fullTypeString(ret.value()->type()));
+      } else {
+         if (_checkNumericConversionLoss(baseType(ret.value()->type()), baseType(ret.type())))
+            _logWarn("possible data loss converting from '{}' to '{}' in return statement", baseType(ret.value()->type()), baseType(ret.type()));
+         static_cast<NumberExpressionAST*>(ret.value().get())->setType(makeInt32()); // only possible way for this to happen is inside the main function
       }
    }
 
@@ -405,35 +442,5 @@ namespace tungsten {
       }
       return nullptr;
    }
-   std::string SemanticAnalyzer::_fullTypeString(const std::shared_ptr<Type>& ty) {
-      if (!ty)
-         return "";
 
-      switch (ty->kind()) {
-         case TypeKind::Pointer: {
-            auto ptrTy = std::static_pointer_cast<PointerTy>(ty);
-            return _fullTypeString(ptrTy->pointee()) + "*";
-         }
-         case TypeKind::Array: {
-            auto arrTy = std::static_pointer_cast<ArrayTy>(ty);
-            return _fullTypeString(arrTy->arrayType()) + "[]";
-         }
-         default:
-            return ty->string();
-      }
-   }
-   std::string SemanticAnalyzer::_baseType(const std::shared_ptr<Type>& ty) {
-      switch (ty->kind()) {
-         case TypeKind::Pointer: {
-            auto ptrTy = std::static_pointer_cast<PointerTy>(ty);
-            return _baseType(ptrTy->pointee());
-         }
-         case TypeKind::Array: {
-            auto arrTy = std::static_pointer_cast<ArrayTy>(ty);
-            return _baseType(arrTy->arrayType());
-         }
-         default:
-            return ty->string();
-      }
-   }
 } // namespace tungsten

@@ -453,14 +453,14 @@ namespace tungsten {
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseNumberExpression() {
-      auto lex = _lexeme(_peek());
+      auto num = _lexeme(_peek());
       // auto type = _peek().type;
       _consume();
       // TODO: go back to uint64 and double after first ship
       // if (type == TokenType::IntLiteral)
-      //    return std::make_unique<NumberExpressionAST>(std::stoull(lex), makeInt32());
+      //    return std::make_unique<NumberExpressionAST>(std::stoull(num), makeInt32());
 
-      return std::make_unique<NumberExpressionAST>(std::stod(lex), makeDouble());
+      return std::make_unique<NumberExpressionAST>(std::stod(num), makeDouble());
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseIdentifierExpression() {
@@ -537,20 +537,20 @@ namespace tungsten {
             return nullptr;
          case TokenType::True:
             _consume();
-            return std::make_unique<NumberExpressionAST>(1, makeBool());
+            return std::make_unique<NumberExpressionAST>(double(1), makeBool());
          case TokenType::False:
             _consume();
-            return std::make_unique<NumberExpressionAST>(0, makeBool());
+            return std::make_unique<NumberExpressionAST>(double(0), makeBool());
          case TokenType::CodeSuccess:
             _consume();
             // TODO: go back to Int32 after first ship
-            return std::make_unique<NumberExpressionAST>(0, makeDouble()); // makeInt32()
+            return std::make_unique<NumberExpressionAST>(double(0), makeDouble()); // makeInt32()
          case TokenType::CodeFailure:
             _consume();
-            return std::make_unique<NumberExpressionAST>(1, makeDouble()); // makeInt32()
+            return std::make_unique<NumberExpressionAST>(double(1), makeDouble()); // makeInt32()
          case TokenType::Null:
             _consume();
-            return std::make_unique<NumberExpressionAST>(0, makeDouble()); // makeInt32()
+            return std::make_unique<NumberExpressionAST>(double(0), makeDouble()); // makeInt32()
 
          case TokenType::OpenBrace:
             return _parseBlock();
@@ -710,7 +710,18 @@ namespace tungsten {
       return std::move(expr);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseTypeof() {
-      return std::make_unique<TypeOfStatementAST>(nullptr);
+      _consume(); // consume typeof
+      if (_peek().type != TokenType::OpenParen)
+         return _logError("expected '(' after 'typeof'");
+      _consume(); // consume '('
+      if (_peek().type != TokenType::Identifier)
+         return _logError("expected an identifier after '(' in 'typeof'");
+      std::string identifier = _lexeme(_peek());
+      _consume(); // consume identifier
+      if (_peek().type != TokenType::CloseParen)
+         return _logError("expected ')' after identifier in 'typeof'");
+      _consume(); // consume ')'
+      return std::make_unique<TypeOfStatementAST>(identifier);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseNameof() {
       _consume(); // consume nameof
