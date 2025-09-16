@@ -1595,11 +1595,87 @@ export namespace tungsten {
    }
 
    llvm::Value* DoWhileStatementAST::codegen() {
-      return nullptr;
+      llvm::Function* function = Builder->GetInsertBlock()->getParent();
+
+      llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*TheContext, "dowhile.body", function);
+      llvm::BasicBlock* condBB = llvm::BasicBlock::Create(*TheContext, "dowhile.cond");
+      llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*TheContext, "dowhile.end");
+
+      Builder->CreateBr(bodyBB);
+
+      // body
+      Builder->SetInsertPoint(bodyBB);
+      if (_body)
+         _body->codegen();
+      Builder->CreateBr(condBB);
+
+      // condition
+      function->insert(function->end(), condBB);
+      Builder->SetInsertPoint(condBB);
+      llvm::Value* CondV = _condition->codegen();
+      if (!CondV)
+         return nullptr;
+      CondV = Builder->CreateICmpNE(
+          CondV,
+          llvm::ConstantInt::get(CondV->getType(), 0),
+          "dowhilecond");
+      Builder->CreateCondBr(CondV, bodyBB, endBB);
+
+      // end
+      function->insert(function->end(), endBB);
+      Builder->SetInsertPoint(endBB);
+
+      return llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*TheContext));
    }
 
    llvm::Value* ForStatementAST::codegen() {
-      return nullptr;
+      llvm::Function* function = Builder->GetInsertBlock()->getParent();
+
+      llvm::BasicBlock* condBB = llvm::BasicBlock::Create(*TheContext, "for.cond");
+      llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*TheContext, "for.body");
+      llvm::BasicBlock* incBB = llvm::BasicBlock::Create(*TheContext, "for.inc");
+      llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*TheContext, "for.end");
+
+      // init
+      if (_init)
+         _init->codegen();
+
+      Builder->CreateBr(condBB);
+
+      // condition
+      function->insert(function->end(), condBB);
+      Builder->SetInsertPoint(condBB);
+      llvm::Value* CondV = _condition ? _condition->codegen() : nullptr;
+      if (_condition) {
+         if (!CondV) return nullptr;
+         CondV = Builder->CreateICmpNE(
+             CondV,
+             llvm::ConstantInt::get(CondV->getType(), 0),
+             "forcond");
+         Builder->CreateCondBr(CondV, bodyBB, endBB);
+      } else
+         Builder->CreateBr(bodyBB);
+
+
+      // body
+      function->insert(function->end(), bodyBB);
+      Builder->SetInsertPoint(bodyBB);
+      if (_body)
+         _body->codegen();
+      Builder->CreateBr(incBB);
+
+      // increment
+      function->insert(function->end(), incBB);
+      Builder->SetInsertPoint(incBB);
+      if (_increment)
+         _increment->codegen();
+      Builder->CreateBr(condBB);
+
+      // end
+      function->insert(function->end(), endBB);
+      Builder->SetInsertPoint(endBB);
+
+      return llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*TheContext));
    }
 
    llvm::Function* FunctionPrototypeAST::codegen() {

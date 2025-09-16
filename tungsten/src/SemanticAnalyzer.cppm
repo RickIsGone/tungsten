@@ -413,7 +413,7 @@ namespace tungsten {
          case ASTType::UnaryExpression:
          case ASTType::BinaryExpression:
          case ASTType::VariableDeclaration:
-            if (forStmnt.condition()->type()->kind() != TypeKind::Bool && !_isNumberType(forStmnt.condition()->type()->string()))
+            if (forStmnt.condition()->type()->kind() != TypeKind::Bool && !_isNumberType(fullTypeString(forStmnt.condition()->type())))
                return _logError("while statement condition must be a numeric or boolean expression");
             break;
          default:
