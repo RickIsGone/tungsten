@@ -38,7 +38,7 @@ namespace tungsten {
       void visit(VariableExpressionAST&) override;
       void visit(StringExpression&) override {}
       void visit(UnaryExpressionAST&) override;
-      void visit(BinaryExpressionAST&) override {}
+      void visit(BinaryExpressionAST&) override;
       void visit(VariableDeclarationAST&) override;
       void visit(CallExpressionAST&) override;
       void visit(TypeOfStatementAST&) override {}
@@ -178,6 +178,45 @@ namespace tungsten {
             return _logError("cannot use operator '-' on non-numeric expression");
       }
       // if (op.operand()->astType() !=)
+   }
+
+   void SemanticAnalyzer::visit(BinaryExpressionAST& binop) {
+      binop.LHS()->accept(*this);
+      binop.RHS()->accept(*this);
+
+
+      if (binop.op() == "==" || binop.op() == "!=" || binop.op() == "<" || binop.op() == ">" || binop.op() == "<=" || binop.op() == ">=") {
+         if (!_isNumberType(fullTypeString(binop.LHS()->type())) || !_isNumberType(fullTypeString(binop.RHS()->type()))) {
+            if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type()))
+               return _logError("type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
+            if (fullTypeString(binop.LHS()->type()) == "String")
+               return _logError("cannot do comparison between strings with operator '{}'", binop.op());
+         }
+         binop.setType(makeBool());
+         return;
+      }
+      if (binop.op() == "&&" || binop.op() == "||") {
+         if (binop.LHS()->type()->kind() != TypeKind::Bool || binop.RHS()->type()->kind() != TypeKind::Bool)
+            return _logError("type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
+         binop.setType(makeBool());
+         return;
+      }
+
+      if (binop.op() == "=" || binop.op() == "+=" || binop.op() == "-=" || binop.op() == "*=" || binop.op() == "/=" || binop.op() == "%=" || binop.op() == "|=" || binop.op() == "&=") {
+         if (!binop.LHS()->isLValue())
+            return _logError("left operand of assignment must be a variable");
+      }
+
+      // addition, multiplication, division, ecc.
+      if (!_isNumberType(fullTypeString(binop.LHS()->type())) || !_isNumberType(fullTypeString(binop.RHS()->type()))) {
+         if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type()))
+            return _logError("type mismatch: cannot operate '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
+
+         if (fullTypeString(binop.LHS()->type()) == "String" && binop.op() != "=")
+            return _logError("strings can only be assigned, not operated on with '{}'", binop.op());
+      }
+
+      binop.setType(binop.LHS()->type());
    }
 
    void SemanticAnalyzer::visit(VariableExpressionAST& var) {
