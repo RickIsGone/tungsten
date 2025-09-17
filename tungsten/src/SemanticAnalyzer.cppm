@@ -73,12 +73,11 @@ namespace tungsten {
    private:
       template <typename... Ty>
       void _logError(const std::string& err, Ty&&... args) {
-         _errors << "error: " << std::vformat(err, std::make_format_args(args...)) << "\n";
+         std::cerr << "error: " << std::vformat(err, std::make_format_args(args...)) << "\n";
          _hasErrors = true;
       }
       template <typename... Ty>
-      void _logWarn(const std::string& warn, Ty&&... args) { _warnings << "warning: " << std::vformat(warn, std::make_format_args(args...)) << "\n"; }
-      void _print() const { std::cerr << _errors.str() << _warnings.str(); }
+      void _logWarn(const std::string& warn, Ty&&... args) { std::cerr << "warning: " << std::vformat(warn, std::make_format_args(args...)) << "\n"; }
 
       bool _isSignedType(const std::string& type);
       bool _isUnsignedType(const std::string& type);
@@ -96,8 +95,6 @@ namespace tungsten {
       std::vector<std::unique_ptr<ExpressionAST>>& _globalVariables;
       std::vector<Scope> _scopes{};
       std::unordered_map<std::string, std::vector<Overload>> _declaredFunctions{};
-      std::stringstream _errors{};
-      std::stringstream _warnings{};
       size_t _currentScope{GlobalScope};
       bool _hasErrors{false};
    };
@@ -123,7 +120,6 @@ namespace tungsten {
          else
             _hasErrors = true;
       }
-      _print();
 
       return !_hasErrors;
    }

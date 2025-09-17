@@ -137,6 +137,7 @@ namespace tungsten {
       std::vector<std::unique_ptr<ClassAST>> _classes;
       std::vector<std::unique_ptr<ExpressionAST>> _globalVariables;
       std::shared_ptr<Type> _currentFunctionReturnType;
+      std::string _currentFunctionName;
    };
 
    //  ========================================== implementation ==========================================
@@ -181,7 +182,7 @@ namespace tungsten {
       return std::filesystem::absolute(_filePath).string();
    }
    std::string Parser::_function() {
-      return "function"; // TODO: fix
+      return _currentFunctionName;
    }
 
    int Parser::_getPrecedence(TokenType type) {
@@ -965,6 +966,7 @@ namespace tungsten {
          return _logError<FunctionAST>("expected '{'");
 
       _currentFunctionReturnType = type;
+      _currentFunctionName = name;
       std::unique_ptr<BlockStatementAST> body = _parseBlock();
       return std::make_unique<FunctionAST>(std::move(proto), std::move(body));
    }

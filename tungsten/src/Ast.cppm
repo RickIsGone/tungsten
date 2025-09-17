@@ -1397,8 +1397,7 @@ export namespace tungsten {
             return nullptr;
          args.push_back(argVal);
       }
-
-      return Builder->CreateCall(callee->getFunctionType(), callee, args, "calltmp");
+      return Builder->CreateCall(callee, args);
    }
 
    llvm::Value* TypeOfStatementAST::codegen() {
@@ -1505,8 +1504,12 @@ export namespace tungsten {
              exitType, llvm::Function::ExternalLinkage, "exit", TheModule.get());
       }
 
-      if (exitValue->getType() != llvm::Type::getInt32Ty(*TheContext)) {
-         exitValue = Builder->CreateIntCast(exitValue, llvm::Type::getInt32Ty(*TheContext), false);
+      if (_value->astType() == ASTType::VariableExpression) {
+         exitValue = Builder->CreateLoad(VariableTypes[static_cast<VariableExpressionAST*>(_value.get())->name()], exitValue, "lval");
+         exitValue = Builder->CreateFPToSI(exitValue, Builder->getInt32Ty(), "cast");
+
+      } else if (exitValue->getType() != llvm::Type::getInt32Ty(*TheContext)) {
+         exitValue = Builder->CreateIntCast(exitValue, Builder->getInt32Ty(), true);
       }
 
       llvm::Value* call = Builder->CreateCall(exitFunc, exitValue);
