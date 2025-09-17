@@ -1107,7 +1107,7 @@ export namespace tungsten {
          case TypeKind::Float:
             return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*TheContext), std::get<double>(_value));
          default:
-            Builder->getIntN(_Type->llvmType()->getIntegerBitWidth(), std::get<double>(_value)); // std::get<uint64_t>
+            return Builder->getIntN(_Type->llvmType()->getIntegerBitWidth(), std::get<double>(_value)); // std::get<uint64_t>
       }
    }
 
@@ -1380,31 +1380,13 @@ export namespace tungsten {
       if (!callee)
          return LogErrorV("unknown function '" + _callee + "'");
 
-      bool areParamsOk = true;
-
-      if (callee->arg_size() != _args.size())
-         areParamsOk = false;
-
       std::vector<llvm::Value*> args;
       std::string argsTypes;
-      for (unsigned i = 0; i < _args.size(); ++i) {
-         llvm::Value* argVal = _args[i]->codegen();
+      for (auto& arg : _args) {
+         llvm::Value* argVal = arg->codegen();
          if (!argVal)
             return nullptr;
-
-         llvm::Type* expectedType = callee->getFunctionType()->getParamType(i);
-         argsTypes += i == _args.size() - 1 ? getTypeString(argVal) + ", " : getTypeString(argVal);
-         if (argVal->getType() != expectedType) {
-            areParamsOk = false;
-         }
-
          args.push_back(argVal);
-      }
-      if (!areParamsOk) {
-         if (callee->arg_size() == 0)
-            return LogErrorV("no instance of function " + _callee + " with zero args");
-
-         return LogErrorV("no instance of function " + _callee + " with args '" + argsTypes + "'");
       }
 
       return Builder->CreateCall(callee->getFunctionType(), callee, args, "calltmp");

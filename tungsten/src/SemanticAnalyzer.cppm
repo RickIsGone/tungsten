@@ -400,7 +400,7 @@ namespace tungsten {
       forStmnt.init()->accept(*this);
       switch (forStmnt.init()->astType()) {
          case ASTType::VariableDeclaration:
-         case ASTType::VariableExpression:
+         case ASTType::BinaryExpression:
             break;
          default:
             return _logError("for statement initialization must be a variable declaration or a binary expression");
