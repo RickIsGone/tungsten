@@ -458,6 +458,7 @@ namespace tungsten {
                static_cast<NumberExpressionAST*>(ret.value().get())->setType(ret.type());
             else
                static_cast<NumberExpressionAST*>(ret.value().get())->setType(makeInt32());
+            return;
          }
       }
       if (!_isNumberType(ret.type()->string()) || !_isNumberType(ret.value()->type()->string())) {
@@ -466,7 +467,6 @@ namespace tungsten {
       } else {
          if (_checkNumericConversionLoss(baseType(ret.value()->type()), baseType(ret.type())))
             _logWarn("possible data loss converting from '{}' to '{}' in return statement", baseType(ret.value()->type()), baseType(ret.type()));
-         static_cast<NumberExpressionAST*>(ret.value().get())->setType(makeInt32()); // only possible way for this to happen is inside the main function
       }
    }
 

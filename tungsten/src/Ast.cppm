@@ -948,6 +948,13 @@ export namespace tungsten {
       _NODISCARD const std::vector<std::unique_ptr<ExpressionAST>>& args() const { return _args; }
       void accept(ASTVisitor& v) { v.visit(*this); }
       _NODISCARD ASTType astType() const noexcept { return ASTType::FunctionPrototype; }
+      _NODISCARD std::string mangledName() const {
+         std::string result = _name;
+         for (auto& arg : _args) {
+            result += "$" + fullTypeString(arg->type());
+         }
+         return result;
+      }
 
    private:
       std::shared_ptr<Type> _type;
@@ -1376,9 +1383,11 @@ export namespace tungsten {
    }
 
    llvm::Value* CallExpressionAST::codegen() {
-      llvm::Function* callee = TheModule->getFunction(_callee);
-      if (!callee)
-         return LogErrorV("unknown function '" + _callee + "'");
+      std::string name = _callee;
+      for (auto& arg : _args) {
+         name += "$" + fullTypeString(arg->type());
+      }
+      llvm::Function* callee = TheModule->getFunction(name);
 
       std::vector<llvm::Value*> args;
       std::string argsTypes;
@@ -1661,27 +1670,31 @@ export namespace tungsten {
    }
 
    llvm::Function* FunctionPrototypeAST::codegen() {
+      std::string name = mangledName();
+
+      if (auto* existing = TheModule->getFunction(name))
+         return existing;
+
       std::vector<llvm::Type*> paramTypes;
       for (const auto& arg : _args) {
-         llvm::Type* type = arg->type()->llvmType();
-         paramTypes.push_back(type);
+         paramTypes.push_back(arg->type()->llvmType());
       }
-      llvm::Type* returnType = _type->llvmType();
 
-      llvm::FunctionType* functionType = llvm::FunctionType::get(returnType, paramTypes, false);
+      llvm::FunctionType* functionType = llvm::FunctionType::get(_type->llvmType(), paramTypes, false);
+
       llvm::Function* function = llvm::Function::Create(
           functionType,
           llvm::Function::ExternalLinkage,
-          _name,
+          name,
           TheModule.get());
 
       return function;
    }
 
    llvm::Function* FunctionAST::codegen() {
-      llvm::Function* function = _prototype->codegen();
+      llvm::Function* function = TheModule->getFunction(_prototype->mangledName());
       if (!function)
-         return nullptr;
+         function = _prototype->codegen();
 
       llvm::BasicBlock* BB = llvm::BasicBlock::Create(*TheContext, "entry", function);
       Builder->SetInsertPoint(BB);

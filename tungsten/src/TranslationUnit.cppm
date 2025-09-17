@@ -33,6 +33,9 @@ export namespace tungsten {
       parser.parse();
       SemanticAnalyzer analyzer{parser.functions(), parser.classes(), parser.globalVariables()};
       if (analyzer.analyze()) {
+         for (auto& fun : parser.functions()) {
+            fun->prototype()->codegen(); // forward declaration
+         }
          for (auto& cls : parser.classes()) {
             cls->codegen();
          }
