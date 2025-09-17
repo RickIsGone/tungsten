@@ -656,6 +656,10 @@ export namespace tungsten {
       void setType(std::shared_ptr<Type> type) { _Type = type; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::BinaryExpression; }
+      _NODISCARD const std::string& op() const { return _op; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& LHS() { return _LHS; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& RHS() { return _RHS; }
+      bool isLValue() override { return false; }
 
    private:
       std::string _op;
@@ -1408,10 +1412,7 @@ export namespace tungsten {
       return nullptr; // Builder->CreateGlobalStringPtr() TODO: fix
    }
    llvm::Value* NameOfStatementAST::codegen() {
-      if (!NamedValues.contains(_name))
-         return LogErrorV("unknown variable '" + _name + "'");
-
-      return Builder->CreateGlobalStringPtr(_name, "strtmp");
+      return Builder->CreateGlobalStringPtr(_name, "varname");
    }
    llvm::Value* SizeOfStatementAST::codegen() { // TODO: fix because of type rework
       // if (!NamedValues.contains(_variable) || !VariableTypes.contains(_variable)) {
@@ -1431,10 +1432,10 @@ export namespace tungsten {
       return Builder->CreateGlobalStringPtr(_function, "strtmp");
    }
    llvm::Value* __BuiltinLineAST::codegen() {
-      return Builder->getInt64(_line);
+      return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*TheContext), _line); // return Builder->getInt64(_line);
    }
    llvm::Value* __BuiltinColumnAST::codegen() {
-      return Builder->getInt64(_column);
+      return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*TheContext), _column); // Builder->getInt64(_column)
    }
    llvm::Value* __BuiltinFileAST::codegen() {
       return Builder->CreateGlobalStringPtr(_file, "strtmp");
@@ -1524,13 +1525,13 @@ export namespace tungsten {
       if (!CondV)
          return nullptr;
 
-      CondV = Builder->CreateICmpNE(CondV, llvm::ConstantInt::get(CondV->getType(), 0), "ifcond");
+      CondV = Builder->CreateICmpNE(CondV, llvm::ConstantInt::get(CondV->getType(), 0), "if.cond");
 
       llvm::Function* function = Builder->GetInsertBlock()->getParent();
 
-      llvm::BasicBlock* ThenBB = llvm::BasicBlock::Create(*TheContext, "then", function);
-      llvm::BasicBlock* ElseBB = llvm::BasicBlock::Create(*TheContext, "else");
-      llvm::BasicBlock* MergeBB = llvm::BasicBlock::Create(*TheContext, "ifcont");
+      llvm::BasicBlock* ThenBB = llvm::BasicBlock::Create(*TheContext, "if.then", function);
+      llvm::BasicBlock* ElseBB = llvm::BasicBlock::Create(*TheContext, "if.else");
+      llvm::BasicBlock* MergeBB = llvm::BasicBlock::Create(*TheContext, "if.end");
 
       Builder->CreateCondBr(CondV, ThenBB, ElseBB);
 
@@ -1560,13 +1561,13 @@ export namespace tungsten {
    llvm::Value* WhileStatementAST::codegen() {
       llvm::Function* function = Builder->GetInsertBlock()->getParent();
 
-      llvm::BasicBlock* condBB = llvm::BasicBlock::Create(*TheContext, "CondBB", function);
-      llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*TheContext, "BodyBB");
-      llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*TheContext, "whilecont");
+      llvm::BasicBlock* condBB = llvm::BasicBlock::Create(*TheContext, "while.cond", function);
+      llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*TheContext, "while.body");
+      llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*TheContext, "while.end");
 
       Builder->CreateBr(condBB);
 
-      // condtion
+      // condition
       Builder->SetInsertPoint(condBB);
       llvm::Value* CondV = _condition->codegen();
       if (!CondV)
@@ -1727,7 +1728,6 @@ export namespace tungsten {
             return LogErrorF("missing return statement in function: '" + name() + "'");
       }
 
-      llvm::verifyFunction(*function, &llvm::outs());
       return function;
    }
 
