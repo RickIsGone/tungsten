@@ -162,7 +162,7 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(NumberExpressionAST& num) {
-      if (!num.type())
+      if (num.type())
          num.setType(makeDouble()); // only for now, will be changed later
    }
 
@@ -306,6 +306,9 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(CallExpressionAST& call) {
+      if (call.callee() == "main")
+         return _logError("cannot call main function");
+
       auto overloadsIt = _declaredFunctions.find(call.callee());
       std::vector<Overload> overloads;
       if (overloadsIt != _declaredFunctions.end()) {
@@ -489,10 +492,7 @@ namespace tungsten {
       ret.value()->accept(*this);
       if (!ret.value()->type()) {
          if (ret.value()->astType() == ASTType::NumberExpression) {
-            if (_isNumberType(ret.type()->string()))
-               static_cast<NumberExpressionAST*>(ret.value().get())->setType(ret.type());
-            else
-               static_cast<NumberExpressionAST*>(ret.value().get())->setType(makeInt32());
+            static_cast<NumberExpressionAST*>(ret.value().get())->setType(ret.type());
             return;
          }
       }

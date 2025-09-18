@@ -52,7 +52,21 @@ namespace tungsten {
    bool isFloatingPointType(const std::string& type) {
       return type == "Float" || type == "Double";
    }
+   llvm::Value* castToCommonType(llvm::Value* val, llvm::Type* targetType) {
+      llvm::Type* srcType = val->getType();
+      if (srcType == targetType) return val;
 
+      if (srcType->isIntegerTy() && targetType->isFloatingPointTy())
+         return Builder->CreateSIToFP(val, targetType, "sitofp");
+      if (srcType->isFloatingPointTy() && targetType->isIntegerTy())
+         return Builder->CreateFPToSI(val, targetType, "fptosi");
+      if (srcType->isIntegerTy() && targetType->isIntegerTy())
+         return Builder->CreateIntCast(val, targetType, true, "intcast");
+      if (srcType->isFloatingPointTy() && targetType->isFloatingPointTy())
+         return Builder->CreateFPCast(val, targetType, "fpcast");
+
+      return val;
+   }
    std::string mapLLVMTypeToCustomType(llvm::Type* type) {
       if (type->isIntegerTy()) {
          unsigned bits = type->getIntegerBitWidth();
@@ -1181,188 +1195,77 @@ export namespace tungsten {
       return LogErrorV("unsupported type for unary operation");
    }
 
-   llvm::Value* BinaryExpressionAST::codegen() { // TODO: fix
-      llvm::Value* L = _LHS->codegen();
-      llvm::Value* R = _RHS->codegen();
-      if (!L || !R)
-         return nullptr;
+   llvm::Value* BinaryExpressionAST::codegen() {
+      llvm::Value* LHS = _LHS->codegen();
+      llvm::Value* RHS = _RHS->codegen();
 
-      auto castRToLType = [](llvm::Value*& L, llvm::Value*& R) -> bool {
-         llvm::Type* typeL = L->getType();
-         llvm::Type* typeR = R->getType();
-
-         if (typeL == typeR)
-            return true;
-
-         if (typeL->isIntegerTy() && typeR->isIntegerTy()) {
-            R = Builder->CreateIntCast(R, typeL, false, "castR");
-            return true;
-         }
-
-         if (typeL->isIntegerTy() && typeR->isFloatingPointTy()) {
-            R = Builder->CreateFPToUI(R, typeL, "castR");
-            return true;
-         }
-
-         if (typeL->isDoubleTy() && typeR->isIntegerTy()) {
-            R = Builder->CreateUIToFP(R, llvm::Type::getDoubleTy(*TheContext), "castR");
-            return true;
-         }
-
-         if (typeL->isFloatingPointTy() && typeR->isIntegerTy()) {
-            R = Builder->CreateUIToFP(R, typeL, "castR");
-            return true;
-         }
-
-         if (typeL->isDoubleTy() && typeR->isFloatTy()) {
-            R = Builder->CreateFPExt(R, llvm::Type::getDoubleTy(*TheContext), "castR");
-            return true;
-         }
-         if (typeL->isFloatTy() && typeR->isDoubleTy()) {
-            R = Builder->CreateFPTrunc(R, llvm::Type::getFloatTy(*TheContext), "castR");
-            return true;
-         }
-
-         if (typeL->isFloatingPointTy() && typeR->isFloatingPointTy()) {
-            unsigned bitsL = typeL->getPrimitiveSizeInBits();
-            unsigned bitsR = typeR->getPrimitiveSizeInBits();
-            if (bitsR < bitsL) {
-               R = Builder->CreateFPExt(R, typeL, "castR");
-            } else if (bitsR > bitsL) {
-               R = Builder->CreateFPTrunc(R, typeL, "castR");
-            }
-            return true;
-         }
-
-         LogErrorV("unsupported or unsafe type cast between operands");
-         return false;
-      };
+      llvm::Value* loadedL = LHS;
+      if (_LHS->astType() == ASTType::VariableExpression)
+         loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "lval");
+      if (_RHS->astType() == ASTType::VariableExpression)
+         RHS = Builder->CreateLoad(_RHS->type()->llvmType(), RHS, "rval");
+      castToCommonType(RHS, _LHS->type()->llvmType());
 
       if (_op == "=" || _op == "+=" || _op == "-=" || _op == "*=" || _op == "/=" || _op == "%=" || _op == "|=" || _op == "&=") {
-         if (!L->getType()->isPointerTy() || !_LHS->isLValue())
-            return LogErrorV("left side of assignment must be a variable or assignable expression");
-
-         llvm::Value* loadedL = L;
-         if (_op != "=" && _op != "+=" && _op != "-=" && _op != "*=" && _op != "/=" && _op != "%=" && _op != "|=" && _op != "&=") {
-            if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_LHS.get())) {
-               llvm::Type* ltype = VariableTypes[varExpr->name()];
-               loadedL = Builder->CreateLoad(ltype, L, "lval");
-            }
+         if (_LHS->type()->kind() == TypeKind::String) {
+            Builder->CreateStore(RHS, LHS);
+            return RHS;
          }
-
-         if (R->getType()->isPointerTy() && !_RHS->isLValue()) {
-            if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_RHS.get())) {
-               llvm::Type* rtype = VariableTypes[varExpr->name()];
-               R = Builder->CreateLoad(rtype, R, "rval");
-            }
-         }
-
-         if (!castRToLType(loadedL, R))
-            return nullptr;
 
          llvm::Value* result = nullptr;
          if (_op == "=") {
-            result = R;
+            result = RHS;
          } else if (_op == "+=") {
-            result = loadedL->getType()->isFloatingPointTy() ? Builder->CreateFAdd(loadedL, R, "addtmp") : Builder->CreateAdd(loadedL, R, "addtmp");
+            result = Builder->CreateFAdd(loadedL, RHS);
          } else if (_op == "-=") {
-            result = loadedL->getType()->isFloatingPointTy() ? Builder->CreateFSub(loadedL, R, "subtmp") : Builder->CreateSub(loadedL, R, "subtmp");
+            result = Builder->CreateFSub(loadedL, RHS);
          } else if (_op == "*=") {
-            result = loadedL->getType()->isFloatingPointTy() ? Builder->CreateFMul(loadedL, R, "multmp") : Builder->CreateMul(loadedL, R, "multmp");
+            result = Builder->CreateFMul(loadedL, RHS);
          } else if (_op == "/=") {
-            result = loadedL->getType()->isFloatingPointTy() ? Builder->CreateFDiv(loadedL, R, "divtmp") : Builder->CreateSDiv(loadedL, R, "divtmp");
+            result = Builder->CreateFDiv(loadedL, RHS);
          } else if (_op == "%=") {
-            result = loadedL->getType()->isFloatingPointTy() ? Builder->CreateFRem(loadedL, R, "modtmp") : Builder->CreateSRem(loadedL, R, "modtmp");
+            result = Builder->CreateFRem(loadedL, RHS);
          } else if (_op == "|=") {
-            result = Builder->CreateOr(loadedL, R, "ortmp");
+            result = Builder->CreateOr(loadedL, RHS);
          } else if (_op == "&=") {
-            result = Builder->CreateAnd(loadedL, R, "andtmp");
+            result = Builder->CreateAnd(loadedL, RHS);
          }
-         return Builder->CreateStore(result, L);
+         return Builder->CreateStore(result, LHS);
       }
-
-      if (L->getType()->isPointerTy() && !_LHS->isLValue()) {
-         if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_LHS.get())) {
-            llvm::Type* ltype = VariableTypes[varExpr->name()];
-            L = Builder->CreateLoad(ltype, L, "lval");
-         }
-      }
-      if (R->getType()->isPointerTy() && !_RHS->isLValue()) {
-         if (auto* varExpr = dynamic_cast<VariableExpressionAST*>(_RHS.get())) {
-            llvm::Type* rtype = VariableTypes[varExpr->name()];
-            R = Builder->CreateLoad(rtype, R, "rval");
-         }
-      }
-
-      if (!castRToLType(L, R))
-         return nullptr;
 
       if (_op == "&&") {
-         L = Builder->CreateICmpNE(L, llvm::ConstantInt::get(L->getType(), 0), "lcond");
-         R = Builder->CreateICmpNE(R, llvm::ConstantInt::get(R->getType(), 0), "rcond");
-         return Builder->CreateAnd(L, R, "andtmp");
+         LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
+         RHS = Builder->CreateICmpNE(RHS, Builder->getInt1(0), "rcond");
+         return Builder->CreateAnd(LHS, RHS);
       }
       if (_op == "||") {
-         L = Builder->CreateICmpNE(L, llvm::ConstantInt::get(L->getType(), 0), "lcond");
-         R = Builder->CreateICmpNE(R, llvm::ConstantInt::get(R->getType(), 0), "rcond");
-         return Builder->CreateOr(L, R, "ortmp");
+         LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
+         RHS = Builder->CreateICmpNE(RHS, Builder->getInt1(0), "rcond");
+         return Builder->CreateOr(LHS, RHS);
       }
 
-      if (!L->getType()->isFloatingPointTy() && !R->getType()->isFloatingPointTy()) {
-         if (_op == "+")
-            return Builder->CreateAdd(L, R, "addtmp");
-         if (_op == "-")
-            return Builder->CreateSub(L, R, "subtmp");
-         if (_op == "*")
-            return Builder->CreateMul(L, R, "multmp");
-         if (_op == "/")
-            return Builder->CreateSDiv(L, R, "divtmp");
-         if (_op == "%")
-            return Builder->CreateSRem(L, R, "modtmp");
-         if (_op == "&")
-            return Builder->CreateAnd(L, R, "andtmp");
-         if (_op == "|")
-            return Builder->CreateOr(L, R, "ortmp");
-         if (_op == "^")
-            return Builder->CreateXor(L, R, "xortmp");
-         if (_op == "==")
-            return Builder->CreateICmpEQ(L, R, "eqtmp");
-         if (_op == "!=")
-            return Builder->CreateICmpNE(L, R, "netmp");
-         if (_op == "<")
-            return Builder->CreateICmpSLT(L, R, "lttmp");
-         if (_op == "<=")
-            return Builder->CreateICmpSLE(L, R, "letmp");
-         if (_op == ">")
-            return Builder->CreateICmpSGT(L, R, "gttmp");
-         if (_op == ">=")
-            return Builder->CreateICmpSGE(L, R, "getmp");
-      } else {
-         if (_op == "+")
-            return Builder->CreateFAdd(L, R, "addtmp");
-         if (_op == "-")
-            return Builder->CreateFSub(L, R, "subtmp");
-         if (_op == "*")
-            return Builder->CreateFMul(L, R, "multmp");
-         if (_op == "/")
-            return Builder->CreateFDiv(L, R, "divtmp");
-         if (_op == "%")
-            return Builder->CreateFRem(L, R, "modtmp");
-         if (_op == "==")
-            return Builder->CreateFCmpOEQ(L, R, "eqtmp");
-         if (_op == "!=")
-            return Builder->CreateFCmpONE(L, R, "netmp");
-         if (_op == "<")
-            return Builder->CreateFCmpOLT(L, R, "lttmp");
-         if (_op == "<=")
-            return Builder->CreateFCmpOLE(L, R, "letmp");
-         if (_op == ">")
-            return Builder->CreateFCmpOGT(L, R, "gttmp");
-         if (_op == ">=")
-            return Builder->CreateFCmpOGE(L, R, "getmp");
-      }
-
-      return nullptr;
+      if (_op == "+")
+         return Builder->CreateFAdd(loadedL, RHS);
+      if (_op == "-")
+         return Builder->CreateFSub(loadedL, RHS);
+      if (_op == "*")
+         return Builder->CreateFMul(loadedL, RHS);
+      if (_op == "/")
+         return Builder->CreateFDiv(loadedL, RHS);
+      if (_op == "%")
+         return Builder->CreateFRem(loadedL, RHS);
+      if (_op == "==")
+         return Builder->CreateFCmpOEQ(loadedL, RHS);
+      if (_op == "!=")
+         return Builder->CreateFCmpONE(loadedL, RHS);
+      if (_op == "<")
+         return Builder->CreateFCmpOLT(loadedL, RHS);
+      if (_op == "<=")
+         return Builder->CreateFCmpOLE(loadedL, RHS);
+      if (_op == ">")
+         return Builder->CreateFCmpOGT(loadedL, RHS);
+      if (_op == ">=")
+         return Builder->CreateFCmpOGE(loadedL, RHS);
    }
 
    llvm::Value* VariableDeclarationAST::codegen() {
@@ -1488,6 +1391,7 @@ export namespace tungsten {
          return Builder->CreateRetVoid();
 
       llvm::Value* returnValue = _value->codegen();
+      returnValue = castToCommonType(returnValue, _Type->llvmType());
       return Builder->CreateRet(returnValue);
    }
    llvm::Value* ExitStatement::codegen() {
@@ -1674,7 +1578,7 @@ export namespace tungsten {
    }
 
    llvm::Function* FunctionPrototypeAST::codegen() {
-      std::string name = mangledName();
+      std::string name = _name == "main" ? _name : mangledName();
 
       if (auto* existing = TheModule->getFunction(name))
          return existing;
@@ -1696,7 +1600,7 @@ export namespace tungsten {
    }
 
    llvm::Function* FunctionAST::codegen() {
-      llvm::Function* function = TheModule->getFunction(_prototype->mangledName());
+      llvm::Function* function = TheModule->getFunction(_prototype->name() == "main" ? "main" : _prototype->mangledName());
       if (!function)
          function = _prototype->codegen();
 
