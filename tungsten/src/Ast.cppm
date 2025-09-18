@@ -1391,6 +1391,8 @@ export namespace tungsten {
          return Builder->CreateRetVoid();
 
       llvm::Value* returnValue = _value->codegen();
+      if (_value->astType() == ASTType::VariableExpression)
+         returnValue = Builder->CreateLoad(_value->type()->llvmType(), returnValue, "rval");
       returnValue = castToCommonType(returnValue, _Type->llvmType());
       return Builder->CreateRet(returnValue);
    }
