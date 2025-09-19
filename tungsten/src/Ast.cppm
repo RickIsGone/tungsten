@@ -1154,7 +1154,10 @@ namespace tungsten {
    };
 
    void addCoreLibFunctions() {
-      const std::array coreFunctions = {CoreFun{llvm::Type::getDoubleTy(*TheContext), "shell", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()}}};
+      const std::array coreFunctions = {
+          CoreFun{llvm::Type::getDoubleTy(*TheContext), "shell", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()}},
+          CoreFun{Builder->getVoidTy(), "print", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()}},
+      };
       for (auto& fun : coreFunctions) {
          std::vector<llvm::Type*> paramTypes;
          for (const auto& arg : fun.args) {
