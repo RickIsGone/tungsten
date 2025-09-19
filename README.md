@@ -13,7 +13,7 @@ by C++ and Java
 
 Below is a snippet of code which shows some of the basic functionalities of tungsten
 
-```c++
+<!-- ```c++
 import stdio;
 Uint fibonacci(Uint num) {
     if (num <= 1) return num;
@@ -25,6 +25,20 @@ Int main(String[] args) {
         print("${}, ", fibonacci(i));
     }
     return 0;
+}
+``` -->
+
+```c++
+// import stdio;
+Num fibonacci(Num num) {
+   if (num <= 1) 
+      return num;
+   return fibonacci(num - 1) + fibonacci(num - 2);
+}
+
+Num main() {
+   Num a = fibonacci(10);
+   return CodeSuccess;
 }
 ```
 
@@ -114,7 +128,7 @@ cmake --build build --config Release
 
 Types follow the ***PascalCase*** convention, they are:
 
-| Type      | Alignment (Bytes) |
+<!-- | Type      | Alignment (Bytes) |
 |-----------|-------------------|
 | `Void`    | N/A               |
 | `Int`     | 4                 |
@@ -133,16 +147,25 @@ Types follow the ***PascalCase*** convention, they are:
 | `Uint16`  | 2                 |
 | `Uint32`  | 4                 |
 | `Uint64`  | 8                 |
-| `Uint128` | 16                |
+| `Uint128` | 16                | -->
+
+| Type     | Alignment (Bytes) |
+|----------|-------------------|
+| `Void`   | N/A               |
+| `Double` | 8                 |
+| `Char`   | 2                 |
+| `Bool`   | 1                 |
+| `String` | N/A               |
+| `Num`    | 4                 |
 
 ### Stack allocation
 
 ```c++
-Int myVariable = 247;
-Int myVariable{247};
+Num myVariable = 247;
+Num myVariable{247};
 ```
 
-### Heap allocation
+<!-- ### Heap allocation
 
 ```c++
 Int* myPointer = new Int{247};
@@ -175,7 +198,7 @@ To free the array:
 
 ```c++
 free[] myArray;
-```
+``` -->
 
 ## Control flow statements
 
@@ -226,7 +249,7 @@ do {
 For statements just like while statements require brackets to work
 
 ```Java
-for(Uint64 i; i < 10; ++i) {
+for(Num i = 0; i < 10; ++i) {
     // do stuff
 }
 ```
@@ -236,12 +259,12 @@ for(Uint64 i; i < 10; ++i) {
 Just like in C++, functions are declared like this:
 
 ```c++
-Int myFunction() {
+Num myFunction() {
     return 247;
 }
 ```
 
-You can return arrays by doing:
+<!-- You can return arrays by doing:
 
 ```c++
 Int[] myfunction() {
@@ -257,7 +280,7 @@ Int* myFunction() {
     Int* array = new Int[3]{2, 4, 7};
     return array;
 }
-```
+``` -->
 
 ### Main Function
 
@@ -265,12 +288,13 @@ The `main` function can return either `Int` or `Int32`. Command line arguments a
 If no return value is provided, `0` will be returned by default.
 
 ```c++
-Int main(String[] args) {
+Num main() {
     /* your code */
-    return 0;
+    return CodeSuccess;
 }
 ```
 
+<!-- 
 If you don't need the command-line arguments, you can simply omit them:
 
 ```c++
@@ -278,7 +302,7 @@ Int main() {
     /* your code */
     return 0;
 }
-```
+``` -->
 
 ## Building a project
 
@@ -293,6 +317,9 @@ tungsten <file> [flags]
 ```
 
 ### Compiling via buildsystem
+
+> [!IMPORTANT]
+> Not added yet
 
 A simple project's build file will look something like this:
 
@@ -319,7 +346,7 @@ After compiling the file, the compiler will automatically execute the `build` ex
 following the rules set by the `build.tgs` file.  
 The build output will then be put into the `projectDirectory/build` directory
 
-# TPKG
+<!-- # TPKG
 
 tpkg is the package manager included with the *Tungsten programming language*
 
@@ -347,7 +374,7 @@ package files are written in **json**, and a simple package file looks like this
     ]
   }
 }
-```
+``` -->
 
 # License
 
