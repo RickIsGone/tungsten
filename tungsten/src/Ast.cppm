@@ -142,14 +142,17 @@ namespace tungsten {
    std::string getTypeString(llvm::Value* val) {
       return mapLLVMTypeToCustomType(val->getType());
    }
+
 } // namespace tungsten
 
 export namespace tungsten {
+   void addCoreLibFunctions();
    void initLLVM(const std::string& moduleName, const std::string& fileName) {
       TheContext = std::make_unique<llvm::LLVMContext>();
       Builder = std::make_unique<llvm::IRBuilder<>>(*TheContext);
       TheModule = std::make_unique<llvm::Module>(moduleName, *TheContext);
       TheModule->setSourceFileName(fileName);
+      addCoreLibFunctions();
    }
    void dumpIR() {
       llvm::verifyModule(*TheModule, &llvm::outs());
@@ -190,7 +193,8 @@ export namespace tungsten {
       virtual void visit(class BlockStatementAST&) = 0;
       virtual void visit(class ReturnStatementAST&) = 0;
       virtual void visit(class ExitStatement&) = 0;
-      virtual void visit(class ExternStatementAST&) = 0;
+      virtual void visit(class ExternFunctionStatementAST&) = 0;
+      virtual void visit(class ExternVariableStatementAST&) = 0;
       virtual void visit(class NamespaceAST&) = 0;
       virtual void visit(class ImportStatementAST&) = 0;
 
@@ -253,7 +257,8 @@ export namespace tungsten {
       BlockStatement,
       ReturnStatement,
       ExitStatement,
-      ExternStatement,
+      ExternFunctionStatement,
+      ExternVariableStatement,
       Namespace,
       ImportStatement,
       FunctionPrototype,
@@ -639,6 +644,7 @@ export namespace tungsten {
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::StringExpression; }
+      _NODISCARD const std::string& value() const { return _value; }
 
    private:
       std::string _value{};
@@ -975,24 +981,37 @@ export namespace tungsten {
          }
          return result;
       }
+      void setExternC(bool c) { _isExternC = c; }
 
    private:
       std::shared_ptr<Type> _type;
       std::string _name;
+      bool _isExternC;
       std::vector<std::unique_ptr<ExpressionAST>> _args;
    };
 
    // expression for external function declarations
-   class ExternStatementAST : public ExpressionAST {
+   class ExternFunctionStatementAST : public ExpressionAST {
    public:
-      ExternStatementAST(std::unique_ptr<FunctionPrototypeAST> value) : _value{std::move(value)} {}
+      ExternFunctionStatementAST(std::unique_ptr<FunctionPrototypeAST> fun) : _fun{std::move(fun)} {}
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
-      _NODISCARD ASTType astType() const noexcept override { return ASTType::ExternStatement; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::ExternFunctionStatement; }
 
    private:
-      std::unique_ptr<FunctionPrototypeAST> _value;
+      std::unique_ptr<FunctionPrototypeAST> _fun;
+   };
+   class ExternVariableStatementAST : public ExpressionAST {
+   public:
+      ExternVariableStatementAST(std::unique_ptr<ExpressionAST> var) : _var{std::move(var)} {}
+      llvm::Value* codegen() override;
+
+      void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::ExternVariableStatement; }
+
+   private:
+      std::unique_ptr<ExpressionAST> _var;
    };
 
    // function definition itself
@@ -1125,9 +1144,31 @@ export namespace tungsten {
    private:
       std::string _module;
    };
+} // namespace tungsten
 
-   //  ========================================== implementation ==========================================
+namespace tungsten {
+   struct CoreFun {
+      llvm::Type* type;
+      std::string name;
+      std::vector<llvm::Type*> args;
+   };
 
+   void addCoreLibFunctions() {
+      const std::array coreFunctions = {CoreFun{llvm::Type::getDoubleTy(*TheContext), "shell", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()}}};
+      for (auto& fun : coreFunctions) {
+         std::vector<llvm::Type*> paramTypes;
+         for (const auto& arg : fun.args) {
+            paramTypes.push_back(arg);
+         }
+         llvm::FunctionType* functionType = llvm::FunctionType::get(fun.type, paramTypes, false);
+
+         llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, fun.name, TheModule.get());
+      }
+   }
+} // namespace tungsten
+
+//  ========================================== implementation ==========================================
+export namespace tungsten {
    llvm::Value* NumberExpressionAST::codegen() { // TODO: fix
       switch (_Type->kind()) {
          case TypeKind::Double:
@@ -1273,8 +1314,8 @@ export namespace tungsten {
    llvm::Value* VariableDeclarationAST::codegen() {
       llvm::Type* type = _Type->llvmType();
       if (_isGlobal) {
+         return nullptr;
       }
-
       llvm::Function* function = Builder->GetInsertBlock()->getParent();
       llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
       llvm::AllocaInst* allocInstance = tmpBuilder.CreateAlloca(type, nullptr, _name);
@@ -1299,6 +1340,9 @@ export namespace tungsten {
          name += "$" + fullTypeString(arg->type());
       }
       llvm::Function* callee = TheModule->getFunction(name);
+
+      if (!callee)
+         callee = TheModule->getFunction(_callee); // for extern functions ex. shell$String doesn't exist -> shell exists
 
       std::vector<llvm::Value*> args;
       std::string argsTypes;
@@ -1387,9 +1431,29 @@ export namespace tungsten {
       return last;
    }
 
-   llvm::Value* ExternStatementAST::codegen() {
+   llvm::Value* ExternVariableStatementAST::codegen() {
       return nullptr;
    }
+   llvm::Value* ExternFunctionStatementAST::codegen() {
+      if (auto* existing = TheModule->getFunction(_fun->name()))
+         return existing;
+
+      std::vector<llvm::Type*> paramTypes;
+      for (const auto& arg : _fun->args()) {
+         paramTypes.push_back(arg->type()->llvmType());
+      }
+
+      llvm::FunctionType* functionType = llvm::FunctionType::get(_fun->type()->llvmType(), paramTypes, false);
+
+      llvm::Function* function = llvm::Function::Create(
+          functionType,
+          llvm::Function::ExternalLinkage,
+          _fun->name(),
+          TheModule.get());
+
+      return function;
+   }
+
    llvm::Value* ReturnStatementAST::codegen() {
       if (_value == nullptr)
          return Builder->CreateRetVoid();
@@ -1584,10 +1648,13 @@ export namespace tungsten {
    }
 
    llvm::Function* FunctionPrototypeAST::codegen() {
-      std::string name = _name == "main" ? _name : mangledName();
+      std::string name;
+      if (_name == "main" || _isExternC)
+         name = _name;
+      else
+         name = mangledName();
 
-      if (auto* existing = TheModule->getFunction(name))
-         return existing;
+      if (auto* existing = TheModule->getFunction(name)) return existing;
 
       std::vector<llvm::Type*> paramTypes;
       for (const auto& arg : _args) {

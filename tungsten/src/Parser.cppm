@@ -64,10 +64,15 @@ namespace tungsten {
    export struct Externs {
       std::vector<std::unique_ptr<FunctionPrototypeAST>> functions;
       std::vector<std::unique_ptr<ExpressionAST>> variables;
-   } export class Parser {
+   };
+
+   export class Parser {
    public:
       Parser(const std::filesystem::path& file, const std::vector<Token>& tokens, const std::string& raw)
-          : _filePath{file}, _tokens{tokens}, _raw{raw} { initLLVM(file.filename().stem().string(), file.filename().string()); }
+          : _filePath{file}, _tokens{tokens}, _raw{raw} {
+         initLLVM(file.filename().stem().string(), file.filename().string());
+         _externs = std::make_unique<Externs>();
+      }
       Parser() = delete;
       ~Parser() { dumpIR(); }
       Parser(const Parser&) = delete;
@@ -78,7 +83,7 @@ namespace tungsten {
       _NODISCARD std::vector<std::unique_ptr<FunctionAST>>& functions() { return _functions; }
       _NODISCARD std::vector<std::unique_ptr<ClassAST>>& classes() { return _classes; }
       _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& globalVariables() { return _globalVariables; }
-      _NODISCARD std::unique_ptr<Externs> externs() { return std::move(_externs); }
+      _NODISCARD std::unique_ptr<Externs>& externs() { return _externs; }
 
    private:
       _NODISCARD Token _peek(size_t offset = 0) const;
@@ -100,7 +105,7 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parseStringExpression();
       std::unique_ptr<ExpressionAST> _parseFunctionCall();
       std::unique_ptr<FunctionPrototypeAST> _parseExternFunctionStatement();
-      std::unique_ptr<ExpressionAST> _parseExternVariableStatement();
+      // std::unique_ptr<ExpressionAST> _parseExternVariableStatement();
       std::unique_ptr<ExpressionAST> _parseReturnStatement();
       std::unique_ptr<ExpressionAST> _parseExitStatement();
       std::unique_ptr<ExpressionAST> _parseExpression();
@@ -227,18 +232,17 @@ namespace tungsten {
                _consume(); // consume ';'
                expr->codegen();
                break;
-            case TokenType::Extern: {
-               std::unique_ptr<FunctionPrototypeAST> proto;
-               if (_peek(3).type == TokenType::OpenParen)
-                  _externs->variables.push_back(_parseExternVariableStatement());
-               else
-                  _externs->functions.push_back(_parseExternFunctionStatement());
+            case TokenType::Extern:
+               // std::unique_ptr<FunctionPrototypeAST> proto;
+               // if (_peek(3).type == TokenType::OpenParen)
+               //    _externs->variables.push_back(_parseExternVariableStatement());
+               // else
+               _externs->functions.push_back(_parseExternFunctionStatement());
 
                if (_peek().type != TokenType::Semicolon)
                   _logError("expected ';' after extern statement");
                _consume(); // consume ';'
                break;
-            }
             case TokenType::Num:
             case TokenType::Int:
             case TokenType::Int8:
@@ -508,16 +512,27 @@ namespace tungsten {
 
    std::unique_ptr<FunctionPrototypeAST> Parser::_parseExternFunctionStatement() {
       _consume(); // consume extern
-      return _parseFunctionPrototype();
+      bool C = false;
+      if (_peek().type == TokenType::StringLiteral) {
+         auto str = _parseStringExpression();
+         if (!str)
+            return nullptr;
+         if (static_cast<StringExpression*>(str.get())->value() != "C")
+            return _logError<FunctionPrototypeAST>("invalid extern function type");
+         C = true;
+      }
+      auto proto = _parseFunctionPrototype();
+      proto->setExternC(C);
+      return std::move(proto);
    }
-   std::unique_ptr<ExpressionAST> Parser::_parseExternVariableStatement() {
-      _consume(); // consume extern
-      auto ext = _parseVariableDeclaration();
-      if (static_cast<VariableDeclarationAST*>(ext.get())->initializer())
-         return _logError("cannot initialize an extern variable");
-      // TODO: set _isGlobal to true
-      return std::move(ext);
-   }
+   // std::unique_ptr<ExpressionAST> Parser::_parseExternVariableStatement() {
+   //    _consume(); // consume extern
+   //    auto ext = _parseVariableDeclaration();
+   //    if (ext)
+   //       return std::make_unique<ExternVariableStatementAST>(std::move(ext));
+   //    // TODO: set _isGlobal to true
+   //    return std::move(ext);
+   // }
 
    std::unique_ptr<ExpressionAST> Parser::_parseReturnStatement() {
       _consume(); // consume return

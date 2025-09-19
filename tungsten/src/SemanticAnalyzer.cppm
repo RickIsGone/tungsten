@@ -20,7 +20,7 @@ namespace tungsten {
    using Scope = std::unordered_map<std::string, std::shared_ptr<Type>>;
    struct Overload {
       std::shared_ptr<Type> type;
-      std::vector<std::pair<std::string, std::shared_ptr<Type>>> args;
+      std::vector<std::shared_ptr<Type>> args;
    };
    constexpr size_t GlobalScope = 0;
 
@@ -59,7 +59,8 @@ namespace tungsten {
       void visit(BlockStatementAST&) override;
       void visit(ReturnStatementAST&) override;
       void visit(ExitStatement&) override;
-      void visit(ExternStatementAST&) override {}
+      void visit(ExternFunctionStatementAST&) override;
+      void visit(ExternVariableStatementAST&) override {}
       void visit(NamespaceAST&) override {}
       void visit(ImportStatementAST&) override {}
 
@@ -106,6 +107,7 @@ namespace tungsten {
    //  ========================================== implementation ==========================================
 
    bool SemanticAnalyzer::analyze() {
+      _declaredFunctions["shell"] = {{makeDouble(), std::vector{makeString()}}};
       for (auto& var : _externs->variables) {
          if (var)
             var->accept(*this);
@@ -251,6 +253,11 @@ namespace tungsten {
       _scopes.pop_back();
       --_currentScope;
    }
+   void SemanticAnalyzer::visit(ExternFunctionStatementAST& fun) {
+      fun.accept(*this);
+   }
+   // void SemanticAnalyzer::visit(ExternVariableStatementAST& fun) {
+   // }
 
    void SemanticAnalyzer::visit(FunctionPrototypeAST& proto) {
       if (_scopes.at(GlobalScope).contains(proto.name()) || _isClass(proto.name()))
@@ -264,14 +271,14 @@ namespace tungsten {
       for (auto& arg : proto.args()) {
          auto cast = static_cast<VariableDeclarationAST*>(arg.get());
          cast->accept(*this);
-         over.args.push_back({cast->name(), cast->type()});
+         over.args.push_back(cast->type());
       }
       auto& overloads = _declaredFunctions[proto.name()];
 
       auto sameSignature = [&](const Overload& o) {
          if (o.args.size() != over.args.size()) return false;
          for (size_t i = 0; i < o.args.size(); i++) {
-            if (fullTypeString(o.args[i].second) != fullTypeString(over.args[i].second))
+            if (fullTypeString(o.args[i]) != fullTypeString(over.args[i]))
                return false;
          }
          return true;
@@ -279,7 +286,7 @@ namespace tungsten {
       auto sameParams = [&](const Overload& o) {
          if (o.args.size() != over.args.size()) return false;
          for (size_t i = 0; i < o.args.size(); i++) {
-            if (fullTypeString(o.args[i].second) != fullTypeString(over.args[i].second))
+            if (fullTypeString(o.args[i]) != fullTypeString(over.args[i]))
                return false;
          }
          return true;
@@ -336,7 +343,7 @@ namespace tungsten {
             over.type = fun->type();
             for (auto& arg : fun->args()) {
                auto cast = static_cast<VariableDeclarationAST*>(arg.get());
-               over.args.push_back({cast->name(), cast->type()});
+               over.args.push_back(cast->type());
             }
             overloads.push_back(over);
          }
@@ -356,7 +363,7 @@ namespace tungsten {
             continue;
          bool match = true;
          for (size_t i = 0; i < call.args().size(); ++i) {
-            if (fullTypeString(call.args()[i]->type()) != fullTypeString(overload.args[i].second)) {
+            if (fullTypeString(call.args()[i]->type()) != fullTypeString(overload.args[i])) {
                match = false;
                break;
             }
@@ -544,6 +551,8 @@ namespace tungsten {
       return false;
    }
    bool SemanticAnalyzer::_isFunction(const std::string& fn) {
+      if (_declaredFunctions.contains(fn))
+         return true;
       for (auto& fun : _functions) {
          if (fun->name() == fn)
             return true;

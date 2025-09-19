@@ -1,15 +1,14 @@
 #include <cstdlib>
 // core tungsten functions
 
-extern "C" int shell(const unsigned char* command) {
+extern "C" double shell(char* command) {
    if (!command)
       return -1;
 
-   int result = system(reinterpret_cast<const char*>(command));
+   int result = system(command);
 #ifdef _WIN32
    return result;
 #else
    return WEXITSTATUS(result);
 #endif
 }
-
