@@ -1,7 +1,9 @@
 #include <cstdlib>
+#include <cstdio>
 // core tungsten functions
 
-extern "C" double shell(char* command) {
+extern "C" {
+double shell(char* command) {
    if (!command)
       return -1;
 
@@ -11,4 +13,11 @@ extern "C" double shell(char* command) {
 #else
    return WEXITSTATUS(result);
 #endif
+}
+
+void print(char* str) {
+   if (!str)
+      return;
+   printf("%s", str);
+}
 }

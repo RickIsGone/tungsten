@@ -108,6 +108,7 @@ namespace tungsten {
 
    bool SemanticAnalyzer::analyze() {
       _declaredFunctions["shell"] = {{makeDouble(), std::vector{makeString()}}};
+      _declaredFunctions["print"] = {{makeVoid(), std::vector{makeString()}}};
       for (auto& var : _externs->variables) {
          if (var)
             var->accept(*this);
