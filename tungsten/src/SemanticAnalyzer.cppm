@@ -27,8 +27,10 @@ namespace tungsten {
    export class SemanticAnalyzer : public ASTVisitor {
    public:
       SemanticAnalyzer(std::vector<std::unique_ptr<FunctionAST>>& functions,
-                       std::vector<std::unique_ptr<ClassAST>>& classes, std::vector<std::unique_ptr<ExpressionAST>>& globVars)
-          : _functions{functions}, _classes{classes}, _globalVariables{globVars} { _scopes.push_back({}); }
+                       std::vector<std::unique_ptr<ClassAST>>& classes,
+                       std::vector<std::unique_ptr<ExpressionAST>>& globVars,
+                       std::unique_ptr<Externs>& externs)
+          : _functions{functions}, _classes{classes}, _globalVariables{globVars}, _externs{externs} { _scopes.push_back({}); }
       SemanticAnalyzer operator=(SemanticAnalyzer&) = delete;
       SemanticAnalyzer(SemanticAnalyzer&) = delete;
 
@@ -93,6 +95,8 @@ namespace tungsten {
       std::vector<std::unique_ptr<FunctionAST>>& _functions;
       std::vector<std::unique_ptr<ClassAST>>& _classes;
       std::vector<std::unique_ptr<ExpressionAST>>& _globalVariables;
+      std::unique_ptr<Externs>& _externs;
+
       std::vector<Scope> _scopes{};
       std::unordered_map<std::string, std::vector<Overload>> _declaredFunctions{};
       size_t _currentScope{GlobalScope};
@@ -102,6 +106,18 @@ namespace tungsten {
    //  ========================================== implementation ==========================================
 
    bool SemanticAnalyzer::analyze() {
+      for (auto& var : _externs->variables) {
+         if (var)
+            var->accept(*this);
+         else
+            _hasErrors = true;
+      }
+      for (auto& fun : _externs->functions) {
+         if (fun)
+            fun->accept(*this);
+         else
+            _hasErrors = true;
+      }
       for (auto& var : _globalVariables) {
          if (var)
             var->accept(*this);

@@ -61,7 +61,10 @@ namespace tungsten {
        {TokenType::Dot, 1}, // class.member
        {TokenType::Arrow, 1}}; // class->member
 
-   export class Parser {
+   export struct Externs {
+      std::vector<std::unique_ptr<FunctionPrototypeAST>> functions;
+      std::vector<std::unique_ptr<ExpressionAST>> variables;
+   } export class Parser {
    public:
       Parser(const std::filesystem::path& file, const std::vector<Token>& tokens, const std::string& raw)
           : _filePath{file}, _tokens{tokens}, _raw{raw} { initLLVM(file.filename().stem().string(), file.filename().string()); }
@@ -75,6 +78,7 @@ namespace tungsten {
       _NODISCARD std::vector<std::unique_ptr<FunctionAST>>& functions() { return _functions; }
       _NODISCARD std::vector<std::unique_ptr<ClassAST>>& classes() { return _classes; }
       _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& globalVariables() { return _globalVariables; }
+      _NODISCARD std::unique_ptr<Externs> externs() { return std::move(_externs); }
 
    private:
       _NODISCARD Token _peek(size_t offset = 0) const;
@@ -133,6 +137,7 @@ namespace tungsten {
       const std::vector<Token> _tokens{};
       const std::string& _raw;
 
+      std::unique_ptr<Externs> _externs;
       std::vector<std::unique_ptr<FunctionAST>> _functions;
       std::vector<std::unique_ptr<ClassAST>> _classes;
       std::vector<std::unique_ptr<ExpressionAST>> _globalVariables;
@@ -224,13 +229,11 @@ namespace tungsten {
                break;
             case TokenType::Extern: {
                std::unique_ptr<FunctionPrototypeAST> proto;
-               if (_peek(3).type == TokenType::OpenParen) {
-                  expr = _parseExternVariableStatement();
-                  expr->codegen();
-               } else {
-                  proto = _parseExternFunctionStatement();
-                  proto->codegen();
-               }
+               if (_peek(3).type == TokenType::OpenParen)
+                  _externs->variables.push_back(_parseExternVariableStatement());
+               else
+                  _externs->functions.push_back(_parseExternFunctionStatement());
+
                if (_peek().type != TokenType::Semicolon)
                   _logError("expected ';' after extern statement");
                _consume(); // consume ';'
@@ -512,7 +515,7 @@ namespace tungsten {
       auto ext = _parseVariableDeclaration();
       if (static_cast<VariableDeclarationAST*>(ext.get())->initializer())
          return _logError("cannot initialize an extern variable");
-
+      // TODO: set _isGlobal to true
       return std::move(ext);
    }
 
@@ -945,7 +948,7 @@ namespace tungsten {
             // }
          }
 
-         return std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr));
+         return std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr), true);
       }
 
       std::vector<std::unique_ptr<ExpressionAST>> args;

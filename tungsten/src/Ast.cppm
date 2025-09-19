@@ -683,17 +683,19 @@ export namespace tungsten {
 
    class VariableDeclarationAST : public ExpressionAST {
    public:
-      VariableDeclarationAST(std::shared_ptr<Type> type, const std::string& name, std::unique_ptr<ExpressionAST> init)
-          : _name{name}, _init{std::move(init)} { _Type = type; }
+      VariableDeclarationAST(std::shared_ptr<Type> type, const std::string& name, std::unique_ptr<ExpressionAST> init, bool isGlobal = false)
+          : _name{name}, _init{std::move(init)}, _isGlobal{isGlobal}, ExpressionAST{type} {}
       llvm::Value* codegen() override;
 
       _NODISCARD const std::string& name() const { return _name; }
       _NODISCARD std::unique_ptr<ExpressionAST>& initializer() { return _init; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
+
       _NODISCARD ASTType astType() const noexcept override { return ASTType::VariableDeclaration; }
 
    private:
       std::string _name;
+      bool _isGlobal;
       std::unique_ptr<ExpressionAST> _init;
    };
 
@@ -1270,6 +1272,8 @@ export namespace tungsten {
 
    llvm::Value* VariableDeclarationAST::codegen() {
       llvm::Type* type = _Type->llvmType();
+      if (_isGlobal) {
+      }
 
       llvm::Function* function = Builder->GetInsertBlock()->getParent();
       llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());

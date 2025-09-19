@@ -77,6 +77,7 @@ namespace tungsten {
       ShiftRightEqual,
 
       // types
+      ArgPack,
       Num,
       Auto,
       Int,
@@ -169,6 +170,7 @@ namespace tungsten {
        // {"alias", TokenType::Alias},
 
        // types
+       // {"ArgPack", TokenType::ArgPack},
        {"Num", TokenType::Num},
        // {"Auto", TokenType::Auto},
        // {"Int", TokenType::Int},

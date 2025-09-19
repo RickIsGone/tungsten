@@ -31,8 +31,14 @@ export namespace tungsten {
       Lexer lexer{path, _raw};
       Parser parser{path, lexer.tokenize(), _raw};
       parser.parse();
-      SemanticAnalyzer analyzer{parser.functions(), parser.classes(), parser.globalVariables()};
+      SemanticAnalyzer analyzer{parser.functions(), parser.classes(), parser.globalVariables(), parser.externs()};
       if (analyzer.analyze()) {
+         for (auto& var : parser.externs()->variables) {
+            var->codegen();
+         }
+         for (auto& fun : parser.externs()->functions) {
+            fun->codegen();
+         }
          for (auto& fun : parser.functions()) {
             fun->prototype()->codegen(); // forward declaration
          }
