@@ -731,6 +731,7 @@ namespace tungsten {
          case TokenType::PlusPlus:
          case TokenType::LogicalNot:
          case TokenType::BitwiseAnd:
+         case TokenType::Multiply:
             return _parseUnaryExpression();
 
          default:
@@ -1087,7 +1088,6 @@ namespace tungsten {
       // _symbolTable.insert({name, SymbolType::Variable});
 
       std::unique_ptr<ExpressionAST> initExpr = nullptr;
-
       if (_peek().type == TokenType::Equal) {
          _consume(); // consume '=' / '{'
          initExpr = _parseExpression();
@@ -1096,6 +1096,9 @@ namespace tungsten {
          initExpr = _parseExpression();
          _consume(); // consume '}'
       }
+      if (initExpr) // TODO: allow default values (still have to figure out how to make them initialize at the location where the function is called instead of where it's defined)
+         return _logError<VariableDeclarationAST>("function arguments cannot have an initializer");
+
       return std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr));
    }
 

@@ -501,7 +501,7 @@ export namespace tungsten {
       }
       _NODISCARD std::shared_ptr<Type>& pointee() { return _pointee; }
       _NODISCARD llvm::Type* llvmType() const override {
-         return Builder->getPtrTy();
+         return _pointee->llvmType()->getPointerTo();
       }
 
    private:
@@ -1204,8 +1204,6 @@ export namespace tungsten {
 
    llvm::Value* VariableExpressionAST::codegen() {
       llvm::Value* V = NamedValues[_name];
-      if (!V)
-         return LogErrorV("unknown variable '" + _name + "'");
       return V;
    }
 
@@ -1252,9 +1250,11 @@ export namespace tungsten {
 
          return LogErrorV("unsupported type for logical not operation");
       }
-      if (_op == "&") {
+      if (_op == "&")
          return operandValue;
-      }
+      if (_op == "*")
+         return Builder->CreateLoad(_Type->llvmType(), operandValue, "deref");
+
       if (operandType->isIntegerTy())
          return Builder->CreateNeg(operandValue, "negtmp");
       if (operandType->isFloatingPointTy())
@@ -1466,7 +1466,7 @@ export namespace tungsten {
    }
 
    llvm::Value* BlockStatementAST::codegen() {
-      llvm::Value* last = nullptr;
+      llvm::Value* last = llvm::Constant::getNullValue(llvm::Type::getInt8Ty(*TheContext)); // to avoid empty functions from getting recognized as wrong
       for (const auto& statement : _statements) {
          last = statement->codegen();
          if (!last) {
@@ -1511,8 +1511,6 @@ export namespace tungsten {
    }
    llvm::Value* ExitStatement::codegen() {
       llvm::Value* exitValue = _value->codegen();
-      if (!exitValue)
-         return LogErrorV("exit statement requires a value");
 
       llvm::Function* exitFunc = TheModule->getFunction("exit");
       if (!exitFunc) {
@@ -1733,7 +1731,7 @@ export namespace tungsten {
       size_t idx = 0;
       for (auto& arg : function->args()) {
          auto* varDecl = static_cast<VariableDeclarationAST*>(_prototype->args()[idx].get());
-         llvm::IRBuilder<> tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
+         llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
          llvm::AllocaInst* alloca = tmpBuilder.CreateAlloca(arg.getType(), nullptr, varDecl->name());
          Builder->CreateStore(&arg, alloca);
          NamedValues[varDecl->name()] = alloca;
@@ -1742,7 +1740,7 @@ export namespace tungsten {
       }
 
       if (!_body || !_body->codegen()) {
-         function->eraseFromParent();
+         // function->eraseFromParent();
          return LogErrorF("error in function: '" + name() + "'");
       }
 

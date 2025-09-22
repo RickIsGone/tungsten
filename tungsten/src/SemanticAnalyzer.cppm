@@ -207,6 +207,13 @@ namespace tungsten {
             return _logError("cannot use operator '{}' on non-variable expression", op.op());
          op.setType(makePointer(op.operand()->type()));
       }
+      if (op.op() == "*") {
+         if (op.operand()->astType() != ASTType::VariableExpression)
+            return _logError("cannot use operator '{}' on non-variable expression", op.op());
+         if (op.operand()->type()->kind() != TypeKind::Pointer)
+            return _logError("cannot dereference non-pointer type '{}'", fullTypeString(op.operand()->type()));
+         op.setType(static_cast<PointerTy*>(op.operand()->type().get())->pointee());
+      }
       // if (op.operand()->astType() !=)
    }
 
