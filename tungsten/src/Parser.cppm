@@ -122,7 +122,7 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parseStaticCast();
       std::unique_ptr<ExpressionAST> _parseConstCast();
       std::unique_ptr<ExpressionAST> _parseVariableDeclaration();
-      std::variant<std::unique_ptr<VariableDeclarationAST>, std::unique_ptr<FunctionAST>> _parseVariableorFunctionDeclaration();
+      std::variant<std::unique_ptr<VariableDeclarationAST>, std::unique_ptr<FunctionAST>> _parseVariableOrFunctionDeclaration();
       std::unique_ptr<ExpressionAST> _parseArgument();
       std::unique_ptr<BlockStatementAST> _parseBlock();
       std::unique_ptr<FunctionPrototypeAST> _parseFunctionPrototype();
@@ -263,7 +263,7 @@ namespace tungsten {
             case TokenType::String:
             case TokenType::Void:
             case TokenType::Identifier: {
-               auto expr = _parseVariableorFunctionDeclaration();
+               auto expr = _parseVariableOrFunctionDeclaration();
                if (std::holds_alternative<std::unique_ptr<VariableDeclarationAST>>(expr)) {
                   if (_peek().type != TokenType::Semicolon)
                      _logError("expected ';' after variable declaration");
@@ -479,10 +479,84 @@ namespace tungsten {
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseStringExpression() {
-      std::string string = _lexeme(_peek());
-      string = string.substr(1, string.size() - 2); // remove quotes
+      std::string str = _lexeme(_peek());
+      str = str.substr(1, str.size() - 2); // remove quotes
       _consume();
-      return std::make_unique<StringExpression>(string);
+
+      std::string result;
+      result.reserve(str.size());
+
+      for (size_t i = 0; i < str.size(); ++i) {
+         if (str[i] == '\\' && i + 1 < str.size()) {
+            ++i;
+            switch (str[i]) {
+               case 'n':
+                  result.push_back('\n');
+                  break;
+               case 't':
+                  result.push_back('\t');
+                  break;
+               case 'r':
+                  result.push_back('\r');
+                  break;
+               case '"':
+                  result.push_back('\"');
+                  break;
+               case '\'':
+                  result.push_back('\'');
+                  break;
+               case '\\':
+                  result.push_back('\\');
+                  break;
+               case '0':
+                  result.push_back('\0');
+                  break;
+
+               case 'x': // hex \xHH
+                  if (i + 2 < str.size()) {
+                     std::string hex = str.substr(i + 1, 2);
+                     char c = static_cast<char>(std::stoi(hex, nullptr, 16));
+                     result.push_back(c);
+                     i += 2;
+                  } else
+                     return _logError<StringExpression>("Invalid hex escape sequence");
+                  break;
+
+               case 'u': // unicode \uHHHH
+                  if (i + 4 < str.size()) {
+                     std::string hex = str.substr(i + 1, 4);
+                     unsigned int codepoint = std::stoi(hex, nullptr, 16);
+                     if (codepoint <= 0x7F)
+                        result.push_back(static_cast<char>(codepoint));
+                     else if (codepoint <= 0x7FF) {
+                        result.push_back(static_cast<char>(0xC0 | ((codepoint >> 6) & 0x1F)));
+                        result.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+                     } else if (codepoint <= 0xFFFF) {
+                        result.push_back(static_cast<char>(0xE0 | ((codepoint >> 12) & 0x0F)));
+                        result.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+                        result.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+                     } else if (codepoint <= 0x10FFFF) {
+                        result.push_back(static_cast<char>(0xF0 | ((codepoint >> 18) & 0x07)));
+                        result.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+                        result.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+                        result.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+                     } else
+                        return _logError<StringExpression>("Unicode codepoint out of range");
+                     i += 4;
+                  } else
+                     return _logError<StringExpression>("Invalid unicode escape sequence");
+                  break;
+
+               default:
+                  result.push_back('\\');
+                  result.push_back(str[i]);
+                  break;
+            }
+         } else
+            result.push_back(str[i]);
+      }
+
+      return std::make_unique<StringExpression>(result);
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseFunctionCall() {
@@ -820,6 +894,9 @@ namespace tungsten {
       std::shared_ptr<Type> type;
       switch (baseType.type) {
          using enum TokenType;
+         case ArgPack:
+            type = makeArgPack();
+            break;
          case Num:
             type = makeDouble();
             break;
@@ -882,6 +959,8 @@ namespace tungsten {
             return nullptr;
       };
       _consume(); // consume type
+      if (type->kind() == TypeKind::ArgPack)
+         return type;
       while (_peek().type == TokenType::Multiply || _peek().type == TokenType::OpenBracket) {
          switch (_peek().type) {
             case TokenType::Multiply:
@@ -937,8 +1016,10 @@ namespace tungsten {
       return std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr));
    }
 
-   std::variant<std::unique_ptr<VariableDeclarationAST>, std::unique_ptr<FunctionAST>> Parser::_parseVariableorFunctionDeclaration() {
+   std::variant<std::unique_ptr<VariableDeclarationAST>, std::unique_ptr<FunctionAST>> Parser::_parseVariableOrFunctionDeclaration() {
       std::shared_ptr<Type> type = _parseType();
+      if (type->kind() == TypeKind::ArgPack)
+         return _logError<VariableDeclarationAST>("variadic arguments are not allowed as type");
 
       if (_peek().type != TokenType::Identifier)
          return _logError<VariableDeclarationAST>("expected an identifier after type in variable declaration but got: '" + _lexeme(_peek()) + "'");
@@ -971,6 +1052,8 @@ namespace tungsten {
       _consume(); // consumes (
       while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile) {
          args.push_back(_parseArgument());
+         if (args.back()->type()->kind() == TypeKind::ArgPack)
+            break;
          if (_peek().type == TokenType::Comma)
             _consume(); // consume ,
       }
@@ -991,6 +1074,8 @@ namespace tungsten {
 
    std::unique_ptr<ExpressionAST> Parser::_parseArgument() {
       std::shared_ptr<Type> type = _parseType();
+      if (type->kind() == TypeKind::ArgPack)
+         return std::make_unique<VariableDeclarationAST>(type, "", nullptr);
 
       std::string name = _lexeme(_peek());
       _consume(); // consume identifier
@@ -1044,6 +1129,8 @@ namespace tungsten {
 
    std::unique_ptr<FunctionPrototypeAST> Parser::_parseFunctionPrototype() {
       std::shared_ptr<Type> type = _parseType();
+      if (type->kind() == TypeKind::ArgPack)
+         return _logError<FunctionPrototypeAST>("variadic arguments are not allowed as return type");
       std::string name = _lexeme(_peek());
       _consume();
       if (_symbolTable.contains(name))

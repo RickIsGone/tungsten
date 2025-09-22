@@ -170,7 +170,7 @@ namespace tungsten {
        // {"alias", TokenType::Alias},
 
        // types
-       // {"ArgPack", TokenType::ArgPack},
+       {"ArgPack", TokenType::ArgPack},
        {"Num", TokenType::Num},
        // {"Auto", TokenType::Auto},
        // {"Int", TokenType::Int},

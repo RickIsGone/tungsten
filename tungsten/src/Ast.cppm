@@ -229,6 +229,8 @@ export namespace tungsten {
       Array,
       Class,
 
+      ArgPack,
+
       Null
    };
 
@@ -528,6 +530,18 @@ export namespace tungsten {
       std::unique_ptr<ExpressionAST> _arraySize;
    };
 
+   class ArgPackTy : public Type {
+      _NODISCARD TypeKind kind() const noexcept override {
+         return TypeKind::ArgPack;
+      }
+      _NODISCARD const std::string string() const override {
+         return "ArgPack";
+      }
+      _NODISCARD llvm::Type* llvmType() const override {
+         return nullptr;
+      }
+   };
+
    class ClassTy : public Type {
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Class;
@@ -571,6 +585,7 @@ export namespace tungsten {
    inline std::shared_ptr<Type> makeClass() { return std::make_shared<ClassTy>(); }
    inline std::shared_ptr<Type> makePointer(std::shared_ptr<Type> pt) { return std::make_shared<PointerTy>(std::move(pt)); }
    inline std::shared_ptr<Type> makeArray(std::shared_ptr<Type> pt, std::unique_ptr<ExpressionAST> size) { return std::make_shared<ArrayTy>(std::move(pt), std::move(size)); }
+   inline std::shared_ptr<Type> makeArgPack() { return std::make_shared<ArgPackTy>(); }
    inline std::shared_ptr<Type> makeNullType() { return std::make_shared<NullTy>(); }
 
    std::string fullTypeString(const std::shared_ptr<Type>& ty) {
@@ -1157,13 +1172,18 @@ namespace tungsten {
       const std::array coreFunctions = {
           CoreFun{llvm::Type::getDoubleTy(*TheContext), "shell", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()}},
           CoreFun{Builder->getVoidTy(), "print", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()}},
-      };
+          CoreFun(Builder->getInt32Ty(), "printf", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()})};
+
       for (auto& fun : coreFunctions) {
          std::vector<llvm::Type*> paramTypes;
          for (const auto& arg : fun.args) {
             paramTypes.push_back(arg);
          }
-         llvm::FunctionType* functionType = llvm::FunctionType::get(fun.type, paramTypes, false);
+         llvm::FunctionType* functionType;
+         if (fun.name == "printf")
+            functionType = llvm::FunctionType::get(fun.type, paramTypes, true);
+         else
+            functionType = llvm::FunctionType::get(fun.type, paramTypes, false);
 
          llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, fun.name, TheModule.get());
       }
@@ -1353,6 +1373,10 @@ export namespace tungsten {
          llvm::Value* argVal = arg->codegen();
          if (!argVal)
             return nullptr;
+
+         if (arg->astType() == ASTType::VariableExpression)
+            argVal = Builder->CreateLoad(arg->type()->llvmType(), argVal);
+
          args.push_back(argVal);
       }
       return Builder->CreateCall(callee, args);
@@ -1660,11 +1684,15 @@ export namespace tungsten {
       if (auto* existing = TheModule->getFunction(name)) return existing;
 
       std::vector<llvm::Type*> paramTypes;
+      bool isVarArgs = false;
       for (const auto& arg : _args) {
-         paramTypes.push_back(arg->type()->llvmType());
+         if (arg->type()->kind() == TypeKind::ArgPack)
+            isVarArgs = true;
+         else
+            paramTypes.push_back(arg->type()->llvmType());
       }
 
-      llvm::FunctionType* functionType = llvm::FunctionType::get(_type->llvmType(), paramTypes, false);
+      llvm::FunctionType* functionType = llvm::FunctionType::get(_type->llvmType(), paramTypes, isVarArgs);
 
       llvm::Function* function = llvm::Function::Create(
           functionType,

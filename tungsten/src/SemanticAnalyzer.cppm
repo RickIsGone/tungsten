@@ -109,6 +109,7 @@ namespace tungsten {
    bool SemanticAnalyzer::analyze() {
       _declaredFunctions["shell"] = {{makeDouble(), std::vector{makeString()}}};
       _declaredFunctions["print"] = {{makeVoid(), std::vector{makeString()}}};
+      _declaredFunctions["printf"] = {{makeInt32(), std::vector{makeString(), makeArgPack()}}};
       for (auto& var : _externs->variables) {
          if (var)
             var->accept(*this);
@@ -360,22 +361,36 @@ namespace tungsten {
 
       bool valid = false;
       for (auto& overload : overloads) {
-         if (overload.args.size() != call.args().size())
-            continue;
-         bool match = true;
-         for (size_t i = 0; i < call.args().size(); ++i) {
-            if (fullTypeString(call.args()[i]->type()) != fullTypeString(overload.args[i])) {
-               match = false;
+         if (overload.args.back()->kind() == TypeKind::ArgPack && call.args().size() >= overload.args.size() - 1) {
+            bool match = true;
+            for (size_t i = 0; i < overload.args.size() - 1; ++i) {
+               if (fullTypeString(call.args()[i]->type()) != fullTypeString(overload.args[i])) {
+                  match = false;
+                  break;
+               }
+            }
+            if (match) {
+               valid = true;
+               call.setType(overload.type);
+               break;
+            }
+         } else {
+            if (call.args().size() != overload.args.size())
+               continue;
+            bool match = true;
+            for (size_t i = 0; i < call.args().size(); ++i) {
+               if (fullTypeString(call.args()[i]->type()) != fullTypeString(overload.args[i])) {
+                  match = false;
+                  break;
+               }
+            }
+            if (match) {
+               valid = true;
+               call.setType(overload.type);
                break;
             }
          }
-         if (match) {
-            valid = true;
-            call.setType(overload.type);
-            break;
-         }
       }
-
       if (!valid) {
          std::string args;
          for (size_t i = 0; i < call.args().size(); ++i) {
@@ -523,10 +538,10 @@ namespace tungsten {
       if (!_isNumberType(ret.type()->string()) || !_isNumberType(ret.value()->type()->string())) {
          if (ret.type()->string() != ret.value()->type()->string())
             return _logError("'{}' function cannot return '{}'", fullTypeString(ret.type()), fullTypeString(ret.value()->type()));
-      } else {
+      } /*else {
          if (_checkNumericConversionLoss(baseType(ret.value()->type()), baseType(ret.type())))
             _logWarn("possible data loss converting from '{}' to '{}' in return statement", baseType(ret.value()->type()), baseType(ret.type()));
-      }
+      }*/
    }
 
    bool SemanticAnalyzer::_isSignedType(const std::string& type) {
@@ -542,7 +557,7 @@ namespace tungsten {
       return _isSignedType(type) || _isUnsignedType(type) || _isFloatingPointType(type);
    }
    bool SemanticAnalyzer::_isBaseType(const std::string& type) {
-      return _isNumberType(type) || type == "String" || type == "Char" || type == "Void" || type == "Bool";
+      return _isNumberType(type) || type == "String" || type == "Char" || type == "Void" || type == "Bool" || type == "ArgPack";
    }
    bool SemanticAnalyzer::_isClass(const std::string& cls) {
       for (auto& clss : _classes) {
