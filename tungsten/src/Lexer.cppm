@@ -80,34 +80,6 @@ namespace tungsten {
 
          } else {
             switch (_peek().value()) {
-               case '/':
-                  // COMMENTS
-                  if (_peek(1).has_value()) {
-                     if (_peek(1).value() == '/')
-                        while (_peek().has_value() && _peek().value() != '\n')
-                           _consume();
-                     else if (_peek(1).value() == '*') {
-                        while (_peek().has_value()) {
-                           if (_peek().value() == '*' && _peek(1).has_value() && _peek(1).value() == '/') {
-                              _consume(2);
-                              break;
-                           }
-                           _consume();
-                        }
-                        // OPERATORS
-                     } else if (_peek(1).value() == '=') {
-                        tokens.push_back({TokenType::DivideEqual});
-                        _consume(2);
-                     } else {
-                        tokens.push_back({TokenType::Divide});
-                        _consume();
-                     }
-                  } else {
-                     tokens.push_back({TokenType::Divide});
-                     _consume();
-                  }
-                  break;
-
                case '"':
                   // STRING LITERALS
                   if (_peek(1).has_value()) {
@@ -130,16 +102,34 @@ namespace tungsten {
                      _consume();
                   break;
 
+               case '/':
+                  // COMMENTS
+                  if (_peek(1).has_value()) {
+                     if (_peek(1).value() == '/')
+                        while (_peek().has_value() && _peek().value() != '\n')
+                           _consume();
+                     else if (_peek(1).value() == '*') {
+                        while (_peek().has_value()) {
+                           if (_peek().value() == '*' && _peek(1).has_value() && _peek(1).value() == '/') {
+                              _consume(2);
+                              break;
+                           }
+                           _consume();
+                        }
+                     }
+                     break;
+                  }
+                  // no break because the remaining tokens with `/` are operators
                default:
                   TokenType lastValidType = TokenType::Invalid;
                   for (size_t i = 0; _peek(i).has_value() && !std::isspace(static_cast<unsigned char>(_peek(i).value())) && _peek(i).value() != '\n' && !std::isalnum(static_cast<unsigned char>(_peek(i).value())) && _peek(i).value() != '_'; ++i) {
                      buffer.push_back(_peek(i).value());
-                     if (_determineFixedSizeTokenType(buffer).has_value() && _determineFixedSizeTokenType(buffer).value() != TokenType::Invalid) {
+                     if (_determineFixedSizeTokenType(buffer).has_value() && _determineFixedSizeTokenType(buffer).value() != TokenType::Invalid)
                         lastValidType = _determineFixedSizeTokenType(buffer).value();
-                     } else {
-                        if (buffer.length() == 1) {
+                     else {
+                        if (buffer.length() == 1)
                            break;
-                        }
+
                         buffer.pop_back();
                         break;
                      }
@@ -204,7 +194,7 @@ namespace tungsten {
             if (token.length() > 1) {
                if (token[1] == '=')
                   return LessEqual;
-               if (token[1] == '>') {
+               if (token[1] == '<') {
                   if (token.size() == 3 && token[2] == '=')
                      return ShiftLeftEqual;
                   if (token.size() == 2)

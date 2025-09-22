@@ -108,8 +108,8 @@ namespace tungsten {
 
    bool SemanticAnalyzer::analyze() {
       _declaredFunctions["shell"] = {{makeDouble(), std::vector{makeString()}}};
-      _declaredFunctions["print"] = {{makeVoid(), std::vector{makeString()}}};
-      _declaredFunctions["printf"] = {{makeInt32(), std::vector{makeString(), makeArgPack()}}};
+      _declaredFunctions["print"] = {{makeVoid(), std::vector{makeString(), makeArgPack()}}};
+      _declaredFunctions["input"] = {{makeVoid(), std::vector{makeString(), makeArgPack()}}};
       for (auto& var : _externs->variables) {
          if (var)
             var->accept(*this);
@@ -192,10 +192,20 @@ namespace tungsten {
       if (op.op() == "--" || op.op() == "++") {
          if (op.operand()->astType() != ASTType::VariableExpression)
             return _logError("cannot use operator '{}' on non-variable expression", op.op());
+         op.setType(op.operand()->type());
       }
       if (op.op() == "-") {
          if (op.operand()->astType() != ASTType::NumberExpression)
             return _logError("cannot use operator '-' on non-numeric expression");
+         op.setType(op.operand()->type());
+      }
+      if (op.op() == "!") {
+         op.setType(makeBool());
+      }
+      if (op.op() == "&") {
+         if (op.operand()->astType() != ASTType::VariableExpression)
+            return _logError("cannot use operator '{}' on non-variable expression", op.op());
+         op.setType(makePointer(op.operand()->type()));
       }
       // if (op.operand()->astType() !=)
    }
@@ -222,7 +232,7 @@ namespace tungsten {
          return;
       }
 
-      if (binop.op() == "=" || binop.op() == "+=" || binop.op() == "-=" || binop.op() == "*=" || binop.op() == "/=" || binop.op() == "%=" || binop.op() == "|=" || binop.op() == "&=") {
+      if (binop.op() == "=" || binop.op() == "+=" || binop.op() == "-=" || binop.op() == "*=" || binop.op() == "/=" || binop.op() == "%=" || binop.op() == "|=" || binop.op() == "&=" || binop.op() == "^=" || binop.op() == "<<=" || binop.op() == ">>=") {
          if (!binop.LHS()->isLValue())
             return _logError("left operand of assignment must be a variable");
       }
@@ -255,6 +265,7 @@ namespace tungsten {
       _scopes.pop_back();
       --_currentScope;
    }
+
    void SemanticAnalyzer::visit(ExternFunctionStatementAST& fun) {
       fun.accept(*this);
    }
@@ -278,11 +289,22 @@ namespace tungsten {
       auto& overloads = _declaredFunctions[proto.name()];
 
       auto sameSignature = [&](const Overload& o) {
-         if (o.args.size() != over.args.size()) return false;
-         for (size_t i = 0; i < o.args.size(); i++) {
-            if (fullTypeString(o.args[i]) != fullTypeString(over.args[i]))
-               return false;
+         bool oVariadic = !o.args.empty() && o.args.back()->kind() == TypeKind::ArgPack;
+         bool overVariadic = !over.args.empty() && over.args.back()->kind() == TypeKind::ArgPack;
+
+         if (!oVariadic && !overVariadic && o.args.size() != over.args.size()) return false;
+         if (oVariadic && overVariadic) {
+            if (o.args.size() != over.args.size()) return false;
          }
+         if ((oVariadic && !overVariadic) || (!oVariadic && overVariadic)) {
+            if (o.args.size() - 1 > over.args.size() - 1) return false;
+         }
+
+         size_t minArgs = std::min(o.args.size(), over.args.size());
+         for (size_t i = 0; i < minArgs; i++) {
+            if (fullTypeString(o.args[i]) != fullTypeString(over.args[i])) return false;
+         }
+
          return true;
       };
       auto sameParams = [&](const Overload& o) {

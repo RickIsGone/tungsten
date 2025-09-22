@@ -152,11 +152,10 @@ Types follow the ***PascalCase*** convention, they are:
 | Type     | Alignment (Bytes) |
 |----------|-------------------|
 | `Void`   | N/A               |
-| `Double` | 8                 |
 | `Char`   | 2                 |
 | `Bool`   | 1                 |
 | `String` | N/A               |
-| `Num`    | 4                 |
+| `Num`    | 8                 |
 
 ### Stack allocation
 
@@ -281,6 +280,25 @@ Int* myFunction() {
     return array;
 }
 ``` -->
+
+### Extern Functions
+
+There are two types of extern functions
+
+- C functions
+- tungsten functions
+
+You can import C functions with
+
+```cpp
+extern "C" Void myCFun();
+```
+
+and tungstn functions with
+
+```cpp
+extern Void myFun();
+```
 
 ### Main Function
 

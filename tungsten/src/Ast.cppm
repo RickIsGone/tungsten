@@ -1171,8 +1171,8 @@ namespace tungsten {
    void addCoreLibFunctions() {
       const std::array coreFunctions = {
           CoreFun{llvm::Type::getDoubleTy(*TheContext), "shell", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()}},
-          CoreFun{Builder->getVoidTy(), "print", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()}},
-          CoreFun(Builder->getInt32Ty(), "printf", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()})};
+          CoreFun{Builder->getVoidTy(), "input", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()}},
+          CoreFun(Builder->getVoidTy(), "print", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()})};
 
       for (auto& fun : coreFunctions) {
          std::vector<llvm::Type*> paramTypes;
@@ -1180,7 +1180,7 @@ namespace tungsten {
             paramTypes.push_back(arg);
          }
          llvm::FunctionType* functionType;
-         if (fun.name == "printf")
+         if (fun.name == "print" || fun.name == "input")
             functionType = llvm::FunctionType::get(fun.type, paramTypes, true);
          else
             functionType = llvm::FunctionType::get(fun.type, paramTypes, false);
@@ -1252,7 +1252,9 @@ export namespace tungsten {
 
          return LogErrorV("unsupported type for logical not operation");
       }
-
+      if (_op == "&") {
+         return operandValue;
+      }
       if (operandType->isIntegerTy())
          return Builder->CreateNeg(operandValue, "negtmp");
       if (operandType->isFloatingPointTy())
@@ -1272,7 +1274,7 @@ export namespace tungsten {
          RHS = Builder->CreateLoad(_RHS->type()->llvmType(), RHS, "rval");
       castToCommonType(RHS, _LHS->type()->llvmType());
 
-      if (_op == "=" || _op == "+=" || _op == "-=" || _op == "*=" || _op == "/=" || _op == "%=" || _op == "|=" || _op == "&=") {
+      if (_op == "=" || _op == "+=" || _op == "-=" || _op == "*=" || _op == "/=" || _op == "%=" || _op == "|=" || _op == "&=" || _op == "^=" || _op == "<<=" || _op == ">>=") {
          if (_LHS->type()->kind() == TypeKind::String) {
             Builder->CreateStore(RHS, LHS);
             return RHS;
@@ -1295,6 +1297,12 @@ export namespace tungsten {
             result = Builder->CreateOr(loadedL, RHS);
          } else if (_op == "&=") {
             result = Builder->CreateAnd(loadedL, RHS);
+         } else if (_op == "^=") {
+            result = Builder->CreateXor(loadedL, RHS);
+         } else if (_op == "<<=") {
+            result = Builder->CreateShl(loadedL, RHS);
+         } else if (_op == ">>=") {
+            result = Builder->CreateLShr(loadedL, RHS);
          }
          return Builder->CreateStore(result, LHS);
       }
@@ -1332,6 +1340,16 @@ export namespace tungsten {
          return Builder->CreateFCmpOGT(loadedL, RHS);
       if (_op == ">=")
          return Builder->CreateFCmpOGE(loadedL, RHS);
+      if (_op == "^")
+         return Builder->CreateXor(loadedL, RHS);
+      if (_op == "|")
+         return Builder->CreateOr(loadedL, RHS);
+      if (_op == "&")
+         return Builder->CreateAnd(loadedL, RHS);
+      if (_op == "<<")
+         return Builder->CreateShl(loadedL, RHS);
+      if (_op == ">>")
+         return Builder->CreateLShr(loadedL, RHS);
    }
 
    llvm::Value* VariableDeclarationAST::codegen() {
@@ -1681,7 +1699,8 @@ export namespace tungsten {
       else
          name = mangledName();
 
-      if (auto* existing = TheModule->getFunction(name)) return existing;
+      if (auto* existing = TheModule->getFunction(name))
+         return existing;
 
       std::vector<llvm::Type*> paramTypes;
       bool isVarArgs = false;

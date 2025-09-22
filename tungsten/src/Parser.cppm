@@ -54,12 +54,13 @@ namespace tungsten {
        {TokenType::XorEqual, 16}, // ^=
        {TokenType::ShiftLeftEqual, 16}, // <<=
        {TokenType::ShiftRightEqual, 16}, // >>=
-       {TokenType::Ternary, 16}, // ?:
+       // {TokenType::Ternary, 16}, // ?:
        {TokenType::PlusPlus, 2}, // ++
        {TokenType::MinusMinus, 2}, // --
 
-       {TokenType::Dot, 1}, // class.member
-       {TokenType::Arrow, 1}}; // class->member
+       // {TokenType::Dot, 1}, // class.member
+       // {TokenType::Arrow, 1} // class->member
+   };
 
    export struct Externs {
       std::vector<std::unique_ptr<FunctionPrototypeAST>> functions;
@@ -729,6 +730,7 @@ namespace tungsten {
          case TokenType::MinusMinus:
          case TokenType::PlusPlus:
          case TokenType::LogicalNot:
+         case TokenType::BitwiseAnd:
             return _parseUnaryExpression();
 
          default:
