@@ -2,6 +2,7 @@ module;
 
 #include <filesystem>
 #include <iostream>
+#include <memory>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -58,29 +59,34 @@ namespace tungsten {
    //  ========================================== implementation ==========================================
 
    void TranslationUnit::compile(const fs::path& path) {
-      Lexer lexer{path, _raw};
-      Parser parser{path, lexer.tokenize(), _raw};
-      parser.parse();
-      SemanticAnalyzer analyzer{parser.functions(), parser.classes(), parser.globalVariables(), parser.externs()};
-      if (analyzer.analyze()) {
-         for (auto& var : parser.externs()->variables) {
+      std::unique_ptr<Lexer> lexer = std::make_unique<Lexer>(path, _raw);
+      std::unique_ptr<Parser> parser = std::make_unique<Parser>(path, lexer->tokenize(), _raw);
+      parser->parse();
+      std::unique_ptr<SemanticAnalyzer> analyzer = std::make_unique<SemanticAnalyzer>(parser->functions(), parser->classes(), parser->globalVariables(), parser->externs());
+      if (analyzer->analyze()) {
+         for (auto& var : parser->externs()->variables) {
             var->codegen();
          }
-         for (auto& fun : parser.externs()->functions) {
+         for (auto& fun : parser->externs()->functions) {
             fun->codegen();
          }
-         for (auto& fun : parser.functions()) {
+         for (auto& fun : parser->functions()) {
             fun->prototype()->codegen(); // forward declaration
          }
-         for (auto& cls : parser.classes()) {
+         for (auto& cls : parser->classes()) {
             cls->codegen();
          }
-         for (auto& var : parser.globalVariables()) {
+         for (auto& var : parser->globalVariables()) {
             var->codegen();
          }
-         for (auto& fun : parser.functions()) {
+         for (auto& fun : parser->functions()) {
             fun->codegen();
          }
+
+         lexer->~Lexer();
+         parser->~Parser();
+         analyzer->~SemanticAnalyzer();
+
          fs::path currentDir = fs::path(getExecutablePath()).parent_path();
          fs::path parentDir = currentDir.parent_path();
          fs::path libDir = parentDir / "lib";
@@ -89,7 +95,6 @@ namespace tungsten {
 #else
          system(("clang " + path.stem().string() + ".ll " + libDir.string() + "/libcore.a -o " + path.stem().string()).c_str());
 #endif
-         std::cout << "passed semantic analysis\n";
       }
    }
 

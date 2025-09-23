@@ -329,6 +329,11 @@ and use the integrated buildsystem
 
 ### Compiling via cmd
 
+> [!IMPORTANT]
+> Tungsten currently uses *clang* to compile the generated llvm ir to an executable, so you need to have it installed
+> for
+> the compiler to work
+
 ```shell
 cd projectDirectory
 tungsten <file> [flags]
