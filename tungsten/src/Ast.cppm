@@ -501,7 +501,7 @@ export namespace tungsten {
       }
       _NODISCARD std::shared_ptr<Type>& pointee() { return _pointee; }
       _NODISCARD llvm::Type* llvmType() const override {
-         return _pointee->llvmType()->getPointerTo();
+         return Builder->getPtrTy();
       }
 
    private:
@@ -1250,10 +1250,8 @@ export namespace tungsten {
 
          return LogErrorV("unsupported type for logical not operation");
       }
-      if (_op == "&")
+      if (_op == "&" || _op == "*")
          return operandValue;
-      if (_op == "*")
-         return Builder->CreateLoad(_Type->llvmType(), operandValue, "deref");
 
       if (operandType->isIntegerTy())
          return Builder->CreateNeg(operandValue, "negtmp");
@@ -1267,11 +1265,15 @@ export namespace tungsten {
       llvm::Value* LHS = _LHS->codegen();
       llvm::Value* RHS = _RHS->codegen();
 
+      if (_RHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_RHS.get())->op() == "*")
+         RHS = Builder->CreateLoad(_RHS->type()->llvmType(), RHS, "derefr");
+
       llvm::Value* loadedL = LHS;
       if (_LHS->astType() == ASTType::VariableExpression)
          loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "lval");
       if (_RHS->astType() == ASTType::VariableExpression)
          RHS = Builder->CreateLoad(_RHS->type()->llvmType(), RHS, "rval");
+
       castToCommonType(RHS, _LHS->type()->llvmType());
 
       if (_op == "=" || _op == "+=" || _op == "-=" || _op == "*=" || _op == "/=" || _op == "%=" || _op == "|=" || _op == "&=" || _op == "^=" || _op == "<<=" || _op == ">>=") {
@@ -1280,32 +1282,44 @@ export namespace tungsten {
             return RHS;
          }
 
+         llvm::Value* targetAddr = LHS;
+         llvm::Value* targetVal = loadedL;
+         if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*") {
+            targetAddr = static_cast<UnaryExpressionAST*>(_LHS.get())->operand()->codegen();
+            targetVal = Builder->CreateLoad(_LHS->type()->llvmType(), targetAddr, "derefl");
+         }
+
          llvm::Value* result = nullptr;
          if (_op == "=") {
             result = RHS;
          } else if (_op == "+=") {
-            result = Builder->CreateFAdd(loadedL, RHS);
+            result = Builder->CreateFAdd(targetVal, RHS);
          } else if (_op == "-=") {
-            result = Builder->CreateFSub(loadedL, RHS);
+            result = Builder->CreateFSub(targetVal, RHS);
          } else if (_op == "*=") {
-            result = Builder->CreateFMul(loadedL, RHS);
+            result = Builder->CreateFMul(targetVal, RHS);
          } else if (_op == "/=") {
-            result = Builder->CreateFDiv(loadedL, RHS);
+            result = Builder->CreateFDiv(targetVal, RHS);
          } else if (_op == "%=") {
-            result = Builder->CreateFRem(loadedL, RHS);
+            result = Builder->CreateFRem(targetVal, RHS);
          } else if (_op == "|=") {
-            result = Builder->CreateOr(loadedL, RHS);
+            result = Builder->CreateOr(targetVal, RHS);
          } else if (_op == "&=") {
-            result = Builder->CreateAnd(loadedL, RHS);
+            result = Builder->CreateAnd(targetVal, RHS);
          } else if (_op == "^=") {
-            result = Builder->CreateXor(loadedL, RHS);
+            result = Builder->CreateXor(targetVal, RHS);
          } else if (_op == "<<=") {
-            result = Builder->CreateShl(loadedL, RHS);
+            result = Builder->CreateShl(targetVal, RHS);
          } else if (_op == ">>=") {
-            result = Builder->CreateLShr(loadedL, RHS);
+            result = Builder->CreateLShr(targetVal, RHS);
          }
-         return Builder->CreateStore(result, LHS);
+
+         Builder->CreateStore(result, targetAddr);
+         return result;
       }
+
+      if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*")
+         loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "derefl");
 
       if (_op == "&&") {
          LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
@@ -1350,7 +1364,10 @@ export namespace tungsten {
          return Builder->CreateShl(loadedL, RHS);
       if (_op == ">>")
          return Builder->CreateLShr(loadedL, RHS);
+
+      return LogErrorV("error during binop codegen with operator '" + _op + "'");
    }
+
 
    llvm::Value* VariableDeclarationAST::codegen() {
       llvm::Type* type = _Type->llvmType();
