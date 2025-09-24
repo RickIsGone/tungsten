@@ -52,6 +52,7 @@ namespace tungsten {
       void visit(__BuiltinFileAST&) override {}
       void visit(StaticCastAST&) override {}
       void visit(ConstCastAST&) override {}
+      void visit(NullPtrAST&) override {}
       void visit(IfStatementAST&) override;
       void visit(WhileStatementAST&) override;
       void visit(DoWhileStatementAST&) override;

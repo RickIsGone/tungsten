@@ -75,12 +75,11 @@ namespace tungsten {
          _externs = std::make_unique<Externs>();
       }
       Parser() = delete;
-      ~Parser() { dumpIR(); }
       Parser(const Parser&) = delete;
       Parser operator=(const Parser&) = delete;
 
       void parse();
-
+      void writeIR() { dumpIR(); }
       _NODISCARD std::vector<std::unique_ptr<FunctionAST>>& functions() { return _functions; }
       _NODISCARD std::vector<std::unique_ptr<ClassAST>>& classes() { return _classes; }
       _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& globalVariables() { return _globalVariables; }

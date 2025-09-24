@@ -48,9 +48,7 @@ Num main() {
 # Trying the language
 
 if you want to try *Tungsten* before installing the compiler, feel free to do so on
-the [online tungsten compiler](https://rickisgone.github.io/tungsten-sandbox/)
-> [!WARNING]  
-> currently not working
+the [online tungsten compiler](https://rickisgone.hackclub.app)
 
 # VSCode Extension
 

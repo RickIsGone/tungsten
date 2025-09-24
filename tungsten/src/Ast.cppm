@@ -186,6 +186,7 @@ export namespace tungsten {
       virtual void visit(class __BuiltinFileAST&) = 0;
       virtual void visit(class StaticCastAST&) = 0;
       virtual void visit(class ConstCastAST&) = 0;
+      virtual void visit(class NullPtrAST&) = 0;
       virtual void visit(class IfStatementAST&) = 0;
       virtual void visit(class WhileStatementAST&) = 0;
       virtual void visit(class DoWhileStatementAST&) = 0;
@@ -252,6 +253,7 @@ export namespace tungsten {
       BuiltinFile,
       StaticCast,
       ConstCast,
+      NullPtr,
       IfStatement,
       WhileStatement,
       DoWhileStatement,
@@ -850,7 +852,14 @@ export namespace tungsten {
    private:
       std::unique_ptr<ExpressionAST> _value;
    };
+   class NullPtrAST : public ExpressionAST {
+   public:
+      NullPtrAST() : ExpressionAST{makePointer(makeNullType())} {}
+      llvm::Value* codegen() override;
 
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::NullPtr; }
+      void accept(ASTVisitor& v) override { v.visit(*this); }
+   };
    // class AliasAST : public ExpressionAST {
    // public:
    //    AliasAST(std::shared_ptr<Type> alias, std::shared_ptr<Type> type) : _alias{alias}, ExpressionAST{type} {}
@@ -1253,6 +1262,7 @@ export namespace tungsten {
       if (_op == "&" || _op == "*")
          return operandValue;
 
+      // _op == '-'
       if (operandType->isIntegerTy())
          return Builder->CreateNeg(operandValue, "negtmp");
       if (operandType->isFloatingPointTy())
@@ -1283,35 +1293,32 @@ export namespace tungsten {
          }
 
          llvm::Value* targetAddr = LHS;
-         llvm::Value* targetVal = loadedL;
-         if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*") {
-            targetAddr = static_cast<UnaryExpressionAST*>(_LHS.get())->operand()->codegen();
-            targetVal = Builder->CreateLoad(_LHS->type()->llvmType(), targetAddr, "derefl");
-         }
+         if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*")
+            loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "derefl");
 
          llvm::Value* result = nullptr;
          if (_op == "=") {
             result = RHS;
          } else if (_op == "+=") {
-            result = Builder->CreateFAdd(targetVal, RHS);
+            result = Builder->CreateFAdd(loadedL, RHS);
          } else if (_op == "-=") {
-            result = Builder->CreateFSub(targetVal, RHS);
+            result = Builder->CreateFSub(loadedL, RHS);
          } else if (_op == "*=") {
-            result = Builder->CreateFMul(targetVal, RHS);
+            result = Builder->CreateFMul(loadedL, RHS);
          } else if (_op == "/=") {
-            result = Builder->CreateFDiv(targetVal, RHS);
+            result = Builder->CreateFDiv(loadedL, RHS);
          } else if (_op == "%=") {
-            result = Builder->CreateFRem(targetVal, RHS);
+            result = Builder->CreateFRem(loadedL, RHS);
          } else if (_op == "|=") {
-            result = Builder->CreateOr(targetVal, RHS);
+            result = Builder->CreateOr(loadedL, RHS);
          } else if (_op == "&=") {
-            result = Builder->CreateAnd(targetVal, RHS);
+            result = Builder->CreateAnd(loadedL, RHS);
          } else if (_op == "^=") {
-            result = Builder->CreateXor(targetVal, RHS);
+            result = Builder->CreateXor(loadedL, RHS);
          } else if (_op == "<<=") {
-            result = Builder->CreateShl(targetVal, RHS);
+            result = Builder->CreateShl(loadedL, RHS);
          } else if (_op == ">>=") {
-            result = Builder->CreateLShr(targetVal, RHS);
+            result = Builder->CreateLShr(loadedL, RHS);
          }
 
          Builder->CreateStore(result, targetAddr);
@@ -1380,6 +1387,8 @@ export namespace tungsten {
 
       if (_init) {
          llvm::Value* initVal = _init->codegen();
+         if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*")
+            initVal = Builder->CreateLoad(type, initVal, "derefl");
          if (!initVal)
             return nullptr;
 
@@ -1411,7 +1420,8 @@ export namespace tungsten {
 
          if (arg->astType() == ASTType::VariableExpression)
             argVal = Builder->CreateLoad(arg->type()->llvmType(), argVal);
-
+         if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "*")
+            argVal = Builder->CreateLoad(arg->type()->llvmType(), argVal, "derefl");
          args.push_back(argVal);
       }
       return Builder->CreateCall(callee, args);
@@ -1481,6 +1491,9 @@ export namespace tungsten {
    llvm::Value* ConstCastAST::codegen() {
       return nullptr;
    }
+   llvm::Value* NullPtrAST::codegen() {
+      return llvm::ConstantPointerNull::get(llvm::Type::getInt8Ty(*TheContext)->getPointerTo());
+   }
 
    llvm::Value* BlockStatementAST::codegen() {
       llvm::Value* last = llvm::Constant::getNullValue(llvm::Type::getInt8Ty(*TheContext)); // to avoid empty functions from getting recognized as wrong
@@ -1523,11 +1536,15 @@ export namespace tungsten {
       llvm::Value* returnValue = _value->codegen();
       if (_value->astType() == ASTType::VariableExpression)
          returnValue = Builder->CreateLoad(_value->type()->llvmType(), returnValue, "rval");
+      if (_value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*")
+         returnValue = Builder->CreateLoad(_value->type()->llvmType(), returnValue, "derefl");
       returnValue = castToCommonType(returnValue, _Type->llvmType());
       return Builder->CreateRet(returnValue);
    }
    llvm::Value* ExitStatement::codegen() {
       llvm::Value* exitValue = _value->codegen();
+      if (_value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*")
+         exitValue = Builder->CreateLoad(_value->type()->llvmType(), exitValue, "derefl");
 
       llvm::Function* exitFunc = TheModule->getFunction("exit");
       if (!exitFunc) {
@@ -1748,10 +1765,7 @@ export namespace tungsten {
       size_t idx = 0;
       for (auto& arg : function->args()) {
          auto* varDecl = static_cast<VariableDeclarationAST*>(_prototype->args()[idx].get());
-         llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
-         llvm::AllocaInst* alloca = tmpBuilder.CreateAlloca(arg.getType(), nullptr, varDecl->name());
-         Builder->CreateStore(&arg, alloca);
-         NamedValues[varDecl->name()] = alloca;
+         NamedValues[varDecl->name()] = &arg;
          VariableTypes[varDecl->name()] = arg.getType();
          ++idx;
       }
