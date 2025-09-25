@@ -27,7 +27,6 @@ jobs:
           echo "version=$(echo "${{ github.event.inputs.tag_name }}" | sed 's/^v//')" >> $GITHUB_ENV
 
       - name: Create and push tag (if not exists)
-        env: { }
         run: |
           if ! git rev-parse ${{ env.new_tag }} >/dev/null 2>&1; then
             git tag ${{ env.new_tag }}
