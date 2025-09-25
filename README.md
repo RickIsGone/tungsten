@@ -29,7 +29,6 @@ Int main(String[] args) {
 ``` -->
 
 ```c++
-// import stdio;
 Num fibonacci(Num num) {
    if (num <= 1) 
       return num;
@@ -37,7 +36,9 @@ Num fibonacci(Num num) {
 }
 
 Num main() {
-   Num a = fibonacci(10);
+   for (Num i = 0; i < 10; ++i)
+      print("fibonacci(%.0lf) = %.0lf\n", i, fibonacci(i));
+   }
    return CodeSuccess;
 }
 ```
