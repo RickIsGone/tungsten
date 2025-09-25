@@ -231,7 +231,7 @@ export namespace tungsten {
       Class,
 
       ArgPack,
-
+      NullPtr,
       Null
    };
 
@@ -1206,6 +1206,8 @@ export namespace tungsten {
          case TypeKind::Double:
          case TypeKind::Float:
             return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*TheContext), std::get<double>(_value));
+         case TypeKind::Bool:
+            return llvm::ConstantInt::getBool(*TheContext, std::get<uint64_t>(_value));
          default:
             return Builder->getIntN(_Type->llvmType()->getIntegerBitWidth(), std::get<double>(_value)); // std::get<uint64_t>
       }

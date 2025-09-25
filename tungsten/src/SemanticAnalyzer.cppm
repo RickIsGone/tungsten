@@ -183,7 +183,7 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(NumberExpressionAST& num) {
-      if (num.type())
+      if (!num.type())
          num.setType(makeDouble()); // only for now, will be changed later
    }
 
@@ -221,8 +221,6 @@ namespace tungsten {
    void SemanticAnalyzer::visit(BinaryExpressionAST& binop) {
       binop.LHS()->accept(*this);
       binop.RHS()->accept(*this);
-
-
       if (binop.op() == "==" || binop.op() == "!=" || binop.op() == "<" || binop.op() == ">" || binop.op() == "<=" || binop.op() == ">=") {
          if (!_isNumberType(fullTypeString(binop.LHS()->type())) || !_isNumberType(fullTypeString(binop.RHS()->type()))) {
             if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type()))
@@ -233,6 +231,7 @@ namespace tungsten {
          binop.setType(makeBool());
          return;
       }
+
       if (binop.op() == "&&" || binop.op() == "||") {
          if (binop.LHS()->type()->kind() != TypeKind::Bool || binop.RHS()->type()->kind() != TypeKind::Bool)
             return _logError("type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
@@ -242,7 +241,7 @@ namespace tungsten {
 
       if (binop.op() == "=" || binop.op() == "+=" || binop.op() == "-=" || binop.op() == "*=" || binop.op() == "/=" || binop.op() == "%=" || binop.op() == "|=" || binop.op() == "&=" || binop.op() == "^=" || binop.op() == "<<=" || binop.op() == ">>=") {
          if (!binop.LHS()->isLValue())
-            return _logError("left operand of assignment must be a variable");
+            return _logError("left side of assignment must be a variable");
       }
 
       // addition, multiplication, division, ecc.

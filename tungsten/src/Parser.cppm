@@ -109,7 +109,7 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parseReturnStatement();
       std::unique_ptr<ExpressionAST> _parseExitStatement();
       std::unique_ptr<ExpressionAST> _parseExpression();
-      std::unique_ptr<ExpressionAST> _parseBinaryOperationRHS(int exprPrecedence, std::unique_ptr<ExpressionAST> lhs);
+      std::unique_ptr<ExpressionAST> _parseBinaryOperationRHS(std::unique_ptr<ExpressionAST> lhs);
       std::unique_ptr<ExpressionAST> _parsePrimaryExpression();
       std::unique_ptr<ExpressionAST> _parseUnaryExpression();
       std::unique_ptr<ExpressionAST> _parseBuiltinFunction();
@@ -430,14 +430,14 @@ namespace tungsten {
       auto lhs = _parsePrimaryExpression();
       if (!lhs)
          return nullptr;
-      return _parseBinaryOperationRHS(0, std::move(lhs));
+      return _parseBinaryOperationRHS(std::move(lhs));
    }
 
-   std::unique_ptr<ExpressionAST> Parser::_parseBinaryOperationRHS(int exprPrecedence, std::unique_ptr<ExpressionAST> lhs) {
+   std::unique_ptr<ExpressionAST> Parser::_parseBinaryOperationRHS(std::unique_ptr<ExpressionAST> lhs) {
       while (true) {
          int tokPrecedence = _getPrecedence(_peek().type);
 
-         if (tokPrecedence < exprPrecedence)
+         if (tokPrecedence == -1)
             return std::move(lhs);
 
          Token opToken = _peek();
@@ -450,8 +450,8 @@ namespace tungsten {
          TokenType nextOpType = _peek().type;
          int nextPrecedence = _getPrecedence(nextOpType);
 
-         if (tokPrecedence < nextPrecedence) {
-            rhs = _parseBinaryOperationRHS(tokPrecedence + 1, std::move(rhs));
+         if (tokPrecedence > nextPrecedence) {
+            rhs = _parseBinaryOperationRHS(std::move(rhs));
             if (!rhs)
                return nullptr;
          }
@@ -630,10 +630,10 @@ namespace tungsten {
             return nullptr;
          case TokenType::True:
             _consume();
-            return std::make_unique<NumberExpressionAST>(double(1), makeBool());
+            return std::make_unique<NumberExpressionAST>((uint64_t)1, makeBool());
          case TokenType::False:
             _consume();
-            return std::make_unique<NumberExpressionAST>(double(0), makeBool());
+            return std::make_unique<NumberExpressionAST>((uint64_t)0, makeBool());
          case TokenType::CodeSuccess:
             _consume();
             // TODO: go back to Int32 after first ship

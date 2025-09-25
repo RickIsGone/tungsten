@@ -116,8 +116,8 @@ namespace tungsten {
                            }
                            _consume();
                         }
+                        break;
                      }
-                     break;
                   }
                   // no break because the remaining tokens with `/` are operators
                default:
