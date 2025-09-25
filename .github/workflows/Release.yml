@@ -1,0 +1,133 @@
+name: Auto Tag & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'release tag'
+        required: true
+        type: string
+
+jobs:
+  autotag-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git user
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Set tag variable
+        run: |
+          echo "new_tag=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+          echo "version=$(echo "${{ github.event.inputs.tag_name }}" | sed 's/^v//')" >> $GITHUB_ENV
+
+      - name: Create and push tag (if not exists)
+        env: { }
+        run: |
+          if ! git rev-parse ${{ env.new_tag }} >/dev/null 2>&1; then
+            git tag ${{ env.new_tag }}
+            git push https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }} ${{ env.new_tag }}
+          fi
+
+      - name: Download Linux 7z artifact
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: Ubuntu build.yml
+          name: tungsten.7z
+          path: ./
+          repo: RickIsGone/tungsten
+          branch: main
+          event: push
+
+      - name: Download Linux zip artifact
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: Ubuntu build.yml
+          name: tungsten.zip
+          path: ./
+          repo: RickIsGone/tungsten
+          branch: main
+          event: push
+
+      - name: Download Linux tar.gz artifact
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: Ubuntu build.yml
+          name: tungsten.tar.gz
+          path: ./
+          repo: RickIsGone/tungsten
+          branch: main
+          event: push
+
+      - name: Download Linux Deb artifact
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: Ubuntu build.yml
+          name: tungsten.Deb
+          path: ./
+          repo: RickIsGone/tungsten
+          branch: main
+          event: push
+
+      - name: Rename Artifacts
+        run: |
+          mv tungsten.7z tungsten-linux-${{ env.version }}.7z
+          mv tungsten.zip tungsten-linux-${{ env.version }}.zip
+          mv tungsten.tar tungsten-linux-${{ env.version }}.tar
+          mv tungsten.deb tungsten-linux-${{ env.version }}.deb
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+        with:
+          tag_name: ${{ env.new_tag }}
+          release_name: Release ${{ env.version }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Linux 7z Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./tungsten-linux-${{ env.version }}.7z
+          asset_name: tungsten-linux-${{ env.version }}.7z
+          asset_content_type: application/x-7z-compressed
+
+      - name: Upload Linux zip Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./tungsten-linux-${{ env.version }}.zip
+          asset_name: tungsten-linux-${{ env.version }}.zip
+          asset_content_type: application/zip
+
+      - name: Upload Linux tar.gz Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./tungsten-linux-${{ env.version }}.tar.gz
+          asset_name: tungsten-linux-${{ env.version }}.tar.gz
+          asset_content_type: application/x-tar
+
+      - name: Upload Linux Deb Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./tungsten-linux-${{ env.version }}.deb
+          asset_name: tungsten-linux-${{ env.version }}.deb
+          asset_content_type: application/vnd.debian.binary-package
