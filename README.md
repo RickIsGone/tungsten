@@ -36,7 +36,7 @@ Num fibonacci(Num num) {
 }
 
 Num main() {
-   for (Num i = 0; i < 10; ++i)
+   for (Num i = 0; i < 10; ++i) {
       print("fibonacci(%.0lf) = %.0lf\n", i, fibonacci(i));
    }
    return CodeSuccess;
