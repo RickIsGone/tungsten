@@ -156,6 +156,8 @@ Types follow the ***PascalCase*** convention, they are:
 | `String` | N/A               |
 | `Num`    | 8                 |
 
+Tungsten has also a variadic type called `ArgPack` which is just like `...` in C
+
 ### Stack allocation
 
 ```c++
