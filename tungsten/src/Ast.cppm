@@ -1288,7 +1288,7 @@ export namespace tungsten {
       llvm::Value* RHS = _RHS->codegen();
 
       if (_RHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_RHS.get())->op() == "*")
-         RHS = Builder->CreateLoad(_RHS->type()->llvmType(), RHS, "derefr");
+         RHS = Builder->CreateLoad(_RHS->type()->llvmType()->getPointerTo(), RHS, "derefr");
 
       llvm::Value* loadedL = loadIfPointer(LHS, _LHS->type()->llvmType(), "lval");
       llvm::Value* loadedR = loadIfPointer(RHS, _RHS->type()->llvmType(), "rval");

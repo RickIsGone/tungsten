@@ -105,10 +105,12 @@ namespace tungsten {
                case '/':
                   // COMMENTS
                   if (_peek(1).has_value()) {
-                     if (_peek(1).value() == '/')
-                        while (_peek().has_value() && _peek().value() != '\n')
+                     if (_peek(1).value() == '/') {
+                        while (_peek().has_value() && _peek().value() != '\n') {
                            _consume();
-                     else if (_peek(1).value() == '*') {
+                        }
+                        break;
+                     } else if (_peek(1).value() == '*') {
                         while (_peek().has_value()) {
                            if (_peek().value() == '*' && _peek(1).has_value() && _peek(1).value() == '/') {
                               _consume(2);
@@ -120,6 +122,7 @@ namespace tungsten {
                      }
                   }
                   // no break because the remaining tokens with `/` are operators
+                  [[fallthrough]];
                default:
                   TokenType lastValidType = TokenType::Invalid;
                   for (size_t i = 0; _peek(i).has_value() && !std::isspace(static_cast<unsigned char>(_peek(i).value())) && _peek(i).value() != '\n' && !std::isalnum(static_cast<unsigned char>(_peek(i).value())) && _peek(i).value() != '_'; ++i) {
