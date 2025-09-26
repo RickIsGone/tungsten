@@ -323,16 +323,16 @@ Tungsten has a reduced number of integrated core functions
 
 | Type       | Name                 | Arguments              | functionality                                 |
 |------------|----------------------|------------------------|-----------------------------------------------|
-| `Num`      | shell                | (String cmd)           | same function as system() in C                |
- | `Void`     | print                | (String fmt, ArgPack)  | same function as printf() in C                |
- | `Void`     | input                | (String fmt, ArgPack)  | same function as scanf() in C                 |  
- | `String`   | __builtinFile        | no arguments           | returns the name of the file                  |
- | `String`   | __builtinFunction    | no arguments           | returns the name of the function              |
- | `Num`      | __builtinColumn      | no arguments           | returns the number of the column              |
- | `Num`      | __builtinLine        | no arguments           | returns the number of the line                |
- | `String`   | nameof               | (any variable)         | returns the name of the variable              |
- | `String`   | typeof               | (any variable)         | returns the type of the variable              |
- | `Num`      | sizeof               | (any variable) | returns the size of the type of the variable  |
+| `Num`      | shell                | (String cmd)           | same function as `system()` in C              |
+| `Void`     | print                | (String fmt, ArgPack)  | same function as `printf()` in C              |
+| `Void`     | input                | (String fmt, ArgPack)  | same function as `scanf()` in C               |  
+| `String`   | __builtinFile        | no arguments           | returns the name of the file                  |
+| `String`   | __builtinFunction    | no arguments           | returns the name of the function              |
+| `Num`      | __builtinColumn      | no arguments           | returns the number of the column              |
+| `Num`      | __builtinLine        | no arguments           | returns the number of the line                |
+| `String`   | nameof               | (any variable)         | returns the name of the variable              |
+| `String`   | typeof               | (any variable)         | returns the type of the variable              |
+| `Num`      | sizeof               | (any variable)         | returns the size of the type of the variable  |
 
 
 
