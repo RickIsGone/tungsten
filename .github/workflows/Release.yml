@@ -40,7 +40,7 @@ jobs:
       - name: Download Linux 7z artifact
         uses: dawidd6/action-download-artifact@v11
         with:
-          workflow: Ubuntu build.yml
+          workflow: Ubuntu build
           name: tungsten.7z
           path: ./
           repo: RickIsGone/tungsten
@@ -50,7 +50,7 @@ jobs:
       - name: Download Linux zip artifact
         uses: dawidd6/action-download-artifact@v11
         with:
-          workflow: Ubuntu build.yml
+          workflow: Ubuntu build
           name: tungsten.zip
           path: ./
           repo: RickIsGone/tungsten
@@ -60,7 +60,7 @@ jobs:
       - name: Download Linux tar.gz artifact
         uses: dawidd6/action-download-artifact@v11
         with:
-          workflow: Ubuntu build.yml
+          workflow: Ubuntu build
           name: tungsten.tar.gz
           path: ./
           repo: RickIsGone/tungsten
@@ -70,7 +70,7 @@ jobs:
       - name: Download Linux Deb artifact
         uses: dawidd6/action-download-artifact@v11
         with:
-          workflow: Ubuntu build.yml
+          workflow: Ubuntu build
           name: tungsten.Deb
           path: ./
           repo: RickIsGone/tungsten
