@@ -10,9 +10,13 @@ on:
 
 jobs:
   autotag-and-release:
+    permissions:
+      contents: write
+      actions: read
+
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -34,7 +38,7 @@ jobs:
           fi
 
       - name: Download Linux 7z artifact
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v11
         with:
           workflow: Ubuntu build.yml
           name: tungsten.7z
@@ -44,7 +48,7 @@ jobs:
           event: push
 
       - name: Download Linux zip artifact
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v11
         with:
           workflow: Ubuntu build.yml
           name: tungsten.zip
@@ -54,7 +58,7 @@ jobs:
           event: push
 
       - name: Download Linux tar.gz artifact
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v11
         with:
           workflow: Ubuntu build.yml
           name: tungsten.tar.gz
@@ -64,7 +68,7 @@ jobs:
           event: push
 
       - name: Download Linux Deb artifact
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v11
         with:
           workflow: Ubuntu build.yml
           name: tungsten.Deb
