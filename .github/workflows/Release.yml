@@ -44,7 +44,7 @@ jobs:
           name: tungsten.7z
           path: ./
           repo: RickIsGone/tungsten
-          branch: main
+          branch: master
           event: push
 
       - name: Download Linux zip artifact
@@ -54,7 +54,7 @@ jobs:
           name: tungsten.zip
           path: ./
           repo: RickIsGone/tungsten
-          branch: main
+          branch: master
           event: push
 
       - name: Download Linux tar.gz artifact
@@ -64,7 +64,7 @@ jobs:
           name: tungsten.tar.gz
           path: ./
           repo: RickIsGone/tungsten
-          branch: main
+          branch: master
           event: push
 
       - name: Download Linux Deb artifact
@@ -74,7 +74,7 @@ jobs:
           name: tungsten.Deb
           path: ./
           repo: RickIsGone/tungsten
-          branch: main
+          branch: master
           event: push
 
       - name: Rename Artifacts
