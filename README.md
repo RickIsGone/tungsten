@@ -156,6 +156,10 @@ Types follow the ***PascalCase*** convention, they are:
 | `String` | N/A               |
 | `Num`    | 8                 |
 
+> [!IMPORTANT]
+> 'Num' is a `double` so to use functions like `print` and `input` you need to use the `%lf` format
+> specifier
+
 Tungsten has also a variadic type called `ArgPack` which is just like `...` in C
 
 ### Stack allocation
@@ -332,8 +336,7 @@ and use the integrated buildsystem
 
 > [!IMPORTANT]
 > Tungsten currently uses *clang* to compile the generated llvm ir to an executable, so you need to have it installed
-> for
-> the compiler to work
+> for the compiler to work
 
 ```shell
 cd projectDirectory
