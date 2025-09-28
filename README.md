@@ -157,7 +157,7 @@ Types follow the ***PascalCase*** convention, they are:
 | `Num`    | 8                 |
 
 > [!IMPORTANT]
-> 'Num' is a `double` so to use functions like `print` and `input` you need to use the `%lf` format
+> `Num` is a `double` so to use functions like `print` and `input` you need to use the `%lf` format
 > specifier
 
 Tungsten has also a variadic type called `ArgPack` which is just like `...` in C
@@ -299,7 +299,7 @@ You can import C functions with
 extern "C" Void myCFun();
 ```
 
-and tungstn functions with
+and tungsten functions with
 
 ```cpp
 extern Void myFun();
