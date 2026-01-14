@@ -4,7 +4,7 @@ export namespace std {
    class SourceLocation {
    public:
       SourceLocation() {}
-      static SourceLocation current(String file = __builtinFile(), String function = __builtinFunction(), Uint64 column = __builtinColumn(), Uint64 line = __builtinLine()) {
+      static SourceLocation current(String file = __builtinFile(), String function = __builtinFunction(), u64 column = __builtinColumn(), u64 line = __builtinLine()) {
          SourceLocation sl;
          sl._file = file;
          sl._function = function;
@@ -15,13 +15,13 @@ export namespace std {
 
       String file() { return _file; }
       String function() { return _function; }
-      Uint64 column() { return _column; }
-      Uint64 line() { return _line; }
+      u64 column() { return _column; }
+      u64 line() { return _line; }
 
    private:
       String _file;
       String _function;
-      Uint64 _column;
-      Uint64 _line;
+      u64 _column;
+      u64 _line;
    };
 }

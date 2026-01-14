@@ -110,7 +110,8 @@ cmake --build build --config Release
 
 ## Variables declaration
 
-Types follow the ***PascalCase*** convention, they are:
+Tungsten has a similar naming convention to Rust, where base types are written in **camelCase** and structs and classes
+are written in **PascalCase**
 
 <!-- | Type      | Alignment (Bytes) |
 |-----------|-------------------|
