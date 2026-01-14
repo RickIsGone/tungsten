@@ -68,7 +68,7 @@ namespace tungsten {
                tokens.push_back({TokenType::Identifier, startingIndex, buffer.length()});
 
             buffer.clear();
-
+ 
          } else if (std::isdigit(static_cast<unsigned char>(_peek().value()))) {
             // INT LITERALS
             do {
@@ -82,24 +82,16 @@ namespace tungsten {
             switch (_peek().value()) {
                case '"':
                   // STRING LITERALS
-                  if (_peek(1).has_value()) {
-                     if (_peek(1).value() == '"') {
-                        tokens.push_back({TokenType::StringLiteral, startingIndex, 2});
-                        _consume(2);
-                     } else {
-                        _consume();
-                        while (_peek().has_value() && _peek().value() != '"' && _peek().value() != '\n') {
-                           buffer.push_back(_peek().value());
-                           _consume();
-                        }
-                        if (_peek().has_value() && _peek().value() == '"') {
-                           tokens.push_back({TokenType::StringLiteral, startingIndex, buffer.length() + 2});
-                           _consume();
-                           buffer.clear();
-                        }
-                     }
-                  } else
+                  _consume();
+                  while (_peek().has_value() && _peek().value() != '"' && _peek().value() != '\n') {
+                     buffer.push_back(_peek().value());
                      _consume();
+                  }
+                  if (_peek().has_value() && _peek().value() == '"') {
+                     tokens.push_back({TokenType::StringLiteral, startingIndex, buffer.length() + 2});
+                     _consume();
+                     buffer.clear();
+                  }
                   break;
 
                case '/':
