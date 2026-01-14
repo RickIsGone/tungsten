@@ -4,7 +4,7 @@
   <img src="tungsten logo.png" alt="the tungsten logo" width="300" />
 </p>
 
-## Introduction
+## introduction
 
 *Tungsten* is a statically-typed multi-paradigm compiled programming language made with the LLVM framework and inspired
 by C++ and Java
@@ -14,14 +14,14 @@ by C++ and Java
 Below is a snippet of code which shows some of the basic functionalities of tungsten
 
 ```c++
-fun fibonacci(Num num) -> Num {
+fun fibonacci(num num) -> num {
    if (num <= 1) 
       ret num;
    ret fibonacci(num - 1) + fibonacci(num - 2);
 }
 
-fun main() -> Num {
-   for (Num i = 0; i < 10; ++i) {
+fun main() -> num {
+   for (num i = 0; i < 10; ++i) {
       print("fibonacci(%.0lf) = %.0lf\n", i, fibonacci(i));
    }
    ret CodeSuccess;
@@ -114,35 +114,35 @@ Types follow the ***PascalCase*** convention, they are:
 
 <!-- | Type      | Alignment (Bytes) |
 |-----------|-------------------|
-| `Void`    | N/A               |
-| `Int`     | 4                 |
-| `Uint`    | 4                 |
+| `void`    | N/A               |
+| `int`     | 4                 |
+| `uint`    | 4                 |
 | `Float`   | 4                 |
 | `Double`  | 8                 |
-| `Char`    | 2                 |
-| `Bool`    | 1                 |
+| `char`    | 2                 |
+| `bool`    | 1                 |
 | `String`  | N/A               |
-| `Int8`    | 1                 |
-| `Int16`   | 2                 |
-| `Int32`   | 4                 |
-| `Int64`   | 8                 |
-| `Int128`  | 16                |
-| `Uint8`   | 1                 |
-| `Uint16`  | 2                 |
-| `Uint32`  | 4                 |
-| `Uint64`  | 8                 |
-| `Uint128` | 16                | -->
+| `i8`      | 1                 |
+| `i16`     | 2                 |
+| `i32`     | 4                 |
+| `i64`     | 8                 |
+| `i128`    | 16                |
+| `u8`      | 1                 |
+| `u16`     | 2                 |
+| `u32`     | 4                 |
+| `u64`     | 8                 |
+| `u128`    | 16                | -->
 
 | Type     | Alignment (Bytes) |
 |----------|-------------------|
-| `Void`   | N/A               |
-| `Char`   | 2                 |
-| `Bool`   | 1                 |
+| `void`   | N/A               |
+| `char`   | 2                 |
+| `bool`   | 1                 |
 | `String` | N/A               |
-| `Num`    | 8                 |
+| `num`    | 8                 |
 
 > [!IMPORTANT]
-> `Num` is a `double` so to use functions like `print` and `input` you need to use the `%lf` format
+> `num` is a `double` so to use functions like `print` and `input` you need to use the `%lf` format
 > specifier
 
 Tungsten has also a variadic type called `ArgPack` which is just like `...` in C
@@ -150,14 +150,14 @@ Tungsten has also a variadic type called `ArgPack` which is just like `...` in C
 ### Stack allocation
 
 ```c++
-Num myVariable = 247;
-Num myVariable{247};
+num myVariable = 247;
+num myVariable{247};
 ```
 
 <!-- ### Heap allocation
 
 ```c++
-Int* myPointer = new Int{247};
+int* myPointer = new int{247};
 ```
 
 To free the pointer:
@@ -174,13 +174,13 @@ free myPointer;
 ### Stack allocation
 
 ```c++
-Int[10] myArray;
+int[10] myArray;
 ```
 
 ### Heap allocation
 
 ```c++
-Int* myArray = new Int[10];
+int* myArray = new int[10];
 ```
 
 To free the array:
@@ -238,7 +238,7 @@ do {
 For statements just like while statements require brackets to work
 
 ```Java
-for (Num i = 0; i < 10; ++i) {
+for (num i = 0; i < 10; ++i) {
     // do stuff
 }
 ```
@@ -248,7 +248,7 @@ for (Num i = 0; i < 10; ++i) {
 Rather than a C++ aproach, functions are more similar to Rust's:
 
 ```c++
-fun myFunction() -> Num {
+fun myFunction() -> num {
     ret 247;
 }
 ```
@@ -256,8 +256,8 @@ fun myFunction() -> Num {
 <!-- You can return arrays by doing:
 
 ```c++
-fun myfunction() -> Int[] {
-    Int[3] array{2, 4, 7};
+fun myfunction() -> int[] {
+    int[3] array{2, 4, 7};
     ret array;
 }
 ```
@@ -265,8 +265,8 @@ fun myfunction() -> Int[] {
 Or you can allocate on the heap and use a pointer:
 
 ```c++
-fun myFunction() -> Int* {
-    Int* array = new Int[3]{2, 4, 7};
+fun myFunction() -> int* {
+    int* array = new int[3]{2, 4, 7};
     ret array;
 }
 ``` -->
@@ -281,49 +281,49 @@ There are two types of extern functions
 You can import C functions with
 
 ```cpp
-extern "C" fun myCFun() -> Void;
+extern "C" fun myCFun() -> void;
 ```
 
 and tungsten functions with
 
 ```cpp
-extern fun myFun() -> Void;
+extern fun myFun() -> void;
 ```
 
 ### Main Function
 
-The `main` function can return either `Int` or `Int32`. Command line arguments are passed as a `String` array.
+The `main` function can return either `int` or `int32`. Command line arguments are passed as a `String` array.
 If no return value is provided, `0` will be returned by default.
 
 ```c++
-fun main(String[] args) -> Num {
+fun main(String[] args) -> num {
     /* your code */
     ret CodeSuccess;
 }
 ```
 
-### Integrated Core Functions
+### integrated Core Functions
 
 Tungsten has a reduced number of integrated core functions
 
 | Type     | Name              | Arguments             | functionality                                |
 |----------|-------------------|-----------------------|----------------------------------------------|
-| `Num`    | shell             | (String cmd)          | same function as `system()` in C             |
-| `Void`   | print             | (String fmt, ArgPack) | same function as `printf()` in C             |
-| `Void`   | input             | (String fmt, ArgPack) | same function as `scanf()` in C              |  
+| `num`    | shell             | (String cmd)          | same function as `system()` in C             |
+| `void`   | print             | (String fmt, ArgPack) | same function as `printf()` in C             |
+| `void`   | input             | (String fmt, ArgPack) | same function as `scanf()` in C              |  
 | `String` | __builtinFile     | no arguments          | returns the name of the file                 |
 | `String` | __builtinFunction | no arguments          | returns the name of the function             |
-| `Num`    | __builtinColumn   | no arguments          | returns the number of the column             |
-| `Num`    | __builtinLine     | no arguments          | returns the number of the line               |
+| `num`    | __builtinColumn   | no arguments          | returns the number of the column             |
+| `num`    | __builtinLine     | no arguments          | returns the number of the line               |
 | `String` | nameof            | (any variable)        | returns the name of the variable             |
 | `String` | typeof            | (any variable)        | returns the type of the variable             |
-| `Num`    | sizeof            | (any variable)        | returns the size of the type of the variable |
+| `num`    | sizeof            | (any variable)        | returns the size of the type of the variable |
 
 <!-- 
 If you don't need the command-line arguments, you can simply omit them:
 
 ```c++
-fun main() -> Num {
+fun main() -> num {
     /* your code */
     ret 0;
 }
@@ -357,7 +357,7 @@ import build;
 
 Project myProject{Executable, "myProject"};
 
-fun main() -> Num {
+fun main() -> num {
     myProject.addSource("main.tgs");
     myProject.build();
 }

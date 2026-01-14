@@ -333,7 +333,7 @@ namespace tungsten {
       }
 
       if (proto.name() == "main") {
-         if (fullTypeString(proto.type()) != "Double")
+         if (fullTypeString(proto.type()) != "double")
             return _logError("main function must have return type 'Num'"); // will replace with Int32 after reintroducing numeric types
          proto.setType(makeInt32());
       }
@@ -552,7 +552,7 @@ namespace tungsten {
       if (ret.type()->kind() == TypeKind::Void) {
          if (ret.value() != nullptr) {
             ret.value()->accept(*this);
-            return _logError("'Void' function cannot return '{}'", fullTypeString(ret.value()->type()));
+            return _logError("'void' function cannot return '{}'", fullTypeString(ret.value()->type()));
          }
          return;
       }
@@ -574,19 +574,19 @@ namespace tungsten {
    }
 
    bool SemanticAnalyzer::_isSignedType(const std::string& type) {
-      return type == "Int" || type == "Int8" || type == "Int16" || type == "Int32" || type == "Int64" || type == "Int128";
+      return type == "int" || type == "i8" || type == "i16" || type == "i32" || type == "i64" || type == "i128";
    }
    bool SemanticAnalyzer::_isUnsignedType(const std::string& type) {
-      return type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64" || type == "Uint128";
+      return type == "uint" || type == "u8" || type == "u16" || type == "u32" || type == "u64" || type == "u128";
    }
    bool SemanticAnalyzer::_isFloatingPointType(const std::string& type) {
-      return type == "Float" || type == "Double";
+      return type == "float" || type == "double";
    }
    bool SemanticAnalyzer::_isNumberType(const std::string& type) {
       return _isSignedType(type) || _isUnsignedType(type) || _isFloatingPointType(type);
    }
    bool SemanticAnalyzer::_isBaseType(const std::string& type) {
-      return _isNumberType(type) || type == "String" || type == "Char" || type == "Void" || type == "Bool" || type == "ArgPack";
+      return _isNumberType(type) || type == "String" || type == "char" || type == "void" || type == "bool" || type == "ArgPack";
    }
    bool SemanticAnalyzer::_isClass(const std::string& cls) {
       for (auto& clss : _classes) {
@@ -613,17 +613,17 @@ namespace tungsten {
             return true;
 
          // Double → Float
-         if (fromType == "Double" && toType == "Float")
+         if (fromType == "double" && toType == "float")
             return true;
 
          auto bitSize = [](const std::string& t) -> int {
-            if (t == "Int8" || t == "Uint8") return 8;
-            if (t == "Int16" || t == "Uint16") return 16;
-            if (t == "Int32" || t == "Uint32" || t == "Int" || t == "Uint") return 32;
-            if (t == "Int64" || t == "Uint64") return 64;
-            if (t == "Int128" || t == "Uint128") return 128;
-            if (t == "Float") return 32;
-            if (t == "Double") return 64;
+            if (t == "i8" || t == "u8") return 8;
+            if (t == "i16" || t == "u16") return 16;
+            if (t == "i32" || t == "u32" || t == "int" || t == "uint") return 32;
+            if (t == "i64" || t == "u64") return 64;
+            if (t == "i128" || t == "u128") return 128;
+            if (t == "float") return 32;
+            if (t == "double") return 64;
             return 0; // unknown
          };
 

@@ -44,13 +44,13 @@ namespace tungsten {
    }
 
    bool isSignedType(const std::string& type) {
-      return type == "Int" || type == "Int8" || type == "Int16" || type == "Int32" || type == "Int64" || type == "Int128";
+      return type == "int" || type == "i8" || type == "i16" || type == "i32" || type == "i64" || type == "i128";
    }
    bool isUnsignedType(const std::string& type) {
-      return type == "Uint" || type == "Uint8" || type == "Uint16" || type == "Uint32" || type == "Uint64" || type == "Uint128";
+      return type == "uint" || type == "u8" || type == "u16" || type == "u32" || type == "u64" || type == "u128";
    }
    bool isFloatingPointType(const std::string& type) {
-      return type == "Float" || type == "Double";
+      return type == "float" || type == "double";
    }
    llvm::Value* castToCommonType(llvm::Value* val, llvm::Type* targetType) {
       llvm::Type* srcType = val->getType();
@@ -72,30 +72,30 @@ namespace tungsten {
          unsigned bits = type->getIntegerBitWidth();
          switch (bits) {
             case 1:
-               return "Bool";
+               return "bool";
             case 8:
-               return "Int8";
+               return "i8";
             case 16:
-               return "Int16";
+               return "i16";
             case 32:
-               return "Int32";
+               return "i32";
             case 64:
-               return "Int64";
+               return "i64";
             case 128:
-               return "Int128";
+               return "i128";
             default:
-               return "Int" + std::to_string(bits); // fallback
+               return "i" + std::to_string(bits); // fallback
          }
       }
 
       if (type->isFloatingPointTy()) {
-         if (type->isFloatTy()) return "Float";
-         if (type->isDoubleTy()) return "Double";
+         if (type->isFloatTy()) return "float";
+         if (type->isDoubleTy()) return "double";
          return "FloatN";
       }
 
       if (type->isVoidTy()) {
-         return "Void";
+         return "void";
       }
 
       if (type->isPointerTy()) { // TODO: fix infinite recursive calling
@@ -105,7 +105,7 @@ namespace tungsten {
          }
 
          if (pointee->isIntegerTy(8)) {
-            return "Char";
+            return "char";
          }
 
          if (pointee->isStructTy()) { // classes
@@ -305,7 +305,7 @@ export namespace tungsten {
          return TypeKind::Void;
       }
       _NODISCARD const std::string string() const override {
-         return "Void";
+         return "void";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getVoidTy();
@@ -317,7 +317,7 @@ export namespace tungsten {
          return TypeKind::Char;
       }
       _NODISCARD const std::string string() const override {
-         return "Char";
+         return "char";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt8Ty();
@@ -353,7 +353,7 @@ export namespace tungsten {
          return TypeKind::Int8;
       }
       _NODISCARD const std::string string() const override {
-         return "Int8";
+         return "i8";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt8Ty();
@@ -365,7 +365,7 @@ export namespace tungsten {
          return TypeKind::Int16;
       }
       _NODISCARD const std::string string() const override {
-         return "Int16";
+         return "i16";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt16Ty();
@@ -377,7 +377,7 @@ export namespace tungsten {
          return TypeKind::Int32;
       }
       _NODISCARD const std::string string() const override {
-         return "Int32";
+         return "i32";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt32Ty();
@@ -389,7 +389,7 @@ export namespace tungsten {
          return TypeKind::Int64;
       }
       _NODISCARD const std::string string() const override {
-         return "Int64";
+         return "i64";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt64Ty();
@@ -401,7 +401,7 @@ export namespace tungsten {
          return TypeKind::Int128;
       }
       _NODISCARD const std::string string() const override {
-         return "Int128";
+         return "i128";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt128Ty();
@@ -413,7 +413,7 @@ export namespace tungsten {
          return TypeKind::Uint8;
       }
       _NODISCARD const std::string string() const override {
-         return "Uint8";
+         return "u8";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt8Ty();
@@ -425,7 +425,7 @@ export namespace tungsten {
          return TypeKind::Uint16;
       }
       _NODISCARD const std::string string() const override {
-         return "Uint16";
+         return "u16";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt16Ty();
@@ -437,7 +437,7 @@ export namespace tungsten {
          return TypeKind::Uint32;
       }
       _NODISCARD const std::string string() const override {
-         return "Uint32";
+         return "u32";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt32Ty();
@@ -449,7 +449,7 @@ export namespace tungsten {
          return TypeKind::Uint64;
       }
       _NODISCARD const std::string string() const override {
-         return "Uint64";
+         return "u64";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt64Ty();
@@ -461,7 +461,7 @@ export namespace tungsten {
          return TypeKind::Uint128;
       }
       _NODISCARD const std::string string() const override {
-         return "Uint128";
+         return "u128";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt128Ty();
@@ -473,7 +473,7 @@ export namespace tungsten {
          return TypeKind::Float;
       }
       _NODISCARD const std::string string() const override {
-         return "Float";
+         return "float";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getFloatTy();
@@ -485,7 +485,7 @@ export namespace tungsten {
          return TypeKind::Double;
       }
       _NODISCARD const std::string string() const override {
-         return "Double";
+         return "double";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getDoubleTy();
@@ -1783,7 +1783,7 @@ export namespace tungsten {
       }
 
       if (Builder->GetInsertBlock()->getTerminator() == nullptr) {
-         if (_prototype->type()->string() == "Void")
+         if (_prototype->type()->string() == "void")
             Builder->CreateRetVoid();
          else if (_prototype->name() == "main")
             Builder->CreateRet(Builder->getInt32(0)); // returning 0 by default in main function
