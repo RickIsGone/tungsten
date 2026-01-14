@@ -122,11 +122,10 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parseStaticCast();
       std::unique_ptr<ExpressionAST> _parseConstCast();
       std::unique_ptr<ExpressionAST> _parseVariableDeclaration();
-      std::variant<std::unique_ptr<VariableDeclarationAST>, std::unique_ptr<FunctionAST>> _parseVariableOrFunctionDeclaration();
+      std::unique_ptr<FunctionAST> _parseFunctionDeclaration();
       std::unique_ptr<ExpressionAST> _parseArgument();
       std::unique_ptr<BlockStatementAST> _parseBlock();
       std::unique_ptr<FunctionPrototypeAST> _parseFunctionPrototype();
-      // std::unique_ptr<FunctionAST> _parseFunctionDeclaration();
       std::unique_ptr<ExpressionAST> _parseIfStatement();
       std::unique_ptr<ExpressionAST> _parseWhileStatement();
       std::unique_ptr<ExpressionAST> _parseDoWhileStatement();
@@ -243,6 +242,11 @@ namespace tungsten {
                   _logError("expected ';' after extern statement");
                _consume(); // consume ';'
                break;
+
+            case TokenType::Fun:
+               _functions.push_back(_parseFunctionDeclaration());
+               break;
+
             case TokenType::Num:
             case TokenType::Int:
             case TokenType::Int8:
@@ -263,15 +267,11 @@ namespace tungsten {
             case TokenType::String:
             case TokenType::Void:
             case TokenType::Identifier: {
-               auto expr = _parseVariableOrFunctionDeclaration();
-               if (std::holds_alternative<std::unique_ptr<VariableDeclarationAST>>(expr)) {
-                  if (_peek().type != TokenType::Semicolon)
-                     _logError("expected ';' after variable declaration");
-                  _consume(); // consume ';'
-                  _globalVariables.push_back(std::move(std::get<std::unique_ptr<VariableDeclarationAST>>(expr)));
-               } else {
-                  _functions.push_back(std::move(std::get<std::unique_ptr<FunctionAST>>(expr)));
-               }
+               auto expr = _parseVariableDeclaration();
+               if (_peek().type != TokenType::Semicolon)
+                  _logError("expected ';' after variable declaration");
+               _consume(); // consume ';'
+               _globalVariables.push_back(std::move(expr));
                break;
             }
                // case TokenType::Namespace:
@@ -670,7 +670,7 @@ namespace tungsten {
          case TokenType::StringLiteral:
             return _parseStringExpression();
 
-         case TokenType::Return:
+         case TokenType::Ret:
             return _parseReturnStatement();
          case TokenType::Exit:
             return _parseExitStatement();
@@ -1018,58 +1018,14 @@ namespace tungsten {
       return std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr));
    }
 
-   std::variant<std::unique_ptr<VariableDeclarationAST>, std::unique_ptr<FunctionAST>> Parser::_parseVariableOrFunctionDeclaration() {
-      std::shared_ptr<Type> type = _parseType();
-      if (type->kind() == TypeKind::ArgPack)
-         return _logError<VariableDeclarationAST>("variadic arguments are not allowed as type");
-
-      if (_peek().type != TokenType::Identifier)
-         return _logError<VariableDeclarationAST>("expected an identifier after type in variable declaration but got: '" + _lexeme(_peek()) + "'");
-
-      std::string name = _lexeme(_peek());
-      _consume(); // consume identifier
-      if (_peek().type != TokenType::OpenParen) {
-         std::unique_ptr<ExpressionAST> initExpr = nullptr;
-
-         if (_peek().type == TokenType::Equal || _peek().type == TokenType::OpenBrace) {
-            _consume(); // consume '=' / '{'
-            initExpr = _parseExpression();
-            if (_peek().type == TokenType::CloseBrace)
-               _consume(); // consume '}'
-
-            // if (initExpr) {
-            //    if (auto* expr = dynamic_cast<NumberExpressionAST*>(initExpr.get())) {
-            //       expr->setType(type);
-            //    } else if (auto* expr = dynamic_cast<BinaryExpressionAST*>(initExpr.get())) {
-            //       expr->setType(type);
-            //    }
-            // }
-         }
-
-         return std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr), true);
-      }
-
-      std::vector<std::unique_ptr<ExpressionAST>> args;
-      // check already handled in _parsePrimaryExpression()
-      _consume(); // consumes (
-      while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile) {
-         args.push_back(_parseArgument());
-         if (args.back()->type()->kind() == TypeKind::ArgPack)
-            break;
-         if (_peek().type == TokenType::Comma)
-            _consume(); // consume ,
-      }
-      if (_peek().type != TokenType::CloseParen)
-         return _logError<FunctionAST>("expected ')'");
-      _consume(); // consumes )
-
-      auto proto = std::make_unique<FunctionPrototypeAST>(type, name, std::move(args));
+   std::unique_ptr<FunctionAST> Parser::_parseFunctionDeclaration() {
+      auto proto = _parseFunctionPrototype();
 
       if (_peek().type != TokenType::OpenBrace)
          return _logError<FunctionAST>("expected '{'");
 
-      _currentFunctionReturnType = type;
-      _currentFunctionName = name;
+      _currentFunctionReturnType = proto->type();
+      _currentFunctionName = proto->name();
       std::unique_ptr<BlockStatementAST> body = _parseBlock();
       return std::make_unique<FunctionAST>(std::move(proto), std::move(body));
    }
@@ -1132,18 +1088,19 @@ namespace tungsten {
    }
 
    std::unique_ptr<FunctionPrototypeAST> Parser::_parseFunctionPrototype() {
-      std::shared_ptr<Type> type = _parseType();
-      if (type->kind() == TypeKind::ArgPack)
-         return _logError<FunctionPrototypeAST>("variadic arguments are not allowed as return type");
-      std::string name = _lexeme(_peek());
-      _consume();
-      if (_symbolTable.contains(name))
-         return _logError<FunctionPrototypeAST>("redefinition of '" + name + "'");
+      _consume(); // consume 'fun'
 
-      // utils::debugLog("definition of function prototype '{}' with type '{}'", name, type);
+      if (_peek().type != TokenType::Identifier)
+         return _logError<FunctionPrototypeAST>("expected an identifier after fun in function declaration but got: '" + _lexeme(_peek()) + "'");
+      std::string name = _lexeme(_peek());
+      _consume(); // consume identifier
+
       std::vector<std::unique_ptr<ExpressionAST>> args;
-      // check already handled in _parsePrimaryExpression()
-      _consume(); // consumes (
+
+      if (_peek().type != TokenType::OpenParen)
+         return _logError<FunctionPrototypeAST>("expected '('");
+      _consume(); // consume '('
+
       while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile) {
          args.push_back(_parseArgument());
          // utils::debugLog("argument {}: {}", args.size(), _lexeme(tok));
@@ -1153,23 +1110,17 @@ namespace tungsten {
       if (_peek().type == TokenType::EndOFFile)
          return _logError<FunctionPrototypeAST>("expected ')'");
       _consume(); // consumes )
+
+      if (_peek().type != TokenType::Arrow)
+         return _logError<FunctionPrototypeAST>("expected '->'");
+      _consume(); // consume '->'
+
+      std::shared_ptr<Type> type = _parseType();
+      if (type->kind() == TypeKind::ArgPack)
+         return _logError<FunctionPrototypeAST>("variadic arguments are not allowed as type");
+
       return std::make_unique<FunctionPrototypeAST>(type, name, std::move(args));
    }
-
-   // std::unique_ptr<FunctionAST> Parser::_parseFunctionDeclaration() {
-   //    std::unique_ptr<FunctionPrototypeAST> proto = _parseFunctionPrototype();
-
-   //    // _symbolTable.insert({proto->name(), SymbolType::Function});
-   //    if (_peek().type != TokenType::OpenBrace)
-   //       return _logError<FunctionAST>("expected '{'");
-
-   //    std::unique_ptr<BlockStatementAST> body = _parseBlock();
-   //    for (auto& expr : body->statements()) {
-   //       if (auto ret = dynamic_cast<ReturnStatementAST*>(expr.get()))
-   //          ret->setType(proto->type());
-   //    }
-   //    return std::make_unique<FunctionAST>(std::move(proto), std::move(body));
-   // }
 
    std::unique_ptr<ExpressionAST> Parser::_parseIfStatement() {
       _consume(); // consume if

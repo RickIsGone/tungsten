@@ -11,7 +11,8 @@ namespace tungsten {
       Invalid,
 
       // keywords
-      Return,
+      Fun,
+      Ret,
       Exit,
       New,
       Free,
@@ -139,7 +140,8 @@ namespace tungsten {
 
    export inline std::unordered_map<std::string, TokenType> tokensMap = {
        // keywords
-       {"return", TokenType::Return},
+       {"fun", TokenType::Fun},
+       {"ret", TokenType::Ret},
        {"exit", TokenType::Exit},
        {"new", TokenType::New},
        {"free", TokenType::Free},

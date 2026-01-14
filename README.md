@@ -13,33 +13,18 @@ by C++ and Java
 
 Below is a snippet of code which shows some of the basic functionalities of tungsten
 
-<!-- ```c++
-import stdio;
-Uint fibonacci(Uint num) {
-    if (num <= 1) return num;
-    return fibonacci(num - 1) + fibonacci(num - 2);
-}
-
-Int main(String[] args) {
-    for (Uint8 i = 0; i < 10; ++i) {
-        print("${}, ", fibonacci(i));
-    }
-    return 0;
-}
-``` -->
-
 ```c++
-Num fibonacci(Num num) {
+fun fibonacci(Num num) -> Num {
    if (num <= 1) 
-      return num;
-   return fibonacci(num - 1) + fibonacci(num - 2);
+      ret num;
+   ret fibonacci(num - 1) + fibonacci(num - 2);
 }
 
-Num main() {
+fun main() -> Num {
    for (Num i = 0; i < 10; ++i) {
       print("fibonacci(%.0lf) = %.0lf\n", i, fibonacci(i));
    }
-   return CodeSuccess;
+   ret CodeSuccess;
 }
 ```
 
@@ -253,36 +238,36 @@ do {
 For statements just like while statements require brackets to work
 
 ```Java
-for(Num i = 0; i < 10; ++i) {
+for (Num i = 0; i < 10; ++i) {
     // do stuff
 }
 ```
 
 ## Functions
 
-Just like in C++, functions are declared like this:
+Rather than a C++ aproach, functions are more similar to Rust's:
 
 ```c++
-Num myFunction() {
-    return 247;
+fun myFunction() -> Num {
+    ret 247;
 }
 ```
 
 <!-- You can return arrays by doing:
 
 ```c++
-Int[] myfunction() {
+fun myfunction() -> Int[] {
     Int[3] array{2, 4, 7};
-    return array;
+    ret array;
 }
 ```
 
 Or you can allocate on the heap and use a pointer:
 
 ```c++
-Int* myFunction() {
+fun myFunction() -> Int* {
     Int* array = new Int[3]{2, 4, 7};
-    return array;
+    ret array;
 }
 ``` -->
 
@@ -296,13 +281,13 @@ There are two types of extern functions
 You can import C functions with
 
 ```cpp
-extern "C" Void myCFun();
+extern "C" fun myCFun() -> Void;
 ```
 
 and tungsten functions with
 
 ```cpp
-extern Void myFun();
+extern fun myFun() -> Void;
 ```
 
 ### Main Function
@@ -311,38 +296,36 @@ The `main` function can return either `Int` or `Int32`. Command line arguments a
 If no return value is provided, `0` will be returned by default.
 
 ```c++
-Num main() {
+fun main(String[] args) -> Num {
     /* your code */
-    return CodeSuccess;
+    ret CodeSuccess;
 }
 ```
 
 ### Integrated Core Functions
 
-Tungsten has a reduced number of integrated core functions  
+Tungsten has a reduced number of integrated core functions
 
-| Type       | Name                 | Arguments              | functionality                                 |
-|------------|----------------------|------------------------|-----------------------------------------------|
-| `Num`      | shell                | (String cmd)           | same function as `system()` in C              |
-| `Void`     | print                | (String fmt, ArgPack)  | same function as `printf()` in C              |
-| `Void`     | input                | (String fmt, ArgPack)  | same function as `scanf()` in C               |  
-| `String`   | __builtinFile        | no arguments           | returns the name of the file                  |
-| `String`   | __builtinFunction    | no arguments           | returns the name of the function              |
-| `Num`      | __builtinColumn      | no arguments           | returns the number of the column              |
-| `Num`      | __builtinLine        | no arguments           | returns the number of the line                |
-| `String`   | nameof               | (any variable)         | returns the name of the variable              |
-| `String`   | typeof               | (any variable)         | returns the type of the variable              |
-| `Num`      | sizeof               | (any variable)         | returns the size of the type of the variable  |
-
-
+| Type     | Name              | Arguments             | functionality                                |
+|----------|-------------------|-----------------------|----------------------------------------------|
+| `Num`    | shell             | (String cmd)          | same function as `system()` in C             |
+| `Void`   | print             | (String fmt, ArgPack) | same function as `printf()` in C             |
+| `Void`   | input             | (String fmt, ArgPack) | same function as `scanf()` in C              |  
+| `String` | __builtinFile     | no arguments          | returns the name of the file                 |
+| `String` | __builtinFunction | no arguments          | returns the name of the function             |
+| `Num`    | __builtinColumn   | no arguments          | returns the number of the column             |
+| `Num`    | __builtinLine     | no arguments          | returns the number of the line               |
+| `String` | nameof            | (any variable)        | returns the name of the variable             |
+| `String` | typeof            | (any variable)        | returns the type of the variable             |
+| `Num`    | sizeof            | (any variable)        | returns the size of the type of the variable |
 
 <!-- 
 If you don't need the command-line arguments, you can simply omit them:
 
 ```c++
-Int main() {
+fun main() -> Num {
     /* your code */
-    return 0;
+    ret 0;
 }
 ``` -->
 
@@ -374,7 +357,7 @@ import build;
 
 Project myProject{Executable, "myProject"};
 
-Int main() {
+fun main() -> Num {
     myProject.addSource("main.tgs");
     myProject.build();
 }
