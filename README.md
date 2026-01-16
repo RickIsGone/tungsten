@@ -14,10 +14,10 @@ by C++ and Java
 Below is a snippet of code which shows some of the basic functionalities of tungsten
 
 ```c++
-fun fibonacci(num num) -> num {
-   if (num <= 1) 
-      ret num;
-   ret fibonacci(num - 1) + fibonacci(num - 2);
+fun fibonacci(num n) -> num {
+   if (n <= 1) 
+      ret n;
+   ret fibonacci(n - 1) + fibonacci(n - 2);
 }
 
 fun main() -> num {
