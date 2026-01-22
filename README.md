@@ -204,7 +204,7 @@ if (condition) {
 }
 ```
 
-And just like in C++ you can avoid using brackets for single instructions
+And just like in C++ you can avoid using braces for single instructions
 
 ```cpp
 if (condition)
@@ -215,7 +215,7 @@ else
 
 ### While
 
-Unlike in C++, while statements require brackets to work
+Unlike in C++, while statements require braces to work
 
 ```cpp
 while (condition) {
@@ -236,7 +236,7 @@ do {
 
 ### For
 
-For statements just like while statements require brackets to work
+For statements just like while statements require braces to work
 
 ```Java
 for (num i = 0; i < 10; ++i) {
