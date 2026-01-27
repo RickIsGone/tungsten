@@ -106,6 +106,18 @@ cmake --build build --config Release
 
 </details><p>
 
+<details><summary><big>MacOS</big></summary><p>
+
+<ins> **2. Compiling the project:** </ins>  
+
+
+```bash
+cmake -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+cmake --build build --config Release
+```
+
+</details><p>
+
 # Syntax
 
 ## Variables declaration

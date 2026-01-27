@@ -47,11 +47,11 @@ jobs:
           branch: master
           event: push
 
-      - name: Download Linux zip artifact
+      - name: Download Linux sh artifact
         uses: dawidd6/action-download-artifact@v11
         with:
           workflow: Ubuntu build
-          name: tungsten.zip
+          name: tungsten.sh
           path: ./
           repo: RickIsGone/tungsten
           branch: master
@@ -80,9 +80,9 @@ jobs:
       - name: Rename Artifacts
         run: |
           mv tungsten.7z tungsten-linux-${{ env.version }}.7z
-          mv tungsten.zip tungsten-linux-${{ env.version }}.zip
+          mv tungsten.sh tungsten-linux-${{ env.version }}.sh
           mv tungsten.tar tungsten-linux-${{ env.version }}.tar
-          mv tungsten.deb tungsten-linux-${{ env.version }}.deb
+          mv tungsten.Deb tungsten-linux-${{ env.version }}.Deb
 
       - name: Create Release
         id: create_release
@@ -131,6 +131,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./tungsten-linux-${{ env.version }}.deb
-          asset_name: tungsten-linux-${{ env.version }}.deb
+          asset_path: ./tungsten-linux-${{ env.version }}.Deb
+          asset_name: tungsten-linux-${{ env.version }}.Deb
           asset_content_type: application/vnd.debian.binary-package

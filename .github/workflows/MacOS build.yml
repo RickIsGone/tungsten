@@ -1,0 +1,76 @@
+name: macOS build
+
+on:
+  push:
+    branches: [ "master" ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    strategy:
+      fail-fast: false
+      
+      matrix:
+        build_type: [ Release ]
+        c_compiler: [ clang ]
+        cpp_compiler: [ clang++ ]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set reusable strings
+        id: strings
+        shell: bash
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies with Homebrew
+        run: |
+          brew update
+          brew install cmake ninja p7zip llvm libarchive curl
+
+      - name: Setting up CMake
+        run: cmake -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+
+      - name: Build
+        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+
+      - name: Test
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        run: ctest --build-config ${{ matrix.build_type }}
+
+      - name: Package with CPack
+        working-directory: build
+        run: cpack
+
+      - name: Get version from latest tag
+        id: get_version
+        shell: bash
+        run: |
+          git fetch --tags
+          TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+
+      - name: Upload TGZ package
+        uses: actions/upload-artifact@v4
+        with:
+          name: tungsten-macos.tar.gz
+          path: build/*.tar.gz
+
+      - name: Upload 7Z package
+        uses: actions/upload-artifact@v4
+        with:
+          name: tungsten-macos.7z
+          path: build/*.7z
+
+      - name: Upload DMG package 
+        uses: actions/upload-artifact@v4
+        with:
+          name: tungsten-macos.dmg
+          path: build/*.dmg
