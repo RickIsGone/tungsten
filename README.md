@@ -49,7 +49,7 @@ You'll need to have the compiler installed on your system for the extension to w
 |----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Ubuntu   | [![Ubuntu Build](https://github.com/rickisgone/tungsten/actions/workflows/Ubuntu%20build.yml/badge.svg)](https://github.com/rickisgone/tungsten/actions/workflows/Ubuntu%20build.yml)    |
 | Windows  | [![Windows Build](https://github.com/rickisgone/tungsten/actions/workflows/Windows%20Build.yml/badge.svg)](https://github.com/rickisgone/tungsten/actions/workflows/Windows%20Build.yml) |
-| Mac      | **not added yet**                                                                                                                                                                        |
+| Mac      | [![macOS build](https://github.com/RickIsGone/tungsten/actions/workflows/MacOS%20build.yml/badge.svg)](https://github.com/RickIsGone/tungsten/actions/workflows/MacOS%20build.yml)                                                                                                                                                                        |
 
 ## Prerequisites
 
@@ -112,7 +112,7 @@ cmake --build build --config Release
 
 
 ```bash
-cmake -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+cmake -DLLVM_DIR=$(brew --prefix llvm)/lib/cmake/llvm -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
 cmake --build build --config Release
 ```
 

@@ -36,7 +36,7 @@ jobs:
           brew install cmake ninja p7zip llvm libarchive curl
 
       - name: Setting up CMake
-        run: cmake -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+        run: cmake -DLLVM_DIR=$(brew --prefix llvm)/lib/cmake/llvm -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
 
       - name: Build
         run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
