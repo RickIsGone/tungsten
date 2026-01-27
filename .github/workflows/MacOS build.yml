@@ -48,8 +48,7 @@ jobs:
                 -DCMAKE_C_COMPILER=$CC \
                 -DCMAKE_CXX_STANDARD=23 \
                 -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
-                -DCMAKE_CXX_FLAGS="-stdlib=libc++ -fmodules -fcxx-modules" \
-                -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++"
+                -DCMAKE_CXX_FLAGS="-stdlib=libc++ -fmodules -fcxx-modules" 
 
       - name: Build
         run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
