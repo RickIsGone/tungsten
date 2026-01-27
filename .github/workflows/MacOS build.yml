@@ -42,7 +42,8 @@ jobs:
           cmake -DLLVM_DIR=$(brew --prefix llvm)/lib/cmake/llvm \
                 -S . -B build -GNinja \
                 -DCMAKE_CXX_COMPILER=$CXX \
-                -DCMAKE_C_COMPILER=$CC
+                -DCMAKE_C_COMPILER=$CC \
+                -DCMAKE_CXX_FLAGS="-stdlib=libc++" 
 
       - name: Build
         run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
