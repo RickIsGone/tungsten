@@ -37,13 +37,19 @@ jobs:
 
       - name: Setting up CMake
         run: |
-          export CC=$(brew --prefix llvm)/bin/clang
-          export CXX=$(brew --prefix llvm)/bin/clang++
-          cmake -DLLVM_DIR=$(brew --prefix llvm)/lib/cmake/llvm \
+          export LLVM_PREFIX=$(brew --prefix llvm)
+          export CC=$LLVM_PREFIX/bin/clang
+          export CXX=$LLVM_PREFIX/bin/clang++
+          export PATH="$LLVM_PREFIX/bin:$PATH"
+          $CXX --version
+          cmake -DLLVM_DIR=$LLVM_PREFIX/lib/cmake/llvm \
                 -S . -B build -GNinja \
                 -DCMAKE_CXX_COMPILER=$CXX \
                 -DCMAKE_C_COMPILER=$CC \
-                -DCMAKE_CXX_FLAGS="-stdlib=libc++" 
+                -DCMAKE_CXX_STANDARD=23 \
+                -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
+                -DCMAKE_CXX_FLAGS="-stdlib=libc++ -fmodules -fcxx-modules" \
+                -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++"
 
       - name: Build
         run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
