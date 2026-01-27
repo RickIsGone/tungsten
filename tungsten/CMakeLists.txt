@@ -65,6 +65,10 @@ add_definitions(${LLVM_DEFINITIONS})
 #endif ()
 
 # === Modules ===
+if(APPLE)
+    set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+endif()
+
 file(GLOB_RECURSE MODULES "src/*.cppm")
 target_sources(tungsten PUBLIC FILE_SET tungsten_modules TYPE CXX_MODULES FILES
         ${MODULES}
