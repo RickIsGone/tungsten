@@ -66,7 +66,7 @@ add_definitions(${LLVM_DEFINITIONS})
 
 # === Modules ===
 if(APPLE)
-    set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+    set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 endif()
 
 file(GLOB_RECURSE MODULES "src/*.cppm")
