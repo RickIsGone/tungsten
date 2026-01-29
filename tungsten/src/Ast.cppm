@@ -1263,8 +1263,8 @@ export namespace tungsten {
 
          return LogErrorV("unsupported type for logical not operation");
       }
-      if (_op == "&"sv || _op == "*")
-         sv return operandValue;
+      if (_op == "&"sv || _op == "*"sv)
+         return operandValue;
 
       // _op == '-'
       if (operandType->isIntegerTy())
@@ -1289,8 +1289,8 @@ export namespace tungsten {
       llvm::Value* LHS = _LHS->codegen();
       llvm::Value* RHS = _RHS->codegen();
 
-      if (_RHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_RHS.get())->op() == "*")
-         sv RHS = Builder->CreateLoad(_RHS->type()->llvmType()->getPointerTo(), RHS, "derefr");
+      if (_RHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_RHS.get())->op() == "*"sv)
+         RHS = Builder->CreateLoad(_RHS->type()->llvmType()->getPointerTo(), RHS, "derefr");
 
       llvm::Value* loadedL = loadIfPointer(LHS, _LHS->type()->llvmType(), "lval");
       llvm::Value* loadedR = loadIfPointer(RHS, _RHS->type()->llvmType(), "rval");
@@ -1305,37 +1305,37 @@ export namespace tungsten {
 
          llvm::Value* targetAddr = LHS;
          if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*")
-            sv loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "derefl");
+            loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "derefl");
 
          llvm::Value* result = nullptr;
          if (_op == "="sv) result = loadedR;
-         else if (_op == "+=")
-            sv result = Builder->CreateFAdd(loadedL, loadedR);
-         else if (_op == "-=")
-            sv result = Builder->CreateFSub(loadedL, loadedR);
-         else if (_op == "*=")
-            sv result = Builder->CreateFMul(loadedL, loadedR);
-         else if (_op == "/=")
-            sv result = Builder->CreateFDiv(loadedL, loadedR);
-         else if (_op == "%=")
-            sv result = Builder->CreateFRem(loadedL, loadedR);
-         else if (_op == "|=")
-            sv result = Builder->CreateOr(loadedL, loadedR);
-         else if (_op == "&=")
-            sv result = Builder->CreateAnd(loadedL, loadedR);
-         else if (_op == "^=")
-            sv result = Builder->CreateXor(loadedL, loadedR);
-         else if (_op == "<<=")
-            sv result = Builder->CreateShl(loadedL, loadedR);
-         else if (_op == ">>=")
-            sv result = Builder->CreateLShr(loadedL, loadedR);
+         else if (_op == "+="sv)
+            result = Builder->CreateFAdd(loadedL, loadedR);
+         else if (_op == "-="sv)
+            result = Builder->CreateFSub(loadedL, loadedR);
+         else if (_op == "*="sv)
+            result = Builder->CreateFMul(loadedL, loadedR);
+         else if (_op == "/="sv)
+            result = Builder->CreateFDiv(loadedL, loadedR);
+         else if (_op == "%="sv)
+            result = Builder->CreateFRem(loadedL, loadedR);
+         else if (_op == "|="sv)
+            result = Builder->CreateOr(loadedL, loadedR);
+         else if (_op == "&="sv)
+            result = Builder->CreateAnd(loadedL, loadedR);
+         else if (_op == "^="sv)
+            result = Builder->CreateXor(loadedL, loadedR);
+         else if (_op == "<<="sv)
+            result = Builder->CreateShl(loadedL, loadedR);
+         else if (_op == ">>="sv)
+            result = Builder->CreateLShr(loadedL, loadedR);
 
          Builder->CreateStore(result, targetAddr);
          return result;
       }
 
-      if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*")
-         sv loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "derefl");
+      if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*"sv)
+         loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "derefl");
 
       if (_op == "&&"sv) {
          LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
@@ -1348,38 +1348,38 @@ export namespace tungsten {
          return Builder->CreateOr(LHS, RHS);
       }
 
-      if (_op == "+")
-         sv return Builder->CreateFAdd(loadedL, loadedR);
-      if (_op == "-")
-         sv return Builder->CreateFSub(loadedL, loadedR);
-      if (_op == "*")
-         sv return Builder->CreateFMul(loadedL, loadedR);
-      if (_op == "/")
-         sv return Builder->CreateFDiv(loadedL, loadedR);
-      if (_op == "%")
-         sv return Builder->CreateFRem(loadedL, loadedR);
-      if (_op == "==")
-         sv return Builder->CreateFCmpOEQ(loadedL, loadedR);
-      if (_op == "!=")
-         sv return Builder->CreateFCmpONE(loadedL, loadedR);
-      if (_op == "<")
-         sv return Builder->CreateFCmpOLT(loadedL, loadedR);
-      if (_op == "<=")
-         sv return Builder->CreateFCmpOLE(loadedL, loadedR);
-      if (_op == ">")
-         sv return Builder->CreateFCmpOGT(loadedL, loadedR);
-      if (_op == ">=")
-         sv return Builder->CreateFCmpOGE(loadedL, loadedR);
-      if (_op == "^")
-         sv return Builder->CreateXor(loadedL, loadedR);
-      if (_op == "|")
-         sv return Builder->CreateOr(loadedL, loadedR);
-      if (_op == "&")
-         sv return Builder->CreateAnd(loadedL, loadedR);
-      if (_op == "<<")
-         sv return Builder->CreateShl(loadedL, loadedR);
-      if (_op == ">>")
-         sv return Builder->CreateLShr(loadedL, loadedR);
+      if (_op == "+"sv)
+         return Builder->CreateFAdd(loadedL, loadedR);
+      if (_op == "-"sv)
+         return Builder->CreateFSub(loadedL, loadedR);
+      if (_op == "*"sv)
+         return Builder->CreateFMul(loadedL, loadedR);
+      if (_op == "/"sv)
+         return Builder->CreateFDiv(loadedL, loadedR);
+      if (_op == "%"sv)
+         return Builder->CreateFRem(loadedL, loadedR);
+      if (_op == "=="sv)
+         return Builder->CreateFCmpOEQ(loadedL, loadedR);
+      if (_op == "!="sv)
+         return Builder->CreateFCmpONE(loadedL, loadedR);
+      if (_op == "<"sv)
+         return Builder->CreateFCmpOLT(loadedL, loadedR);
+      if (_op == "<="sv)
+         return Builder->CreateFCmpOLE(loadedL, loadedR);
+      if (_op == ">"sv)
+         return Builder->CreateFCmpOGT(loadedL, loadedR);
+      if (_op == ">="sv)
+         return Builder->CreateFCmpOGE(loadedL, loadedR);
+      if (_op == "^"sv)
+         return Builder->CreateXor(loadedL, loadedR);
+      if (_op == "|"sv)
+         return Builder->CreateOr(loadedL, loadedR);
+      if (_op == "&"sv)
+         return Builder->CreateAnd(loadedL, loadedR);
+      if (_op == "<<"sv)
+         return Builder->CreateShl(loadedL, loadedR);
+      if (_op == ">>"sv)
+         return Builder->CreateLShr(loadedL, loadedR);
 
       return LogErrorV("error during binop codegen with operator '" + _op + "'");
    }
@@ -1396,8 +1396,8 @@ export namespace tungsten {
 
       if (_init) {
          llvm::Value* initVal = _init->codegen();
-         if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*")
-            sv initVal = Builder->CreateLoad(type, initVal, "derefl");
+         if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*"sv)
+            initVal = Builder->CreateLoad(type, initVal, "derefl");
          if (!initVal)
             return nullptr;
 
@@ -1429,8 +1429,8 @@ export namespace tungsten {
 
          if (arg->astType() == ASTType::VariableExpression)
             argVal = loadIfPointer(argVal, arg->type()->llvmType());
-         if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "*")
-            sv argVal = Builder->CreateLoad(arg->type()->llvmType(), argVal, "derefl");
+         if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "*"sv)
+            argVal = Builder->CreateLoad(arg->type()->llvmType(), argVal, "derefl");
          args.push_back(argVal);
       }
       return Builder->CreateCall(callee, args);
@@ -1545,15 +1545,15 @@ export namespace tungsten {
       llvm::Value* returnValue = _value->codegen();
       if (_value->astType() == ASTType::VariableExpression)
          returnValue = loadIfPointer(returnValue, _value->type()->llvmType(), "rval");
-      if (_value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*")
-         sv returnValue = Builder->CreateLoad(_value->type()->llvmType(), returnValue, "derefl");
+      if (_value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*"sv)
+         returnValue = Builder->CreateLoad(_value->type()->llvmType(), returnValue, "derefl");
       returnValue = castToCommonType(returnValue, _Type->llvmType());
       return Builder->CreateRet(returnValue);
    }
    llvm::Value* ExitStatement::codegen() {
       llvm::Value* exitValue = _value->codegen();
-      if (_value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*")
-         sv exitValue = Builder->CreateLoad(_value->type()->llvmType(), exitValue, "derefl");
+      if (_value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*"sv)
+         exitValue = Builder->CreateLoad(_value->type()->llvmType(), exitValue, "derefl");
 
       llvm::Function* exitFunc = TheModule->getFunction("exit");
       if (!exitFunc) {
