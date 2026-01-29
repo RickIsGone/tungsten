@@ -109,15 +109,15 @@ jobs:
           asset_name: Tungsten-${{ env.version }}-Linux.7z
           asset_content_type: application/x-7z-compressed
 
-      - name: Upload Linux zip Release Asset
+      - name: Upload Linux sh Release Asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./Tungsten-${{ env.version }}-Linux.zip
-          asset_name: Tungsten-${{ env.version }}-Linux.zip
-          asset_content_type: application/zip
+          asset_path: ./Tungsten-${{ env.version }}-Linux.sh
+          asset_name: Tungsten-${{ env.version }}-Linux.sh
+          asset_content_type: application/x-sh
 
       - name: Upload Linux tar.gz Release Asset
         uses: actions/upload-release-asset@v1
