@@ -68,8 +68,13 @@ jobs:
             -DVCPKG_TARGET_TRIPLET=x64-windows-static `
             -DCMAKE_BUILD_TYPE=Release `
             -DLLVM_DIR="C:\llvm\lib\cmake\llvm" `
+            -Dzstd_DIR="${{ github.workspace }}\vcpkg\installed\x64-windows-static\share\zstd"
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}\llvm"
             -DCMAKE_CXX_STANDARD=23 `
+            -DCMAKE_CXX_COMPILER="${{ github.workspace }}\llvm\tools\llvm\clang++.exe"
+            -DCMAKE_C_COMPILER="${{ github.workspace }}\llvm\tools\llvm\clang.exe"
             -GNinja
+            cmake -B build -S .
 
       - name: Build
         run: cmake --build build --config Release
