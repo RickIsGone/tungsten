@@ -83,10 +83,10 @@ jobs:
 
       # - name: Rename Artifacts
       #   run: |
-      #     mv Tungsten-linux.7z Tungsten-linux-${{ env.version }}.7z
-      #     mv tungsten.sh Tungsten-linux-${{ env.version }}.sh
-      #     mv tungsten.tar Tungsten-linux-${{ env.version }}.tar
-      #     mv tungsten.deb Tungsten-linux-${{ env.version }}.deb
+      #     mv Tungsten-linux.7z Tungsten-${{ env.version }}-linux.7z
+      #     mv tungsten.sh Tungsten-${{ env.version }}-linux.sh
+      #     mv tungsten.tar Tungsten-${{ env.version }}-linux.tar
+      #     mv tungsten.deb Tungsten-${{ env.version }}-linux.deb
 
       - name: Create Release
         id: create_release
@@ -106,7 +106,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./Tungsten-${{ env.version }}-linux.7z
-          asset_name: Tungsten-linux-${{ env.version }}.7z
+          asset_name: Tungsten-${{ env.version }}-linux.7z
           asset_content_type: application/x-7z-compressed
 
       - name: Upload Linux zip Release Asset
@@ -115,8 +115,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./Tungsten-linux-${{ env.version }}.zip
-          asset_name: Tungsten-linux-${{ env.version }}.zip
+          asset_path: ./Tungsten-${{ env.version }}-linux.zip
+          asset_name: Tungsten-${{ env.version }}-linux.zip
           asset_content_type: application/zip
 
       - name: Upload Linux tar.gz Release Asset
@@ -125,8 +125,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./Tungsten-linux-${{ env.version }}.tar.gz
-          asset_name: Tungsten-linux-${{ env.version }}.tar.gz
+          asset_path: ./Tungsten-${{ env.version }}-linux.tar.gz
+          asset_name: Tungsten-${{ env.version }}-linux.tar.gz
           asset_content_type: application/x-tar
 
       - name: Upload Linux Deb Release Asset
@@ -135,6 +135,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./Tungsten-linux-${{ env.version }}.deb
-          asset_name: Tungsten-linux-${{ env.version }}.deb
+          asset_path: ./Tungsten-${{ env.version }}-linux.deb
+          asset_name: Tungsten-${{ env.version }}-linux.deb
           asset_content_type: application/vnd.debian.binary-package
