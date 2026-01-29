@@ -23,6 +23,25 @@ jobs:
         run: |
           echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
+      - name: Cache LLVM
+        id: cache-llvm
+        uses: actions/cache@v3
+        with:
+          path: C:\llvm
+          key: llvm-17-windows
+
+      - name: Install LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/LLVM-17.0.6-win64.exe" -OutFile "llvm-installer.exe"
+          Start-Process -FilePath "llvm-installer.exe" -ArgumentList "/S", "/D=C:\llvm" -Wait
+
+      - name: Setup LLVM environment
+        run: |
+          echo "C:\llvm\bin" >> $env:GITHUB_PATH
+          echo "LLVM_DIR=C:\llvm\lib\cmake\llvm" >> $env:GITHUB_ENV
+
       - name: Install vcpkg
         shell: powershell
         run: |
@@ -33,12 +52,14 @@ jobs:
       - name: Add vcpkg to PATH
         run: echo "${{ github.workspace }}\vcpkg" | Out-File -Append -FilePath $env:GITHUB_PATH
 
-      - name: Install LLVM and dependencies with vcpkg
+      - name: Install dependencies with vcpkg
         run: |
-          vcpkg install llvm:x64-windows-static
           vcpkg install curl:x64-windows-static
           vcpkg install libarchive:x64-windows-static
           vcpkg install zstd:x64-windows-static
+
+      - name: Install Ninja
+        run: choco install ninja
 
       - name: Configure CMake
         run: |
@@ -46,6 +67,8 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows-static `
             -DCMAKE_BUILD_TYPE=Release `
+            -DLLVM_DIR="C:\llvm\lib\cmake\llvm" `
+            -DCMAKE_CXX_STANDARD=23 `
             -GNinja
 
       - name: Build
