@@ -11,6 +11,8 @@ module;
 #define _NODISCARD [[nodiscard]]
 #endif
 
+using namespace std::literals;
+
 export module Tungsten.semanticAnalyzer;
 import Tungsten.token;
 import Tungsten.ast;
@@ -31,8 +33,8 @@ namespace tungsten {
                        std::vector<std::unique_ptr<ExpressionAST>>& globVars,
                        std::unique_ptr<Externs>& externs)
           : _functions{functions}, _classes{classes}, _globalVariables{globVars}, _externs{externs} { _scopes.push_back({}); }
-      SemanticAnalyzer& operator=(const SemanticAnalyzer&) = delete;
       SemanticAnalyzer(const SemanticAnalyzer&) = delete;
+      SemanticAnalyzer& operator=(const SemanticAnalyzer&) = delete;
 
       bool analyze();
 
@@ -190,25 +192,25 @@ namespace tungsten {
    void SemanticAnalyzer::visit(UnaryExpressionAST& op) {
       op.operand()->accept(*this);
 
-      if (op.op() == "--" || op.op() == "++") {
+      if (op.op() == "--"sv || op.op() == "++"sv) {
          if (op.operand()->astType() != ASTType::VariableExpression)
             return _logError("cannot use operator '{}' on non-variable expression", op.op());
          op.setType(op.operand()->type());
       }
-      if (op.op() == "-") {
+      if (op.op() == "-"sv) {
          if (op.operand()->astType() != ASTType::NumberExpression)
             return _logError("cannot use operator '-' on non-numeric expression");
          op.setType(op.operand()->type());
       }
-      if (op.op() == "!") {
+      if (op.op() == "!"sv) {
          op.setType(makeBool());
       }
-      if (op.op() == "&") {
+      if (op.op() == "&"sv) {
          if (op.operand()->astType() != ASTType::VariableExpression)
             return _logError("cannot use operator '{}' on non-variable expression", op.op());
          op.setType(makePointer(op.operand()->type()));
       }
-      if (op.op() == "*") {
+      if (op.op() == "*"sv) {
          if (op.operand()->astType() != ASTType::VariableExpression)
             return _logError("cannot use operator '{}' on non-variable expression", op.op());
          if (op.operand()->type()->kind() != TypeKind::Pointer)
@@ -221,25 +223,25 @@ namespace tungsten {
    void SemanticAnalyzer::visit(BinaryExpressionAST& binop) {
       binop.LHS()->accept(*this);
       binop.RHS()->accept(*this);
-      if (binop.op() == "==" || binop.op() == "!=" || binop.op() == "<" || binop.op() == ">" || binop.op() == "<=" || binop.op() == ">=") {
+      if (binop.op() == "=="sv || binop.op() == "!="sv || binop.op() == "<"sv || binop.op() == ">"sv || binop.op() == "<="sv || binop.op() == ">="sv) {
          if (!_isNumberType(fullTypeString(binop.LHS()->type())) || !_isNumberType(fullTypeString(binop.RHS()->type()))) {
             if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type()))
                return _logError("type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
-            if (fullTypeString(binop.LHS()->type()) == "String")
+            if (fullTypeString(binop.LHS()->type()) == "String"sv)
                return _logError("cannot do comparison between strings with operator '{}'", binop.op());
          }
          binop.setType(makeBool());
          return;
       }
 
-      if (binop.op() == "&&" || binop.op() == "||") {
+      if (binop.op() == "&&"sv || binop.op() == "||"sv) {
          if (binop.LHS()->type()->kind() != TypeKind::Bool || binop.RHS()->type()->kind() != TypeKind::Bool)
             return _logError("type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
          binop.setType(makeBool());
          return;
       }
 
-      if (binop.op() == "=" || binop.op() == "+=" || binop.op() == "-=" || binop.op() == "*=" || binop.op() == "/=" || binop.op() == "%=" || binop.op() == "|=" || binop.op() == "&=" || binop.op() == "^=" || binop.op() == "<<=" || binop.op() == ">>=") {
+      if (binop.op() == "="sv || binop.op() == "+="sv || binop.op() == "-="sv || binop.op() == "*="sv || binop.op() == "/="sv || binop.op() == "%="sv || binop.op() == "|="sv || binop.op() == "&="sv || binop.op() == "^="sv || binop.op() == "<<="sv || binop.op() == ">>="sv) {
          if (!binop.LHS()->isLValue())
             return _logError("left side of assignment must be a variable");
       }
@@ -249,7 +251,7 @@ namespace tungsten {
          if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type()))
             return _logError("type mismatch: cannot operate '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
 
-         if (fullTypeString(binop.LHS()->type()) == "String" && binop.op() != "=")
+         if (fullTypeString(binop.LHS()->type()) == "String"sv && binop.op() != "=")
             return _logError("strings can only be assigned, not operated on with '{}'", binop.op());
       }
 
@@ -283,7 +285,7 @@ namespace tungsten {
       if (_scopes.at(GlobalScope).contains(proto.name()) || _isClass(proto.name()))
          return _logError("{} with name {}' already exists", _isClass(proto.name()) ? "class" : "variable", proto.name());
 
-      if (_declaredFunctions.contains("main") && proto.name() == "main")
+      if (_declaredFunctions.contains("main") && proto.name() == "main"sv)
          return _logError("redefinition of main function");
 
       Overload over;
@@ -332,7 +334,7 @@ namespace tungsten {
          }
       }
 
-      if (proto.name() == "main") {
+      if (proto.name() == "main"sv) {
          if (fullTypeString(proto.type()) != "double")
             return _logError("main function must have return type 'Num'"); // will replace with Int32 after reintroducing numeric types
          proto.setType(makeInt32());
@@ -346,7 +348,7 @@ namespace tungsten {
       ++_currentScope;
       fun.prototype()->accept(*this);
       // temporary fix because of the single numeric type being a double
-      if (fun.name() == "main") {
+      if (fun.name() == "main"sv) {
          if (fun.body()) {
             for (auto& expr : static_cast<BlockStatementAST*>(fun.body().get())->statements()) {
                if (expr->astType() == ASTType::ReturnStatement)
@@ -360,7 +362,7 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(CallExpressionAST& call) {
-      if (call.callee() == "main")
+      if (call.callee() == "main"sv)
          return _logError("cannot call main function");
 
       auto overloadsIt = _declaredFunctions.find(call.callee());
@@ -574,19 +576,19 @@ namespace tungsten {
    }
 
    bool SemanticAnalyzer::_isSignedType(const std::string& type) {
-      return type == "int" || type == "i8" || type == "i16" || type == "i32" || type == "i64" || type == "i128";
+      return type == "int"sv || type == "i8"sv || type == "i16"sv || type == "i32"sv || type == "i64"sv || type == "i128"sv;
    }
    bool SemanticAnalyzer::_isUnsignedType(const std::string& type) {
-      return type == "uint" || type == "u8" || type == "u16" || type == "u32" || type == "u64" || type == "u128";
+      return type == "uint"sv || type == "u8"sv || type == "u16"sv || type == "u32"sv || type == "u64"sv || type == "u128"sv;
    }
    bool SemanticAnalyzer::_isFloatingPointType(const std::string& type) {
-      return type == "float" || type == "double";
+      return type == "float"sv || type == "double"sv;
    }
    bool SemanticAnalyzer::_isNumberType(const std::string& type) {
       return _isSignedType(type) || _isUnsignedType(type) || _isFloatingPointType(type);
    }
    bool SemanticAnalyzer::_isBaseType(const std::string& type) {
-      return _isNumberType(type) || type == "String" || type == "char" || type == "void" || type == "bool" || type == "ArgPack";
+      return _isNumberType(type) || type == "String"sv || type == "char"sv || type == "void"sv || type == "bool"sv || type == "ArgPack"sv;
    }
    bool SemanticAnalyzer::_isClass(const std::string& cls) {
       for (auto& clss : _classes) {
@@ -613,17 +615,17 @@ namespace tungsten {
             return true;
 
          // Double → Float
-         if (fromType == "double" && toType == "float")
+         if (fromType == "double"sv && toType == "float"sv)
             return true;
 
          auto bitSize = [](const std::string& t) -> int {
-            if (t == "i8" || t == "u8") return 8;
-            if (t == "i16" || t == "u16") return 16;
-            if (t == "i32" || t == "u32" || t == "int" || t == "uint") return 32;
-            if (t == "i64" || t == "u64") return 64;
-            if (t == "i128" || t == "u128") return 128;
-            if (t == "float") return 32;
-            if (t == "double") return 64;
+            if (t == "i8"sv || t == "u8"sv) return 8;
+            if (t == "i16"sv || t == "u16"sv) return 16;
+            if (t == "i32"sv || t == "u32"sv || t == "int"sv || t == "uint"sv) return 32;
+            if (t == "i64"sv || t == "u64"sv) return 64;
+            if (t == "i128"sv || t == "u128"sv) return 128;
+            if (t == "float"sv) return 32;
+            if (t == "double"sv) return 64;
             return 0; // unknown
          };
 
