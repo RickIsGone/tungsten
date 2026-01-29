@@ -81,12 +81,12 @@ jobs:
           branch: master
           event: push
 
-      - name: Rename Artifacts
-        run: |
-          mv tungsten.7z tungsten-linux-${{ env.version }}.7z
-          mv tungsten.sh tungsten-linux-${{ env.version }}.sh
-          mv tungsten.tar tungsten-linux-${{ env.version }}.tar
-          mv tungsten.deb tungsten-linux-${{ env.version }}.deb
+      # - name: Rename Artifacts
+      #   run: |
+      #     mv tungsten-linux.7z tungsten-linux-${{ env.version }}.7z
+      #     mv tungsten.sh tungsten-linux-${{ env.version }}.sh
+      #     mv tungsten.tar tungsten-linux-${{ env.version }}.tar
+      #     mv tungsten.deb tungsten-linux-${{ env.version }}.deb
 
       - name: Create Release
         id: create_release

@@ -2,15 +2,11 @@ name: Windows build
 
 on:
   push:
-    branches: [ "master" ]
-
-env:
-  BUILD_TYPE: Release
+    branches: [ "master" ] # Cambiato da main a master
 
 jobs:
   build:
-    runs-on: windows-2022
-
+    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
@@ -27,62 +23,60 @@ jobs:
         run: |
           echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-      - name: Cache LLVM
-        id: cache-llvm
-        uses: actions/cache@v3
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
         with:
-          path: C:\llvm
-          key: llvm-17-windows
+          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+          vcpkgGitCommitId: '2024.01.12'
 
-      - name: Install LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        shell: powershell
+      - name: Install LLVM and dependencies with vcpkg
         run: |
-          Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/LLVM-17.0.6-win64.exe" -OutFile "llvm-installer.exe"
-          Start-Process -FilePath "llvm-installer.exe" -ArgumentList "/S", "/D=C:\llvm" -Wait
-
-      - name: Setup environment
-        run: |
-          echo "C:\llvm\bin" >> $env:GITHUB_PATH
-          echo "LLVM_DIR=C:\llvm\lib\cmake\llvm" >> $env:GITHUB_ENV
-
-      - name: Install dependencies
-        run: |
-          choco install ninja 7zip curl libarchive
+          vcpkg install llvm:x64-windows-static
+          vcpkg install curl:x64-windows-static
+          vcpkg install libarchive:x64-windows-static
+          vcpkg install zstd:x64-windows-static
 
       - name: Configure CMake
         run: |
-          cmake -B ${{ steps.strings.outputs.build-output-dir }} `
-                -G "Visual Studio 17 2022" -A x64 `
-                -DCMAKE_CXX_STANDARD=23 `
-                -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
-                -DLLVM_DIR="C:\llvm\lib\cmake\llvm"
+          cmake -B build -S . `
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+            -DCMAKE_BUILD_TYPE=Release `
+            -GNinja
 
       - name: Build
-        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }} --parallel
+        run: cmake --build build --config Release
 
       - name: Test
         working-directory: ${{ steps.strings.outputs.build-output-dir }}
         run: ctest --build-config ${{ matrix.build_type }}
 
       - name: Package with CPack
-        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        working-directory: build
         run: cpack
 
-      - name: Upload ZIP package
-        uses: actions/upload-artifact@v4
-        with:
-          name: tungsten-windows.zip
-          path: ${{ steps.strings.outputs.build-output-dir }}/*.zip
+      - name: Get version from latest tag
+        id: get_version
+        shell: bash
+        run: |
+          git fetch --tags
+          TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
 
-      - name: Upload MSI package  
-        uses: actions/upload-artifact@v4
-        with:
-          name: tungsten-windows.msi
-          path: ${{ steps.strings.outputs.build-output-dir }}/*.msi
-
-      - name: Upload 7Z package
+      - name: Upload Windows 7z artifact
         uses: actions/upload-artifact@v4
         with:
           name: tungsten-windows.7z
-          path: ${{ steps.strings.outputs.build-output-dir }}/*.7z
+          path: build/*.7z
+
+      - name: Upload Windows zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tungsten-windows.zip
+          path: build/*.zip
+
+      - name: Upload Windows msi artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tungsten-windows.msi
+          path: build/*.msi
