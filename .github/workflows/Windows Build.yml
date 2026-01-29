@@ -67,7 +67,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows-static `
             -DCMAKE_BUILD_TYPE=Release `
-            -DLLVM_DIR="C:\llvm\lib\cmake\llvm" `
+            -DLLVM_DIR="${{ github.workspace }}\llvm\lib\cmake\llvm" `
             -Dzstd_DIR="${{ github.workspace }}\vcpkg\installed\x64-windows-static\share\zstd"
             -DCMAKE_PREFIX_PATH="${{ github.workspace }}\llvm"
             -DCMAKE_CXX_STANDARD=23 `
