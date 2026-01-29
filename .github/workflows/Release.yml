@@ -40,7 +40,8 @@ jobs:
       - name: Download Linux 7z artifact
         uses: dawidd6/action-download-artifact@v11
         with:
-          workflow: Ubuntu build
+          workflow: Ubuntu build.yml
+          github_token: ${{ secrets.PAT_TOKEN }}
           name: tungsten.7z
           path: ./
           repo: RickIsGone/tungsten
@@ -50,7 +51,8 @@ jobs:
       - name: Download Linux sh artifact
         uses: dawidd6/action-download-artifact@v11
         with:
-          workflow: Ubuntu build
+          workflow: Ubuntu build.yml
+          github_token: ${{ secrets.PAT_TOKEN }}
           name: tungsten.sh
           path: ./
           repo: RickIsGone/tungsten
@@ -60,7 +62,8 @@ jobs:
       - name: Download Linux tar.gz artifact
         uses: dawidd6/action-download-artifact@v11
         with:
-          workflow: Ubuntu build
+          workflow: Ubuntu build.yml
+          github_token: ${{ secrets.PAT_TOKEN }}
           name: tungsten.tar.gz
           path: ./
           repo: RickIsGone/tungsten
@@ -70,7 +73,8 @@ jobs:
       - name: Download Linux Deb artifact
         uses: dawidd6/action-download-artifact@v11
         with:
-          workflow: Ubuntu build
+          workflow: Ubuntu build.yml
+          github_token: ${{ secrets.PAT_TOKEN }}
           name: tungsten.Deb
           path: ./
           repo: RickIsGone/tungsten
