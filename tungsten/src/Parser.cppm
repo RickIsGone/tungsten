@@ -76,7 +76,7 @@ namespace tungsten {
       }
       Parser() = delete;
       Parser(const Parser&) = delete;
-      Parser operator=(const Parser&) = delete;
+      Parser& operator=(const Parser&) = delete;
 
       void parse();
       void writeIR() { dumpIR(); }

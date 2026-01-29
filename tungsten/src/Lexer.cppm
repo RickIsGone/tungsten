@@ -21,7 +21,7 @@ namespace tungsten {
       Lexer() = delete;
       ~Lexer() = default;
       Lexer(const Lexer&) = delete;
-      Lexer operator=(const Lexer&) = delete;
+      Lexer& operator=(const Lexer&) = delete;
 
       _NODISCARD std::vector<Token> tokenize();
       _NODISCARD const std::string& raw() const { return _raw; }

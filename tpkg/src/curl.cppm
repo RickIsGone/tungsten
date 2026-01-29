@@ -9,8 +9,8 @@ namespace TPKG {
    public:
       Curl();
       ~Curl();
-      Curl(const Curl& other) = delete;
-      Curl operator=(const Curl& other) = delete;
+      Curl(const Curl&) = delete;
+      Curl& operator=(const Curl&) = delete;
 
       void download(const std::string& url);
 

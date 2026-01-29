@@ -45,7 +45,7 @@ namespace tungsten {
       TranslationUnit() = default;
       ~TranslationUnit() = default;
       TranslationUnit(const TranslationUnit&) = delete;
-      TranslationUnit operator=(const TranslationUnit&) = delete;
+      TranslationUnit& operator=(const TranslationUnit&) = delete;
 
       void compile(const fs::path& path);
 

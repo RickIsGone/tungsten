@@ -31,8 +31,8 @@ namespace tungsten {
                        std::vector<std::unique_ptr<ExpressionAST>>& globVars,
                        std::unique_ptr<Externs>& externs)
           : _functions{functions}, _classes{classes}, _globalVariables{globVars}, _externs{externs} { _scopes.push_back({}); }
-      SemanticAnalyzer operator=(SemanticAnalyzer&) = delete;
-      SemanticAnalyzer(SemanticAnalyzer&) = delete;
+      SemanticAnalyzer& operator=(const SemanticAnalyzer&) = delete;
+      SemanticAnalyzer(const SemanticAnalyzer&) = delete;
 
       bool analyze();
 
