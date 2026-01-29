@@ -75,7 +75,7 @@ jobs:
         with:
           workflow: Ubuntu build.yml
           github_token: ${{ secrets.PAT_TOKEN }}
-          name: tungsten.Deb
+          name: tungsten.deb
           path: ./
           repo: RickIsGone/tungsten
           branch: master
@@ -86,7 +86,7 @@ jobs:
           mv tungsten.7z tungsten-linux-${{ env.version }}.7z
           mv tungsten.sh tungsten-linux-${{ env.version }}.sh
           mv tungsten.tar tungsten-linux-${{ env.version }}.tar
-          mv tungsten.Deb tungsten-linux-${{ env.version }}.Deb
+          mv tungsten.deb tungsten-linux-${{ env.version }}.deb
 
       - name: Create Release
         id: create_release
@@ -135,6 +135,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./tungsten-linux-${{ env.version }}.Deb
-          asset_name: tungsten-linux-${{ env.version }}.Deb
+          asset_path: ./tungsten-linux-${{ env.version }}.deb
+          asset_name: tungsten-linux-${{ env.version }}.deb
           asset_content_type: application/vnd.debian.binary-package
