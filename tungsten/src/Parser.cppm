@@ -6,7 +6,6 @@ module;
 #include <memory>
 #include <unordered_map>
 #include <filesystem>
-#include <variant>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
 #endif
