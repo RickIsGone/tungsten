@@ -1230,40 +1230,40 @@ export namespace tungsten {
          return nullptr;
 
       llvm::Value* result;
-      if (_op == "++" sv || _op == "--") sv {
-            llvm::Value* loadedOperand = Builder->CreateLoad(VariableTypes[static_cast<VariableExpressionAST*>(_operand.get())->name()], operandValue, "loadedoperand");
-            llvm::Type* operandType = loadedOperand->getType();
-            if (_op == "++") sv {
-                  if (operandType->isIntegerTy())
-                     result = Builder->CreateAdd(loadedOperand, llvm::ConstantInt::get(operandType, 1), "increment");
-                  else if (operandType->isFloatingPointTy())
-                     result = Builder->CreateFAdd(loadedOperand, llvm::ConstantFP::get(operandType, 1.0), "increment");
-                  else
-                     return LogErrorV("unsupported type for increment operation");
-                  Builder->CreateStore(result, operandValue);
-                  return result;
-               }
-
+      if (_op == "++"sv || _op == "--"sv) {
+         llvm::Value* loadedOperand = Builder->CreateLoad(VariableTypes[static_cast<VariableExpressionAST*>(_operand.get())->name()], operandValue, "loadedoperand");
+         llvm::Type* operandType = loadedOperand->getType();
+         if (_op == "++"sv) {
             if (operandType->isIntegerTy())
-               result = Builder->CreateSub(loadedOperand, llvm::ConstantInt::get(operandType, 1), "decrement");
+               result = Builder->CreateAdd(loadedOperand, llvm::ConstantInt::get(operandType, 1), "increment");
             else if (operandType->isFloatingPointTy())
-               result = Builder->CreateFSub(loadedOperand, llvm::ConstantFP::get(operandType, 1.0), "decrement");
+               result = Builder->CreateFAdd(loadedOperand, llvm::ConstantFP::get(operandType, 1.0), "increment");
             else
-               return LogErrorV("unsupported type for decrement operation");
-            return Builder->CreateStore(result, operandValue);
+               return LogErrorV("unsupported type for increment operation");
+            Builder->CreateStore(result, operandValue);
+            return result;
          }
+
+         if (operandType->isIntegerTy())
+            result = Builder->CreateSub(loadedOperand, llvm::ConstantInt::get(operandType, 1), "decrement");
+         else if (operandType->isFloatingPointTy())
+            result = Builder->CreateFSub(loadedOperand, llvm::ConstantFP::get(operandType, 1.0), "decrement");
+         else
+            return LogErrorV("unsupported type for decrement operation");
+         return Builder->CreateStore(result, operandValue);
+      }
 
       llvm::Type* operandType = operandValue->getType(); // TODO: make it work with both L and R values
-      if (_op == "!") sv {
-            if (operandType->isIntegerTy())
-               return Builder->CreateICmpEQ(operandValue, llvm::ConstantInt::get(operandType, 0), "nottmp");
+      if (_op == "!"sv) {
+         if (operandType->isIntegerTy())
+            return Builder->CreateICmpEQ(operandValue, llvm::ConstantInt::get(operandType, 0), "nottmp");
 
-            if (operandType->isFloatingPointTy())
-               return Builder->CreateFCmpOEQ(operandValue, llvm::ConstantFP::get(operandType, 0.0), "nottmp");
+         if (operandType->isFloatingPointTy())
+            return Builder->CreateFCmpOEQ(operandValue, llvm::ConstantFP::get(operandType, 0.0), "nottmp");
 
-            return LogErrorV("unsupported type for logical not operation");
-         }
-      if (_op == "&" sv || _op == "*")
+         return LogErrorV("unsupported type for logical not operation");
+      }
+      if (_op == "&"sv || _op == "*")
          sv return operandValue;
 
       // _op == '-'
@@ -1297,56 +1297,56 @@ export namespace tungsten {
 
       castToCommonType(loadedR, _LHS->type()->llvmType());
 
-      if (_op == "=" sv || _op == "+=" sv || _op == "-=" sv || _op == "*=" sv || _op == "/=" sv || _op == "%=" sv || _op == "|=" sv || _op == "&=" sv || _op == "^=" sv || _op == "<<=" sv || _op == ">>=") sv {
-            if (_LHS->type()->kind() == TypeKind::String) {
-               Builder->CreateStore(RHS, LHS);
-               return RHS;
-            }
-
-            llvm::Value* targetAddr = LHS;
-            if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*")
-               sv loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "derefl");
-
-            llvm::Value* result = nullptr;
-            if (_op == "=") svresult = loadedR;
-            else if (_op == "+=")
-               sv result = Builder->CreateFAdd(loadedL, loadedR);
-            else if (_op == "-=")
-               sv result = Builder->CreateFSub(loadedL, loadedR);
-            else if (_op == "*=")
-               sv result = Builder->CreateFMul(loadedL, loadedR);
-            else if (_op == "/=")
-               sv result = Builder->CreateFDiv(loadedL, loadedR);
-            else if (_op == "%=")
-               sv result = Builder->CreateFRem(loadedL, loadedR);
-            else if (_op == "|=")
-               sv result = Builder->CreateOr(loadedL, loadedR);
-            else if (_op == "&=")
-               sv result = Builder->CreateAnd(loadedL, loadedR);
-            else if (_op == "^=")
-               sv result = Builder->CreateXor(loadedL, loadedR);
-            else if (_op == "<<=")
-               sv result = Builder->CreateShl(loadedL, loadedR);
-            else if (_op == ">>=")
-               sv result = Builder->CreateLShr(loadedL, loadedR);
-
-            Builder->CreateStore(result, targetAddr);
-            return result;
+      if (_op == "="sv || _op == "+="sv || _op == "-="sv || _op == "*="sv || _op == "/="sv || _op == "%="sv || _op == "|="sv || _op == "&="sv || _op == "^="sv || _op == "<<="sv || _op == ">>="sv) {
+         if (_LHS->type()->kind() == TypeKind::String) {
+            Builder->CreateStore(RHS, LHS);
+            return RHS;
          }
+
+         llvm::Value* targetAddr = LHS;
+         if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*")
+            sv loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "derefl");
+
+         llvm::Value* result = nullptr;
+         if (_op == "="sv) result = loadedR;
+         else if (_op == "+=")
+            sv result = Builder->CreateFAdd(loadedL, loadedR);
+         else if (_op == "-=")
+            sv result = Builder->CreateFSub(loadedL, loadedR);
+         else if (_op == "*=")
+            sv result = Builder->CreateFMul(loadedL, loadedR);
+         else if (_op == "/=")
+            sv result = Builder->CreateFDiv(loadedL, loadedR);
+         else if (_op == "%=")
+            sv result = Builder->CreateFRem(loadedL, loadedR);
+         else if (_op == "|=")
+            sv result = Builder->CreateOr(loadedL, loadedR);
+         else if (_op == "&=")
+            sv result = Builder->CreateAnd(loadedL, loadedR);
+         else if (_op == "^=")
+            sv result = Builder->CreateXor(loadedL, loadedR);
+         else if (_op == "<<=")
+            sv result = Builder->CreateShl(loadedL, loadedR);
+         else if (_op == ">>=")
+            sv result = Builder->CreateLShr(loadedL, loadedR);
+
+         Builder->CreateStore(result, targetAddr);
+         return result;
+      }
 
       if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*")
          sv loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "derefl");
 
-      if (_op == "&&") sv {
-            LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
-            RHS = Builder->CreateICmpNE(loadedR, Builder->getInt1(0), "rcond");
-            return Builder->CreateAnd(LHS, RHS);
-         }
-      if (_op == "||") sv {
-            LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
-            RHS = Builder->CreateICmpNE(loadedR, Builder->getInt1(0), "rcond");
-            return Builder->CreateOr(LHS, RHS);
-         }
+      if (_op == "&&"sv) {
+         LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
+         RHS = Builder->CreateICmpNE(loadedR, Builder->getInt1(0), "rcond");
+         return Builder->CreateAnd(LHS, RHS);
+      }
+      if (_op == "||"sv) {
+         LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
+         RHS = Builder->CreateICmpNE(loadedR, Builder->getInt1(0), "rcond");
+         return Builder->CreateOr(LHS, RHS);
+      }
 
       if (_op == "+")
          sv return Builder->CreateFAdd(loadedL, loadedR);
