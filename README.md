@@ -106,7 +106,7 @@ cmake --build build --config Release
 
 </details><p>
 
-<details><summary><big>MacOS</big></summary><p>
+<!-- <details><summary><big>MacOS</big></summary><p>
 
 <ins> **2. Compiling the project:** </ins>  
 
@@ -116,7 +116,7 @@ cmake -DLLVM_DIR=$(brew --prefix llvm)/lib/cmake/llvm -S . -B build -GNinja -DCM
 cmake --build build --config Release
 ```
 
-</details><p>
+</details><p> -->
 
 # Syntax
 
