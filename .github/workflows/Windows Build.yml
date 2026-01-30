@@ -35,13 +35,12 @@ jobs:
       - name: Install LLVM and dependencies with vcpkg
         run: |
           vcpkg install llvm[core,target-x86,enable-rtti]:x64-windows-static
-          vcpkg install clang:x64-windows-static
           vcpkg install curl:x64-windows-static
           vcpkg install libarchive:x64-windows-static
           vcpkg install zstd:x64-windows-static
 
-      - name: Install Ninja
-        run: choco install ninja
+      - name: Install Ninja and Clang
+        run: choco install ninja llvm
 
       - name: Configure CMake
         run: |
@@ -52,8 +51,8 @@ jobs:
           -DLLVM_DIR="${{ github.workspace }}\vcpkg\installed\x64-windows-static\share\llvm" `
           -Dzstd_DIR="${{ github.workspace }}\vcpkg\installed\x64-windows-static\share\zstd" `
           -DCMAKE_CXX_STANDARD=20 `
-          -DCMAKE_CXX_COMPILER="${{ github.workspace }}\vcpkg\installed\x64-windows-static\tools\clang\clang++.exe" `
-          -DCMAKE_C_COMPILER="${{ github.workspace }}\vcpkg\installed\x64-windows-static\tools\clang\clang.exe" `
+          -DCMAKE_CXX_COMPILER="clang++" `
+          -DCMAKE_C_COMPILER="clang" `
           -GNinja
 
       - name: Build
