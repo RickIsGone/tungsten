@@ -2,7 +2,7 @@ name: Windows build
 
 on:
   push:
-    branches: [ "main" ] # Cambiato da main a master
+    branches: [ "master" ] # Cambiato da main a master
 
 jobs:
   build:
@@ -34,7 +34,7 @@ jobs:
 
       - name: Install LLVM and dependencies with vcpkg
         run: |
-          vcpkg install llvm:x64-windows-static
+          vcpkg install llvm[core,target-x86,enable-rtti]:x64-windows-static
           vcpkg install curl:x64-windows-static
           vcpkg install libarchive:x64-windows-static
           vcpkg install zstd:x64-windows-static
