@@ -5,9 +5,9 @@ add_subdirectory(tungsten)
 #add_subdirectory(tpkg) # will continue working on after shipping the language
 
 # === CPack ===
-install(DIRECTORY "build/${CMAKE_BUILD_TYPE}/tungsten/tungsten/bin" DESTINATION ".")
-install(DIRECTORY "build/${CMAKE_BUILD_TYPE}/tungsten/tungsten/lib" DESTINATION ".")
-install(DIRECTORY "build/${CMAKE_BUILD_TYPE}/tungsten/tungsten/include" DESTINATION ".")
+install(DIRECTORY "${CMAKE_BINARY_DIR}/tungsten/tungsten/bin" DESTINATION ".")
+install(DIRECTORY "${CMAKE_BINARY_DIR}/tungsten/tungsten/lib" DESTINATION ".")
+install(DIRECTORY "${CMAKE_BINARY_DIR}/tungsten/tungsten/include" DESTINATION ".")
 #install(DIRECTORY "build/${CMAKE_BUILD_TYPE}/tpkg/tpkg" DESTINATION ".")
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
