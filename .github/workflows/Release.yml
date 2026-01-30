@@ -171,8 +171,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./Tungsten-${{ env.version }}-Windows.7z
-          asset_name: Tungsten-${{ env.version }}-Windows.7z
+          asset_path: ./Tungsten-${{ env.version }}-win64.7z
+          asset_name: Tungsten-${{ env.version }}-win64.7z
           asset_content_type: application/x-7z-compressed
 
       - name: Upload Windows zip Release Asset
@@ -181,8 +181,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}     
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./Tungsten-${{ env.version }}-Windows.zip
-          asset_name: Tungsten-${{ env.version }}-Windows.zip
+          asset_path: ./Tungsten-${{ env.version }}-win64.zip
+          asset_name: Tungsten-${{ env.version }}-win64.zip
           asset_content_type: application/zip
 
       - name: Upload Windows msi Release Asset
@@ -191,6 +191,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./Tungsten-${{ env.version }}-Windows.msi
-          asset_name: Tungsten-${{ env.version }}-Windows.msi
+          asset_path: ./Tungsten-${{ env.version }}-win64.msi
+          asset_name: Tungsten-${{ env.version }}-win64.msi
           asset_content_type: application/x-msi
