@@ -2,7 +2,7 @@ name: Windows build
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main" ] # Cambiato da main a master
 
 jobs:
   build:
@@ -23,25 +23,6 @@ jobs:
         run: |
           echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-      - name: Cache LLVM
-        id: cache-llvm
-        uses: actions/cache@v3
-        with:
-          path: C:\llvm
-          key: llvm-20-windows
-
-      - name: Install LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        shell: powershell
-        run: |
-          Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/LLVM-20.1.8-win64.exe" -OutFile "llvm-installer.exe"
-          Start-Process -FilePath "llvm-installer.exe" -ArgumentList "/S", "/D=C:\llvm" -Wait
-
-      - name: Setup LLVM environment
-        run: |
-          echo "C:\llvm\bin" >> $env:GITHUB_PATH
-          echo "LLVM_DIR=C:\llvm\lib\cmake\llvm" >> $env:GITHUB_ENV
-
       - name: Install vcpkg
         shell: powershell
         run: |
@@ -51,8 +32,9 @@ jobs:
       - name: Add vcpkg to PATH
         run: echo "${{ github.workspace }}\vcpkg" | Out-File -Append -FilePath $env:GITHUB_PATH
 
-      - name: Install dependencies with vcpkg
+      - name: Install LLVM and dependencies with vcpkg
         run: |
+          vcpkg install llvm:x64-windows-static
           vcpkg install curl:x64-windows-static
           vcpkg install libarchive:x64-windows-static
           vcpkg install zstd:x64-windows-static
@@ -66,11 +48,11 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows-static `
             -DCMAKE_BUILD_TYPE=Release `
-            -DLLVM_DIR="C:\llvm\lib\cmake\llvm" `
+            -DLLVM_DIR="${{ github.workspace }}\llvm\lib\cmake\llvm" `
             -Dzstd_DIR="${{ github.workspace }}\vcpkg\installed\x64-windows-static\share\zstd" `
-            -DCMAKE_CXX_STANDARD=23 `
-            -DCMAKE_CXX_COMPILER="C:\llvm\bin\clang++.exe" `
-            -DCMAKE_C_COMPILER="C:\llvm\bin\clang.exe" `
+            -DCMAKE_CXX_STANDARD=20 `
+            -DCMAKE_CXX_COMPILER="${{ github.workspace }}\llvm\bin\clang++.exe" `
+            -DCMAKE_C_COMPILER="${{ github.workspace }}\llvm\bin\clang.exe" `
             -GNinja
 
       - name: Build
