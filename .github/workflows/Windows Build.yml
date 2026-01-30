@@ -41,6 +41,9 @@ jobs:
 
       - name: Install Ninja and Clang
         run: choco install ninja llvm
+        
+      - name: Add LLVM to PATH
+        run: echo "C:\Program Files\LLVM\bin" | Out-File -Append -FilePath $env:GITHUB_PATH
 
       - name: Configure CMake
         run: |
