@@ -34,14 +34,14 @@ jobs:
         run: |
           if ! git rev-parse ${{ env.new_tag }} >/dev/null 2>&1; then
             git tag ${{ env.new_tag }}
-            git push https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }} ${{ env.new_tag }}
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} ${{ env.new_tag }}
           fi
 
       - name: Download Linux 7z artifact
         uses: dawidd6/action-download-artifact@v11
         with:
           workflow: Ubuntu build.yml
-          github_token: ${{ secrets.PAT_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           name: tungsten.7z
           path: ./
           repo: RickIsGone/tungsten
@@ -52,7 +52,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v11
         with:
           workflow: Ubuntu build.yml
-          github_token: ${{ secrets.PAT_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           name: tungsten.sh
           path: ./
           repo: RickIsGone/tungsten
@@ -63,7 +63,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v11
         with:
           workflow: Ubuntu build.yml
-          github_token: ${{ secrets.PAT_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           name: tungsten.tar.gz
           path: ./
           repo: RickIsGone/tungsten
@@ -74,7 +74,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v11
         with:
           workflow: Ubuntu build.yml
-          github_token: ${{ secrets.PAT_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           name: tungsten.deb
           path: ./
           repo: RickIsGone/tungsten
@@ -92,7 +92,7 @@ jobs:
         id: create_release
         uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ env.new_tag }}
           release_name: Release ${{ env.version }}
@@ -102,7 +102,7 @@ jobs:
       - name: Upload Linux 7z Release Asset
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./Tungsten-${{ env.version }}-Linux.7z
@@ -112,7 +112,7 @@ jobs:
       - name: Upload Linux sh Release Asset
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./Tungsten-${{ env.version }}-Linux.sh
@@ -122,7 +122,7 @@ jobs:
       - name: Upload Linux tar.gz Release Asset
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./Tungsten-${{ env.version }}-Linux.tar.gz
@@ -132,7 +132,7 @@ jobs:
       - name: Upload Linux Deb Release Asset
         uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./Tungsten-${{ env.version }}-Linux.deb
