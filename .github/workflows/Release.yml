@@ -81,12 +81,38 @@ jobs:
           branch: master
           event: push
 
-      # - name: Rename Artifacts
-      #   run: |
-      #     mv Tungsten-linux.7z Tungsten-${{ env.version }}-Linux.7z
-      #     mv tungsten.sh Tungsten-${{ env.version }}-Linux.sh
-      #     mv tungsten.tar Tungsten-${{ env.version }}-Linux.tar
-      #     mv tungsten.deb Tungsten-${{ env.version }}-Linux.deb
+      - name: Download Windows 7z artifact
+        uses: dawidd6/action-download-artifact@v11
+        with:
+          workflow: Windows Build.yml
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          name: tungsten.7z
+          path: ./
+          repo: RickIsGone/tungsten
+          branch: master
+          event: push
+        
+      - name: Download Windows zip artifact
+        uses: dawidd6/action-download-artifact@v11
+        with:
+          workflow: Windows Build.yml
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          name: tungsten.zip
+          path: ./
+          repo: RickIsGone/tungsten
+          branch: master
+          event: push
+
+      - name: Download Windows msi artifact
+        uses: dawidd6/action-download-artifact@v11
+        with:
+          workflow: Windows Build.yml
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          name: tungsten.msi
+          path: ./
+          repo: RickIsGone/tungsten
+          branch: master
+          event: push
 
       - name: Create Release
         id: create_release
@@ -138,3 +164,33 @@ jobs:
           asset_path: ./Tungsten-${{ env.version }}-Linux.deb
           asset_name: Tungsten-${{ env.version }}-Linux.deb
           asset_content_type: application/vnd.debian.binary-package
+
+      - name: Upload Windows 7z Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./Tungsten-${{ env.version }}-Windows.7z
+          asset_name: Tungsten-${{ env.version }}-Windows.7z
+          asset_content_type: application/x-7z-compressed
+
+      - name: Upload Windows zip Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}     
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./Tungsten-${{ env.version }}-Windows.zip
+          asset_name: Tungsten-${{ env.version }}-Windows.zip
+          asset_content_type: application/zip
+
+      - name: Upload Windows msi Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./Tungsten-${{ env.version }}-Windows.msi
+          asset_name: Tungsten-${{ env.version }}-Windows.msi
+          asset_content_type: application/x-msi

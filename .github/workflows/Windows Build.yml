@@ -2,7 +2,7 @@ name: Windows build
 
 on:
   push:
-    branches: [ "master" ] # Cambiato da main a master
+    branches: [ "master" ] 
 
 jobs:
   build:
@@ -77,17 +77,17 @@ jobs:
       - name: Upload Windows 7z artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tungsten-windows.7z
+          name: tungsten.7z
           path: build/*.7z
 
       - name: Upload Windows zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tungsten-windows.zip
+          name: tungsten.zip
           path: build/*.zip
 
       - name: Upload Windows msi artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tungsten-windows.msi
+          name: tungsten.msi
           path: build/*.msi
