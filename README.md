@@ -232,7 +232,6 @@ Unlike in C++, while statements require braces to work
 ```cpp
 while (condition) {
     // do stuff
-
 }
 ```
 
@@ -250,7 +249,7 @@ do {
 
 For statements just like while statements require braces to work
 
-```Java
+```c++
 for (num i = 0; i < 10; ++i) {
     // do stuff
 }
@@ -388,7 +387,10 @@ After compiling the file, the compiler will automatically execute the `build` ex
 following the rules set by the `build.tgs` file.  
 The build output will then be put into the `projectDirectory/build` directory
 
-<!-- # TPKG
+# TPKG
+
+> [!IMPORTANT]
+> Not added yet
 
 tpkg is the package manager included with the *Tungsten programming language*
 
@@ -416,7 +418,7 @@ package files are written in **json**, and a simple package file looks like this
     ]
   }
 }
-``` -->
+```
 
 # License
 

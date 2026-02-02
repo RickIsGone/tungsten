@@ -3,8 +3,8 @@ module sourceLocation;
 export namespace std {
    class SourceLocation {
    public:
-      SourceLocation() {}
-      static SourceLocation current(String file = __builtinFile(), String function = __builtinFunction(), u64 column = __builtinColumn(), u64 line = __builtinLine()) {
+      fun SourceLocation() {}
+      fun static current(String file = __builtinFile(), String function = __builtinFunction(), u64 column = __builtinColumn(), u64 line = __builtinLine()) -> SourceLocation {
          SourceLocation sl;
          sl._file = file;
          sl._function = function;
@@ -13,10 +13,10 @@ export namespace std {
          return sl;
       }
 
-      String file() { return _file; }
-      String function() { return _function; }
-      u64 column() { return _column; }
-      u64 line() { return _line; }
+      fun file() -> String { return _file; }
+      fun function() -> String { return _function; }
+      fun column() -> u64 { return _column; }
+      fun line() -> u64 { return _line; }
 
    private:
       String _file;
