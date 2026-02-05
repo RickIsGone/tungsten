@@ -331,7 +331,7 @@ export namespace tungsten {
          return TypeKind::Bool;
       }
       _NODISCARD const std::string string() const override {
-         return "Bool";
+         return "bool";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt1Ty();
