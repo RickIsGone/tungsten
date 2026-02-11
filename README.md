@@ -43,6 +43,25 @@ the [VSCode marketplace](https://marketplace.visualstudio.com/items?itemName=Ric
 or by searching for `tungsten` in the extensions tab of VSCode.
 You'll need to have the compiler installed on your system for the extension to work properly.
 
+# Installation
+
+You have two options to get Tungsten:
+
+## Option 1: Download Pre-compiled Binaries
+
+You can download pre-compiled binaries from the [GitHub Releases page](https://github.com/rickisgone/tungsten/releases/latest).
+
+Available packages:
+- **Windows**: `.zip`, `.msi`, `.7z` packages
+- **Linux (Ubuntu)**: `.deb`, `.tar.gz`, `.7z`, `.sh` packages  
+<!-- - **macOS**: `.tar.gz`, `.7z`, `.dmg` packages -->
+
+Simply download the appropriate package for your platform.
+
+## Option 2: Build from Source
+
+If you prefer to build from source or need the latest development version, follow the building instructions below.
+
 # Building
 
 | Platform | Build Status                                                                                                                                                                             |
