@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(tungsten_language VERSION 0.1.2)
+project(tungsten_language VERSION 0.1.3)
 
 add_subdirectory(tungsten)
 #add_subdirectory(tpkg) # will continue working on after shipping the language
