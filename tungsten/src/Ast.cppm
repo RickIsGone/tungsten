@@ -1001,9 +1001,10 @@ export namespace tungsten {
       void accept(ASTVisitor& v) { v.visit(*this); }
       _NODISCARD ASTType astType() const noexcept { return ASTType::FunctionPrototype; }
       _NODISCARD std::string mangledName() const {
-         std::string result = _name;
-         for (auto& arg : _args) {
-            result += "$" + fullTypeString(arg->type());
+         std::string result = _name + "$";
+         for (size_t i = 0; i < _args.size(); ++i) {
+            if (i > 0) result += "$";
+            result += fullTypeString(_args[i]->type());
          }
          return result;
       }
