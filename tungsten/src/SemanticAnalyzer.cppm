@@ -336,7 +336,7 @@ namespace tungsten {
 
       if (proto.name() == "main"sv) {
          if (fullTypeString(proto.type()) != "double")
-            return _logError("main function must have return type 'Num'"); // will replace with Int32 after reintroducing numeric types
+            return _logError("main function must have return type 'num'"); // will replace with Int32 after reintroducing numeric types
          proto.setType(makeInt32());
       }
 

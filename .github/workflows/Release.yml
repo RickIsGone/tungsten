@@ -1,6 +1,12 @@
 name: Auto Tag & Release
 
 on:
+  workflow_run:
+    workflows: ["Windows build"]
+    types:
+      - completed
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       tag_name:
@@ -9,7 +15,54 @@ on:
         type: string
 
 jobs:
+  check-builds:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_run' }}
+    outputs:
+      both_successful: ${{ steps.check.outputs.both_successful }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+
+      - name: Get version from CMakeLists.txt
+        id: version
+        run: |
+          VERSION=$(grep "^project(tungsten_language VERSION" CMakeLists.txt | sed -E 's/.*VERSION ([0-9.]+).*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check both workflows status
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST_SHA=$(git rev-parse HEAD)
+          
+          UBUNTU_STATUS=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/actions/workflows/Ubuntu%20build.yml/runs?branch=master&per_page=1" \
+            --jq '.workflow_runs[0] | select(.head_sha == "'$LATEST_SHA'") | .conclusion')
+          
+          WINDOWS_STATUS=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/actions/workflows/Windows%20Build.yml/runs?branch=master&per_page=1" \
+            --jq '.workflow_runs[0] | select(.head_sha == "'$LATEST_SHA'") | .conclusion')
+          
+          if [[ "$UBUNTU_STATUS" == "success" && "$WINDOWS_STATUS" == "success" ]]; then
+            echo "both_successful=true" >> $GITHUB_OUTPUT
+          else
+            echo "both_successful=false" >> $GITHUB_OUTPUT
+          fi
+
   autotag-and-release:
+    needs: check-builds
+    if: |
+      always() &&
+      (github.event_name == 'workflow_dispatch' || 
+       (needs.check-builds.result == 'success' && needs.check-builds.outputs.both_successful == 'true'))
     permissions:
       contents: write
       actions: read
@@ -27,8 +80,13 @@ jobs:
 
       - name: Set tag variable
         run: |
-          echo "new_tag=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
-          echo "version=$(echo "${{ github.event.inputs.tag_name }}" | sed 's/^v//')" >> $GITHUB_ENV
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "new_tag=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+            echo "version=$(echo "${{ github.event.inputs.tag_name }}" | sed 's/^v//')" >> $GITHUB_ENV
+          else
+            echo "new_tag=${{ needs.check-builds.outputs.tag }}" >> $GITHUB_ENV
+            echo "version=${{ needs.check-builds.outputs.version }}" >> $GITHUB_ENV
+          fi
 
       - name: Create and push tag (if not exists)
         run: |

@@ -28,6 +28,7 @@ module;
 using namespace std::literals;
 
 export module Tungsten.ast;
+import Tungsten.utils;
 
 namespace tungsten {
    // llvm stuff (separate namespace block to avoid exporting to other modules)
@@ -331,7 +332,7 @@ export namespace tungsten {
          return TypeKind::Bool;
       }
       _NODISCARD const std::string string() const override {
-         return "Bool";
+         return "bool";
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt1Ty();
@@ -1001,10 +1002,18 @@ export namespace tungsten {
       void accept(ASTVisitor& v) { v.visit(*this); }
       _NODISCARD ASTType astType() const noexcept { return ASTType::FunctionPrototype; }
       _NODISCARD std::string mangledName() const {
+         if (_args.empty())
+            return _name + "$";
+
          std::string result = _name;
-         for (auto& arg : _args) {
+         std::string args;
+         for (const auto& arg : _args) {
             result += "$" + fullTypeString(arg->type());
+            args += fullTypeString(arg->type());
+            if (arg != _args.back())
+               args += ", ";
          }
+         utils::debugLog("Mangled name for function fun {}({}) -> {}: {}", _name, args, fullTypeString(_type), result);
          return result;
       }
       void setExternC(bool c) { _isExternC = c; }
@@ -1012,7 +1021,7 @@ export namespace tungsten {
    private:
       std::shared_ptr<Type> _type;
       std::string _name;
-      bool _isExternC;
+      bool _isExternC{false};
       std::vector<std::unique_ptr<ExpressionAST>> _args;
    };
 
@@ -1411,10 +1420,13 @@ export namespace tungsten {
    }
 
    llvm::Value* CallExpressionAST::codegen() {
-      std::string name = _callee;
+      std::string name = _callee + "$";
       for (auto& arg : _args) {
-         name += "$" + fullTypeString(arg->type());
+         if (arg != _args.front())
+            name += "$";
+         name += fullTypeString(arg->type());
       }
+      utils::debugLog("looking for function with mangled name: {}", name);
       llvm::Function* callee = TheModule->getFunction(name);
 
       if (!callee)
