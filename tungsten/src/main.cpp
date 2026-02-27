@@ -1,12 +1,23 @@
 #include <filesystem>
 #include <cstdlib>
 namespace fs = std::filesystem;
+using namespace std::string_view_literals;
 import Tungsten.translationUnit;
 import Tungsten.utils;
 
 int main(int argc, char** argv) {
    size_t fileProcessed{0};
    if (argc > 1) {
+      if (argv[1] == "new"sv) {
+         if (argc != 3) {
+            tungsten::utils::pushError("usage: tungsten new <project_name>");
+            tungsten::utils::printErrors();
+            return EXIT_FAILURE;
+         }
+         tungsten::utils::createProject(argv[2]);
+         return EXIT_SUCCESS;
+      }
+      
       tungsten::TranslationUnit tu{};
       for (int i = 1; i < argc; ++i) {
          if (fs::exists(argv[i]) && !fs::is_directory(argv[i])) {
