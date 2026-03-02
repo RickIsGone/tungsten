@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <filesystem>
 import Tungsten.translationUnit;
 import Tungsten.compileOptions;
 import Tungsten.utils;
