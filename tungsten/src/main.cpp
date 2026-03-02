@@ -5,7 +5,7 @@ import Tungsten.compileOptions;
 import Tungsten.utils;
 
 int main(int argc, char** argv) {
-   tungsten::CompileOptions options = tungsten::parseArguments(argc, argv);
+   const tungsten::CompileOptions options = tungsten::parseArguments(argc, argv);
 
    if (tungsten::utils::hasErrors()) {
       tungsten::utils::printErrors();

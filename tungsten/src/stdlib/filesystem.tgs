@@ -1,0 +1,99 @@
+module filesystem;
+
+extern "C" fun __remove(const String path) -> bool;
+extern "C" fun __rename(const String oldPath, const String newPath) -> void;
+
+export namespace std::fs {
+   // Memory management
+   extern "C" fun freeString(char* str) -> void;
+
+   // Copy operations
+   extern "C" fun copy(const String from, const String to) -> void;
+   extern "C" fun copyFile(const String from, const String to) -> bool;
+   extern "C" fun copyDirectory(const String from, const String to, bool recursive) -> bool;
+   extern "C" fun copySymlink(const String from, const String to) -> bool;
+
+   // Directory creation
+   extern "C" fun createDirectory(const String path) -> bool;
+   extern "C" fun createDirectories(const String path) -> bool;
+   extern "C" fun createHardLink(const String target, const String link) -> bool;
+   extern "C" fun createSymlink(const String target, const String link) -> bool;
+   extern "C" fun createDirectorySymlink(const String target, const String link) -> bool;
+
+   // Existence and type checks
+   extern "C" fun exists(const String path) -> bool;
+   extern "C" fun isDirectory(const String path) -> bool;
+   extern "C" fun isRegularFile(const String path) -> bool;
+   extern "C" fun isSymlink(const String path) -> bool;
+   extern "C" fun isEmpty(const String path) -> bool;
+   extern "C" fun isBlockFile(const String path) -> bool;
+   extern "C" fun isCharacterFile(const String path) -> bool;
+   extern "C" fun isFifo(const String path) -> bool;
+   extern "C" fun isSocket(const String path) -> bool;
+   extern "C" fun isOther(const String path) -> bool;
+
+   // Removal operations
+   fun remove(const String path) -> bool {
+      return __remove(path);
+   }
+   extern "C" fun removeAll(const String path) -> u64;
+
+   // Rename and move
+   fun rename(const String oldPath, const String newPath) -> bool {
+      return _rename(oldPath, newPath);
+   }
+   // File information
+   extern "C" fun fileSize(const String path) -> u64;
+   extern "C" fun hardLinkCount(const String path) -> u64;
+   extern "C" fun lastWriteTime(const String path) -> u64;
+   extern "C" fun setLastWriteTime(const String path, u64 time) -> bool;
+
+   // File operations
+   extern "C" fun resizeFile(const String path, u64 newSize) -> bool;
+   extern "C" fun changePermissions(const String path, i32 permissions) -> bool;
+
+   // Path operations
+   extern "C" fun absolute(const String path) -> String;
+   extern "C" fun canonical(const String path) -> String;
+   extern "C" fun weaklyCanonical(const String path) -> String;
+   extern "C" fun relativePath(const String path, const String base) -> String;
+   extern "C" fun proximate(const String path, const String base) -> String;
+
+   // Path components
+   extern "C" fun parentPath(const String path) -> String;
+   extern "C" fun filename(const String path) -> String;
+   extern "C" fun extension(const String path) -> String;
+   extern "C" fun stem(const String path) -> String;
+   extern "C" fun rootName(const String path) -> String;
+   extern "C" fun rootDirectory(const String path) -> String;
+   extern "C" fun rootPath(const String path) -> String;
+   extern "C" fun relativePathComponent(const String path) -> String;
+
+   // Path property checks
+   extern "C" fun hasRootName(const String path) -> bool;
+   extern "C" fun hasRootDirectory(const String path) -> bool;
+   extern "C" fun hasRootPath(const String path) -> bool;
+   extern "C" fun hasRelativePath(const String path) -> bool;
+   extern "C" fun hasParentPath(const String path) -> bool;
+   extern "C" fun hasFilename(const String path) -> bool;
+   extern "C" fun hasStem(const String path) -> bool;
+   extern "C" fun hasExtension(const String path) -> bool;
+   extern "C" fun isAbsolute(const String path) -> bool;
+   extern "C" fun isRelative(const String path) -> bool;
+
+   // Current path operations
+   extern "C" fun currentPath() -> String;
+   extern "C" fun setCurrentPath(const String path) -> void;
+
+   // Temporary directory
+   extern "C" fun tempDirectoryPath() -> String;
+
+   // Symlink operations
+   extern "C" fun readSymlink(const String path) -> String;
+
+   // Disk space information
+   extern "C" fun getSpaceInfo(const String path, u64* capacity, u64* free, u64* available) -> bool;
+
+   // Path equivalence
+   extern "C" fun equivalent(const String p1, const String p2) -> bool;
+}

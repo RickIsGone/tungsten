@@ -392,7 +392,8 @@ namespace tungsten {
 
       bool valid = false;
       for (auto& overload : overloads) {
-         if (overload.args.back()->kind() == TypeKind::ArgPack && call.args().size() >= overload.args.size() - 1) {
+         // Check if function has variadic arguments (ArgPack)
+         if (!overload.args.empty() && overload.args.back()->kind() == TypeKind::ArgPack && call.args().size() >= overload.args.size() - 1) {
             bool match = true;
             for (size_t i = 0; i < overload.args.size() - 1; ++i) {
                if (fullTypeString(call.args()[i]->type()) != fullTypeString(overload.args[i])) {
