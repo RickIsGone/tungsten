@@ -15,6 +15,7 @@ module;
 #endif
 using namespace std::string_view_literals;
 namespace fs = std::filesystem;
+
 export module Tungsten.utils;
 
 namespace Colors {
@@ -88,6 +89,9 @@ export namespace tungsten::utils {
    void pushError(std::string_view message, Args&&... args) {
       errors << "tungsten: " << Colors::Red << "error: " << Colors::White << std::vformat(message, std::make_format_args(args...)) << Colors::Reset << '\n';
    }
+   bool hasErrors() {
+      return !errors.str().empty();
+   }
    void printErrors() {
       std::cerr << errors.str();
    }
@@ -128,7 +132,6 @@ export namespace tungsten::utils {
          printErrors();
       }
    }
-
 
 #ifdef TUNGSTEN_DEBUG
    template <typename... Args>
