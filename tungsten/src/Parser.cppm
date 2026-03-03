@@ -437,7 +437,7 @@ namespace tungsten {
          int tokPrecedence = _getPrecedence(_peek().type);
 
          if (tokPrecedence == -1)
-            return std::move(lhs);
+            return lhs;
 
          Token opToken = _peek();
          _consume(); // consume operator
@@ -596,7 +596,7 @@ namespace tungsten {
       }
       auto proto = _parseFunctionPrototype();
       proto->setExternC(C);
-      return std::move(proto);
+      return proto;
    }
    // std::unique_ptr<ExpressionAST> Parser::_parseExternVariableStatement() {
    //    _consume(); // consume extern
@@ -653,7 +653,7 @@ namespace tungsten {
             if (_peek().type != TokenType::CloseParen)
                return _logError("expected ')' after expression");
             _consume(); // consume )
-            return std::move(expr);
+            return expr;
          }
 
          case TokenType::Identifier:

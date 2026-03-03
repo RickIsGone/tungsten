@@ -86,10 +86,17 @@ namespace tungsten {
          fs::path parentDir = currentDir.parent_path();
          fs::path libDir = parentDir / "lib";
 #ifdef WIN32
-         system(("clang " + path.stem().string() + ".ll " + libDir.string() + "/core.lib -o " + path.stem().string() + ".exe -O3").c_str());
+         std::string libs = libDir.string() + "/core.lib" + " " + libDir.string() + "/stdlib.lib";
 #else
-         system(("clang " + path.stem().string() + ".ll " + libDir.string() + "/libcore.a -o " + path.stem().string() + " -O3").c_str());
+         std::string libs = libDir.string() + "/libcore.a" + " " + libDir.string() + "/libstdlib.a";
 #endif
+
+#ifdef WIN32
+         system(("clang++ " + path.stem().string() + ".ll " + libs + " -o " + path.stem().string() + ".exe -O3").c_str());
+#else
+         system(("clang++ " + path.stem().string() + ".ll " + libs + " -o " + path.stem().string() + " -O3").c_str());
+#endif
+         fs::remove(path.stem().string() + ".ll");
       }
    }
 
