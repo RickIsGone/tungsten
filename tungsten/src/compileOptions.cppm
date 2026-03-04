@@ -13,16 +13,28 @@ export module Tungsten.compileOptions;
 import Tungsten.utils;
 
 namespace tungsten {
+   export enum class OutputKind {
+      Executable,
+      Object,
+      Assembly,
+      LLVMIR
+   };
+
    const std::unordered_set validFlags{
        "--help"sv, "-h"sv,
        "-o"sv,
-       "-O1"sv, "-O2"sv, "-O3"sv};
+       "-O1"sv, "-O2"sv, "-O3"sv,
+       "-C"sv,
+       "-S"sv,
+       "-emit-llvm"sv};
 
    export struct CompileOptions {
       std::vector<fs::path> files;
       std::vector<std::string> flags;
       bool newProject{false};
       bool buildSystem{false};
+      OutputKind outputKind{OutputKind::Executable};
+      int optimizationLevel{0};
       std::string outputFile{"a.out"};
    };
 
@@ -54,7 +66,10 @@ namespace tungsten {
                    "  build-tgs [options]    Build a build.tgs file\n\n"
                    "Available flags:\n"
                    "  -o <name>              Set the output file name\n"
-                   "  -O<1,2,3>              Enable optimizations\n";
+                   "  -O<1,2,3>              Enable optimizations\n"
+                   "  -C                     Emit object files\n"
+                   "  -S                     Emit assembly files\n"
+                   "  -emit-llvm             Emit LLVM IR\n";
       exit(EXIT_SUCCESS);
    }
 
@@ -69,6 +84,34 @@ namespace tungsten {
       }
    }
 
+   void checkOutputFlags(CompileOptions& options) {
+      int count = 0;
+      for (const auto& flag : options.flags) {
+         if (flag == "-C"sv || flag == "-S"sv || flag == "-emit-llvm"sv) {
+            if (flag == "-C"sv)
+               options.outputKind = OutputKind::Object;
+            else if (flag == "-S"sv)
+               options.outputKind = OutputKind::Assembly;
+            else
+               options.outputKind = OutputKind::LLVMIR;
+            ++count;
+         }
+      }
+      if (count > 1)
+         utils::pushError("only one of -C, -S, or -emit-llvm can be used at a time");
+   }
+
+   void checkOptimizationFlags(CompileOptions& options) {
+      for (const auto& flag : options.flags) {
+         if (flag == "-O1"sv)
+            options.optimizationLevel = 1;
+         else if (flag == "-O2"sv)
+            options.optimizationLevel = 2;
+         else if (flag == "-O3"sv)
+            options.optimizationLevel = 3;
+      }
+   }
+
    void checkFlags(const CompileOptions& options) {
       for (const auto& flag : options.flags) {
          if (flag != "--help"sv && flag != "-h"sv) {
@@ -78,10 +121,12 @@ namespace tungsten {
       }
    }
 
-   void analyzeOptions(const CompileOptions& options) {
+   void analyzeOptions(CompileOptions& options) {
       checkBuildSystemOptions(options);
       checkInputFiles(options);
       checkHelpFlag(options);
+      checkOutputFlags(options);
+      checkOptimizationFlags(options);
       checkFlags(options);
    }
 

@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <filesystem>
+#include <memory>
 import Tungsten.translationUnit;
 import Tungsten.compileOptions;
 import Tungsten.utils;
@@ -21,10 +22,8 @@ int main(int argc, char** argv) {
       return EXIT_FAILURE;
    }
 
-   for (const auto& file : options.files) {
-      tungsten::TranslationUnit tu{};
-      tu.compile(file);
-   }
+   std::unique_ptr<tungsten::TranslationUnit> tu = std::make_unique<tungsten::TranslationUnit>(options);
+   tu->compile(options.files[0]); // temporary for testing
 
    return EXIT_SUCCESS;
 }
