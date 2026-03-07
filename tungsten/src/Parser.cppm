@@ -150,7 +150,7 @@ namespace tungsten {
 
    //  ========================================== implementation ==========================================
 
-   template <typename Ty = ExpressionAST>
+   template <typename Ty>
    std::unique_ptr<Ty> Parser::_logError(const std::string& str) {
       std::cerr << _location(_peek()) << " error: " << str << "\n";
       return nullptr;

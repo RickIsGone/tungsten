@@ -6,11 +6,12 @@ module;
 #include <filesystem>
 #include <iostream>
 #include <unordered_set>
-namespace fs = std::filesystem;
-using namespace std::string_view_literals;
 
 export module Tungsten.compileOptions;
 import Tungsten.utils;
+
+using namespace std::string_view_literals;
+namespace fs = std::filesystem;
 
 namespace tungsten {
    export enum class OutputKind {

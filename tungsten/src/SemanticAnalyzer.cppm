@@ -11,12 +11,13 @@ module;
 #define _NODISCARD [[nodiscard]]
 #endif
 
-using namespace std::literals;
 
 export module Tungsten.semanticAnalyzer;
 import Tungsten.token;
 import Tungsten.ast;
 import Tungsten.parser;
+
+using namespace std::literals;
 
 namespace tungsten {
    using Scope = std::unordered_map<std::string, std::shared_ptr<Type>>;
