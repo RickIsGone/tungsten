@@ -198,15 +198,15 @@ namespace tungsten {
       return -1;
    }
 
-   Token Parser::_peek(const size_t offset) const {
+   _NODISCARD Token Parser::_peek(const size_t offset) const {
       if (_index + offset <= _tokens.size() - 1)
          return _tokens.at(_index + offset);
       return _tokens.back();
    }
 
    _NODISCARD Token Parser::_peekBack(size_t offset) const {
-      if (_index - offset >= 0)
-         return _tokens.at(_index - offset);
+      if (_index - offset - 1 >= 0)
+         return _tokens.at(_index - offset - 1);
       return _tokens.at(0);
    }
 
