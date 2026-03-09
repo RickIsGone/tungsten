@@ -31,10 +31,10 @@ fun main() -> num {
 > [!WARNING]
 > the language is still under development, and everything is subject to change
 
-# Trying the language
+<!-- # Trying the language
 
 if you want to try *Tungsten* before installing the compiler, feel free to do so on
-the [online tungsten compiler](https://rickisgone.hackclub.app)
+the [online tungsten compiler](https://rickisgone.hackclub.app) -->
 
 # VSCode Extension
 
@@ -368,7 +368,7 @@ and use the integrated buildsystem
 ### Compiling via cmd
 
 > [!IMPORTANT]
-> Tungsten currently uses *clang* to compile the generated llvm ir to an executable, so you need to have it installed
+> Tungsten currently uses *clang++* to compile the generated llvm ir to an executable, so you need to have it installed
 > for the compiler to work
 
 ```shell

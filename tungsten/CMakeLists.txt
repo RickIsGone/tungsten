@@ -1,9 +1,16 @@
 cmake_minimum_required(VERSION 3.28)
-project(tungsten_compiler VERSION 0.1.5)
+project(tungsten_compiler VERSION 0.1.9)
 
 # === Compiler Settings ===
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# === Output Structure  ===
+set(TUNGSTEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/tungsten/tungsten)
+file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR})
+file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/bin)
+file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/lib)
+file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/include)
 
 # === Required Packages ===
 find_package(LLVM REQUIRED CONFIG)
@@ -70,12 +77,7 @@ target_sources(tungsten PUBLIC FILE_SET tungsten_modules TYPE CXX_MODULES FILES
         ${MODULES}
 )
 
-# === Output Structure ===
-set(TUNGSTEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/tungsten/tungsten)
-file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR})
-file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/bin)
-file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/lib)
-file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/include)
+# === Set output directory ===
 set_target_properties(tungsten PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/bin
 )

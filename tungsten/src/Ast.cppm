@@ -25,10 +25,10 @@ module;
 #define _NODISCARD [[nodiscard]]
 #endif
 
-using namespace std::literals;
-
 export module Tungsten.ast;
 import Tungsten.utils;
+
+using namespace std::literals;
 
 namespace tungsten {
    // llvm stuff (separate namespace block to avoid exporting to other modules)
