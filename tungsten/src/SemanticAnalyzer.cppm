@@ -357,7 +357,10 @@ namespace tungsten {
             }
          }
       }
-      fun.body()->accept(*this);
+      if (fun.body())
+         fun.body()->accept(*this);
+      else
+         _hasErrors = true;
       _scopes.pop_back();
       --_currentScope;
    }

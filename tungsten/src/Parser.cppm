@@ -147,7 +147,6 @@ namespace tungsten {
       std::shared_ptr<Type> _currentFunctionReturnType;
       std::string _currentFunctionName;
    };
-
    //  ========================================== implementation ==========================================
 
    template <typename Ty>
@@ -1064,6 +1063,7 @@ namespace tungsten {
    std::unique_ptr<BlockStatementAST> Parser::_parseBlock() {
       _consume(); // consume {
       std::vector<std::unique_ptr<ExpressionAST>> statements{};
+      bool hasErrors = false;
       while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile) {
          if (auto expr = _parseExpression())
             statements.push_back(std::move(expr));
@@ -1074,20 +1074,24 @@ namespace tungsten {
             case ASTType::WhileStatement:
             case ASTType::IfStatement:
                break;
-            // case ASTType::IfStatement:
-            //    if (auto* ifStmnt = static_cast<IfStatementAST*>(statements.back().get())) {
-            //       if (!ifStmnt->elseBranch())
-            //    }
             default:
-               if (_peek().type != TokenType::Semicolon)
-                  return _logError<BlockStatementAST>("expected ';' before '" + _lexeme(_peek()) + "'");
-               _consume(); // consume ';'
+               if (_peek().type != TokenType::Semicolon) {
+                  hasErrors = true;
+                  _logError<BlockStatementAST>("expected ';' after '" + _lexeme(_peekBack()) + "'");
+                  while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile && _peek().type != TokenType::Semicolon) {
+                     _consume();
+                  }
+                  if (_peek().type == TokenType::Semicolon)
+                     _consume();
+               } else
+                  _consume(); // consume ';'
          }
       }
       if (_peek().type != TokenType::CloseBrace)
          return _logError<BlockStatementAST>("expected '}'");
       _consume(); // consume }
-
+      if (hasErrors)
+         return nullptr;
       return std::make_unique<BlockStatementAST>(std::move(statements));
    }
 
@@ -1151,7 +1155,7 @@ namespace tungsten {
             break;
          default:
             if (_peek().type != TokenType::Semicolon)
-               return _logError("expected ';' before '" + _lexeme(_peek()) + "'");
+               return _logError("expected ';' after '" + _lexeme(_peekBack()) + "'");
             _consume(); // consume ';'
       }
 
@@ -1168,7 +1172,7 @@ namespace tungsten {
                break;
             default:
                if (_peek().type != TokenType::Semicolon)
-                  return _logError("expected ';' before '" + _lexeme(_peek()) + "'");
+                  return _logError("expected ';' after '" + _lexeme(_peekBack()) + "'");
                _consume(); // consume ';'
          }
       }
