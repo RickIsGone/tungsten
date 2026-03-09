@@ -1792,8 +1792,9 @@ export namespace tungsten {
       }
 
       if (!_body || !_body->codegen()) {
-         // function->eraseFromParent();
-         return LogErrorF("error in function: '" + name() + "'");
+         function->eraseFromParent();
+         // return LogErrorF("error in function: '" + name() + "'");
+         return nullptr;
       }
 
       if (Builder->GetInsertBlock()->getTerminator() == nullptr) {
