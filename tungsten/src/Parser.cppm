@@ -1031,10 +1031,15 @@ namespace tungsten {
 
    std::unique_ptr<ExpressionAST> Parser::_parseArgument() {
       std::shared_ptr<Type> type = _parseType();
+      if (!type)
+         return nullptr;
       if (type->kind() == TypeKind::ArgPack)
          return std::make_unique<VariableDeclarationAST>(type, "", nullptr);
 
+      if (_peek().type != TokenType::Identifier)
+         return _logError("expected an identifier after type in function argument but got: '" + _lexeme(_peek()) + "'");
       std::string name = _lexeme(_peek());
+
       _consume(); // consume identifier
 
       // if (_symbolTable.contains(name))
@@ -1101,7 +1106,9 @@ namespace tungsten {
       _consume(); // consume '('
 
       while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile) {
-         args.push_back(_parseArgument());
+         auto arg = _parseArgument();
+         if (arg)
+            args.push_back(std::move(arg));
          // utils::debugLog("argument {}: {}", args.size(), _lexeme(tok));
          if (_peek().type == TokenType::Comma)
             _consume(); // consume ,
