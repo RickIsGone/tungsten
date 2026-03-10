@@ -152,17 +152,17 @@ namespace tungsten {
       std::string _currentFunctionName;
    };
    //  ========================================== implementation ==========================================
-   std::string operator*(std::string_view value, size_t amount) {
-      std::string result;
-      for (size_t i = 0; i < amount; ++i)
-         result += value;
-      return result;
-   }
+
    template <typename Ty>
    std::unique_ptr<Ty> Parser::_logError(const std::string& str) {
-      const Token token = _peek();
-      const size_t start = _raw.rfind('\n', token.position) == std::string::npos ? 0 : _raw.rfind('\n', token.position) + 1;
-      const size_t end = _raw.find('\n', token.position) == std::string::npos ? _raw.size() : _raw.find('\n', token.position);
+      const bool isSemicolonError = str.find("expected ';'") != std::string::npos;
+      Token errorToken = isSemicolonError ? _peekBack() : _peek();
+
+      const size_t linePosition = errorToken.position;
+      const size_t errorPosition = isSemicolonError ? errorToken.position + errorToken.length : errorToken.position;
+
+      const size_t start = _raw.rfind('\n', linePosition) == std::string::npos ? 0 : _raw.rfind('\n', linePosition) + 1;
+      const size_t end = _raw.find('\n', linePosition) == std::string::npos ? _raw.size() : _raw.find('\n', linePosition);
 
       std::string line = _raw.substr(start, end - start);
       size_t indentation = 0;
@@ -172,12 +172,18 @@ namespace tungsten {
          else
             break;
       }
-      size_t column = _column(_peek()) > indentation ? _column(_peek()) - indentation : 0;
-      size_t lineLength = std::to_string(_line(token)).length();
 
-      std::cerr << _location(_peek()) << " error: " << str << "\n";
-      std::cerr << _line(token) << " | " << line.substr(indentation) << "\n";
-      std::cerr << " "sv * (lineLength + 3 + (column > 1 ? column - 1 : 0)) << "^\n";
+      Token displayToken = errorToken;
+      displayToken.position = errorPosition;
+      displayToken.length = 0;
+
+      size_t column = _column(displayToken) > indentation ? _column(displayToken) - indentation : 0;
+      size_t lineNum = _line(displayToken);
+      size_t lineLength = std::to_string(lineNum).length();
+
+      std::cerr << _location(displayToken) << Colors::Red << " error: " << Colors::Reset << str << "\n";
+      std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
+      std::cerr << " "sv * (lineLength + 3 + (column > 1 ? column - 1 : 0)) << Colors::Green << "^" << Colors::Reset << "\n";
       return nullptr;
    }
 
@@ -189,16 +195,7 @@ namespace tungsten {
    }
 
    std::string Parser::_location(const Token& token) {
-      size_t line = 1, column = 1;
-      for (size_t i = 0; i < token.position; ++i) {
-         if (_raw[i] == '\n') {
-            ++line;
-            column = 1;
-         } else {
-            ++column;
-         }
-      }
-      return _filePath.string() + ":" + std::to_string(line) + ":" + std::to_string(column) + ":"; // std::filesystem::absolute(_filePath).string()
+      return _filePath.string() + ":" + std::to_string(_line(token)) + ":" + std::to_string(_column(token)) + ":";
    }
    size_t Parser::_column(const Token& token) {
       size_t column = 1;
@@ -1132,9 +1129,9 @@ namespace tungsten {
                   if (_peek().type != TokenType::Semicolon) {
                      hasErrors = true;
                      _logError<BlockStatementAST>("expected ';' after '" + _lexeme(_peekBack()) + "'");
-                     while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile && _peek().type != TokenType::Semicolon) {
-                        _consume();
-                     }
+                     // while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile && _peek().type != TokenType::Semicolon) {
+                     //    _consume();
+                     // }
                      if (_peek().type == TokenType::Semicolon)
                         _consume();
                   } else

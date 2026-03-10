@@ -13,16 +13,19 @@ module;
 #include <sys/wait.h>
 #include <fcntl.h>
 #endif
-using namespace std::string_view_literals;
-namespace fs = std::filesystem;
 
 export module Tungsten.utils;
 
-namespace Colors {
+using namespace std::string_view_literals;
+namespace fs = std::filesystem;
+
+export namespace tungsten::Colors {
    constexpr const char* Red = "\x1B[91m";
+   constexpr const char* Green = "\x1B[92m";
+   constexpr const char* Yellow = "\x1B[93m";
    constexpr const char* White = "\x1B[97m";
    constexpr const char* Reset = "\x1B[0m";
-} // namespace Colors
+} // namespace tungsten::Colors
 
 export inline std::stringstream errors{};
 
@@ -82,6 +85,13 @@ namespace tungsten::utils {
 #endif
    }
 } // namespace tungsten::utils
+export std::string operator*(std::string_view value, size_t amount) {
+   std::string result;
+   for (size_t i = 0; i < amount; ++i)
+      result += value;
+   return result;
+}
+
 export namespace tungsten::utils {
 
 
