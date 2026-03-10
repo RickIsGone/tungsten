@@ -1,6 +1,7 @@
 module;
 
 #include <format>
+#include <algorithm>
 #include <memory>
 #include <vector>
 #include <iostream>
@@ -27,13 +28,21 @@ namespace tungsten {
    };
    constexpr size_t GlobalScope = 0;
 
+   std::string operator*(std::string_view value, size_t amount) {
+      std::string result;
+      for (size_t i = 0; i < amount; ++i)
+         result += value;
+      return result;
+   }
    export class SemanticAnalyzer : public ASTVisitor {
    public:
       SemanticAnalyzer(std::vector<std::unique_ptr<FunctionAST>>& functions,
                        std::vector<std::unique_ptr<ClassAST>>& classes,
                        std::vector<std::unique_ptr<ExpressionAST>>& globVars,
-                       std::unique_ptr<Externs>& externs)
-          : _functions{functions}, _classes{classes}, _globalVariables{globVars}, _externs{externs} { _scopes.push_back({}); }
+                       std::unique_ptr<Externs>& externs,
+                       std::string_view path,
+                       const std::string& raw)
+          : _functions{functions}, _classes{classes}, _globalVariables{globVars}, _externs{externs}, _path{path}, _raw{raw} { _scopes.push_back({}); }
       SemanticAnalyzer(const SemanticAnalyzer&) = delete;
       SemanticAnalyzer& operator=(const SemanticAnalyzer&) = delete;
 
@@ -79,12 +88,41 @@ namespace tungsten {
 
    private:
       template <typename... Ty>
-      void _logError(const std::string& err, Ty&&... args) {
-         std::cerr << "error: " << std::vformat(err, std::make_format_args(args...)) << "\n";
+      void _logError(const ExpressionAST* node, const std::string& err, Ty&&... args) {
+         const std::string message = std::vformat(err, std::make_format_args(args...));
+         if (node && node->hasSource() && !_raw.empty()) {
+            const size_t position = node->sourcePosition();
+            const size_t start = _raw.rfind('\n', position) == std::string::npos ? 0 : _raw.rfind('\n', position) + 1;
+            const size_t end = _raw.find('\n', position) == std::string::npos ? _raw.size() : _raw.find('\n', position);
+
+            std::string line = _raw.substr(start, end - start);
+            size_t indentation = 0;
+            for (char c : line) {
+               if (c == ' ' || c == '\t')
+                  ++indentation;
+               else
+                  break;
+            }
+            size_t column = _column(position) > indentation ? _column(position) - indentation : 0;
+            size_t lineLength = std::to_string(_line(position)).length();
+
+            std::cerr << _path << ":" << _line(position) << ":" << _column(position) << ": error: " << message << "\n";
+            std::cerr << _line(position) << " | " << line.substr(indentation) << "\n";
+            std::cerr << " "sv * (lineLength + 3 + (column > 1 ? column - 1 : 0)) << "^\n";
+         } else {
+            std::cerr << "error: " << message << "\n";
+         }
          _hasErrors = true;
       }
       template <typename... Ty>
+      void _logError(const std::string& err, Ty&&... args) {
+         _logError(nullptr, err, std::forward<Ty>(args)...);
+      }
+      template <typename... Ty>
       void _logWarn(const std::string& warn, Ty&&... args) { std::cerr << "warning: " << std::vformat(warn, std::make_format_args(args...)) << "\n"; }
+
+      size_t _line(size_t position) const;
+      size_t _column(size_t position) const;
 
       bool _isSignedType(const std::string& type);
       bool _isUnsignedType(const std::string& type);
@@ -101,6 +139,8 @@ namespace tungsten {
       std::vector<std::unique_ptr<ClassAST>>& _classes;
       std::vector<std::unique_ptr<ExpressionAST>>& _globalVariables;
       std::unique_ptr<Externs>& _externs;
+      std::string_view _path;
+      const std::string& _raw;
 
       std::vector<Scope> _scopes{};
       std::unordered_map<std::string, std::vector<Overload>> _declaredFunctions{};
@@ -150,24 +190,24 @@ namespace tungsten {
 
    void SemanticAnalyzer::visit(VariableDeclarationAST& var) {
       if (_isFunction(var.name()) || _isClass(var.name()))
-         return _logError("{} with name '{}' already exists", _isFunction(var.name()) ? "function" : "class", var.name());
+         return _logError(&var, "{} with name '{}' already exists", _isFunction(var.name()) ? "function" : "class", var.name());
       if (_doesVariableExist(var.name()))
-         return _logError("variable '{}' already exists", var.name());
+         return _logError(&var, "variable '{}' already exists", var.name());
 
       switch (var.type()->kind()) {
          case TypeKind::Array: {
             auto array = static_cast<ArrayTy*>(var.type().get());
             if (!_isBaseType(baseType(array->arrayType())) && !_isClass(baseType(array->arrayType())))
-               return _logError("unknown type '{}' in variable declaration '{} {}'", baseType(array->arrayType()), fullTypeString(var.type()), var.name());
+               return _logError(&var, "unknown type '{}' in variable declaration '{} {}'", baseType(array->arrayType()), fullTypeString(var.type()), var.name());
          } break;
          case TypeKind::Pointer: {
             auto ptr = static_cast<PointerTy*>(var.type().get());
             if (!_isBaseType(baseType(ptr->pointee())) && !_isClass(baseType(ptr->pointee())))
-               return _logError("unknown type '{}' in variable declaration '{} {}'", baseType(ptr->pointee()), fullTypeString(var.type()), var.name());
+               return _logError(&var, "unknown type '{}' in variable declaration '{} {}'", baseType(ptr->pointee()), fullTypeString(var.type()), var.name());
          } break;
          default:
             if (!_isBaseType(var.type()->string()) && !_isClass(var.type()->string()))
-               return _logError("unknown type '{}' in variable declaration '{} {}'", var.type()->string(), fullTypeString(var.type()), var.name());
+               return _logError(&var, "unknown type '{}' in variable declaration '{} {}'", var.type()->string(), fullTypeString(var.type()), var.name());
             break;
       }
 
@@ -175,7 +215,7 @@ namespace tungsten {
          var.initializer()->accept(*this);
          if (!_isNumberType(var.type()->string()) || !_isNumberType(var.initializer()->type()->string())) {
             if (fullTypeString(var.type()) != fullTypeString(var.initializer()->type()))
-               return _logError("type mismatch: cannot assign '{}' to variable of type '{}'", fullTypeString(var.initializer()->type()), fullTypeString(var.type()));
+               return _logError(&var, "type mismatch: cannot assign '{}' to variable of type '{}'", fullTypeString(var.initializer()->type()), fullTypeString(var.type()));
 
          } /*else if (_checkNumericConversionLoss(baseType(var.initializer()->type()), baseType(var.type()))) {
             _logWarn("possible data loss converting from '{}' to '{}' in variable ''", baseType(var.initializer()->type()), baseType(var.type()), var.name());
@@ -195,12 +235,12 @@ namespace tungsten {
 
       if (op.op() == "--"sv || op.op() == "++"sv) {
          if (op.operand()->astType() != ASTType::VariableExpression)
-            return _logError("cannot use operator '{}' on non-variable expression", op.op());
+            return _logError(&op, "cannot use operator '{}' on non-variable expression", op.op());
          op.setType(op.operand()->type());
       }
       if (op.op() == "-"sv) {
          if (op.operand()->astType() != ASTType::NumberExpression)
-            return _logError("cannot use operator '-' on non-numeric expression");
+            return _logError(&op, "cannot use operator '-' on non-numeric expression");
          op.setType(op.operand()->type());
       }
       if (op.op() == "!"sv) {
@@ -208,14 +248,14 @@ namespace tungsten {
       }
       if (op.op() == "&"sv) {
          if (op.operand()->astType() != ASTType::VariableExpression)
-            return _logError("cannot use operator '{}' on non-variable expression", op.op());
+            return _logError(&op, "cannot use operator '{}' on non-variable expression", op.op());
          op.setType(makePointer(op.operand()->type()));
       }
       if (op.op() == "*"sv) {
          if (op.operand()->astType() != ASTType::VariableExpression)
-            return _logError("cannot use operator '{}' on non-variable expression", op.op());
+            return _logError(&op, "cannot use operator '{}' on non-variable expression", op.op());
          if (op.operand()->type()->kind() != TypeKind::Pointer)
-            return _logError("cannot dereference non-pointer type '{}'", fullTypeString(op.operand()->type()));
+            return _logError(&op, "cannot dereference non-pointer type '{}'", fullTypeString(op.operand()->type()));
          op.setType(static_cast<PointerTy*>(op.operand()->type().get())->pointee());
       }
       // if (op.operand()->astType() !=)
@@ -227,9 +267,9 @@ namespace tungsten {
       if (binop.op() == "=="sv || binop.op() == "!="sv || binop.op() == "<"sv || binop.op() == ">"sv || binop.op() == "<="sv || binop.op() == ">="sv) {
          if (!_isNumberType(fullTypeString(binop.LHS()->type())) || !_isNumberType(fullTypeString(binop.RHS()->type()))) {
             if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type()))
-               return _logError("type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
+               return _logError(&binop, "type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
             if (fullTypeString(binop.LHS()->type()) == "String"sv)
-               return _logError("cannot do comparison between strings with operator '{}'", binop.op());
+               return _logError(&binop, "cannot do comparison between strings with operator '{}'", binop.op());
          }
          binop.setType(makeBool());
          return;
@@ -237,23 +277,23 @@ namespace tungsten {
 
       if (binop.op() == "&&"sv || binop.op() == "||"sv) {
          if (binop.LHS()->type()->kind() != TypeKind::Bool || binop.RHS()->type()->kind() != TypeKind::Bool)
-            return _logError("type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
+            return _logError(&binop, "type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
          binop.setType(makeBool());
          return;
       }
 
       if (binop.op() == "="sv || binop.op() == "+="sv || binop.op() == "-="sv || binop.op() == "*="sv || binop.op() == "/="sv || binop.op() == "%="sv || binop.op() == "|="sv || binop.op() == "&="sv || binop.op() == "^="sv || binop.op() == "<<="sv || binop.op() == ">>="sv) {
          if (!binop.LHS()->isLValue())
-            return _logError("left side of assignment must be a variable");
+            return _logError(&binop, "left side of assignment must be a variable");
       }
 
       // addition, multiplication, division, ecc.
       if (!_isNumberType(fullTypeString(binop.LHS()->type())) || !_isNumberType(fullTypeString(binop.RHS()->type()))) {
          if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type()))
-            return _logError("type mismatch: cannot operate '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
+            return _logError(&binop, "type mismatch: cannot operate '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
 
          if (fullTypeString(binop.LHS()->type()) == "String"sv && binop.op() != "=")
-            return _logError("strings can only be assigned, not operated on with '{}'", binop.op());
+            return _logError(&binop, "strings can only be assigned, not operated on with '{}'", binop.op());
       }
 
       binop.setType(binop.LHS()->type());
@@ -261,7 +301,7 @@ namespace tungsten {
 
    void SemanticAnalyzer::visit(VariableExpressionAST& var) {
       if (!_doesVariableExist(var.name()))
-         return _logError("unknown variable '{}'", var.name());
+         return _logError(&var, "unknown variable '{}'", var.name());
 
       var.setType(_variableType(var.name()));
    }
@@ -367,7 +407,7 @@ namespace tungsten {
 
    void SemanticAnalyzer::visit(CallExpressionAST& call) {
       if (call.callee() == "main"sv)
-         return _logError("cannot call main function");
+         return _logError(&call, "cannot call main function");
 
       auto overloadsIt = _declaredFunctions.find(call.callee());
       std::vector<Overload> overloads;
@@ -387,7 +427,7 @@ namespace tungsten {
       }
       if (overloads.empty()) {
          call.setType(makeNullType()); // temporary fix (if I don't fucking forget to fix it *again*)
-         return _logError("unknown function '{}'", call.callee());
+         return _logError(&call, "unknown function '{}'", call.callee());
       }
 
       for (auto& arg : call.args()) {
@@ -434,8 +474,8 @@ namespace tungsten {
          }
          call.setType(makeNullType());
          if (args.empty())
-            return _logError("no overload of function '{}' with no arguments", call.callee());
-         return _logError("no overload of function '{}' with arguments '{}'", call.callee(), args);
+            return _logError(&call, "no overload of function '{}' with no arguments", call.callee());
+         return _logError(&call, "no overload of function '{}' with arguments '{}'", call.callee(), args);
       }
    }
 
@@ -451,7 +491,7 @@ namespace tungsten {
             break;
 
          default:
-            return _logError("if statement condition must be a numeric or boolean expression");
+            return _logError(&ifStmnt, "if statement condition must be a numeric or boolean expression");
       }
       if (ifStmnt.thenBranch()->astType() != ASTType::BlockStatement) {
          _scopes.push_back({});
@@ -485,7 +525,7 @@ namespace tungsten {
             break;
 
          default:
-            return _logError("while statement condition must be a numeric or boolean expression");
+            return _logError(&whileStmnt, "while statement condition must be a numeric or boolean expression");
       }
 
       whileStmnt.body()->accept(*this);
@@ -502,7 +542,7 @@ namespace tungsten {
             break;
 
          default:
-            return _logError("while statement condition must be a numeric or boolean expression");
+            return _logError(&doWhile, "while statement condition must be a numeric or boolean expression");
       }
 
       doWhile.body()->accept(*this);
@@ -516,7 +556,7 @@ namespace tungsten {
          case ASTType::BinaryExpression:
             break;
          default:
-            return _logError("for statement initialization must be a variable declaration or a binary expression");
+            return _logError(&forStmnt, "for statement initialization must be a variable declaration or a binary expression");
       }
       forStmnt.condition()->accept(*this);
       switch (forStmnt.condition()->astType()) {
@@ -527,10 +567,10 @@ namespace tungsten {
          case ASTType::BinaryExpression:
          case ASTType::VariableDeclaration:
             if (forStmnt.condition()->type()->kind() != TypeKind::Bool && !_isNumberType(fullTypeString(forStmnt.condition()->type())))
-               return _logError("while statement condition must be a numeric or boolean expression");
+               return _logError(&forStmnt, "while statement condition must be a numeric or boolean expression");
             break;
          default:
-            return _logError("for statement condition must be a numeric or boolean expression");
+            return _logError(&forStmnt, "for statement condition must be a numeric or boolean expression");
       }
       forStmnt.increment()->accept(*this);
       switch (forStmnt.increment()->astType()) {
@@ -538,7 +578,7 @@ namespace tungsten {
          case ASTType::UnaryExpression:
             break;
          default:
-            return _logError("for statement increment must be a binary expression");
+            return _logError(&forStmnt, "for statement increment must be a binary expression");
       }
       forStmnt.body()->accept(*this);
       _scopes.pop_back();
@@ -552,14 +592,14 @@ namespace tungsten {
             static_cast<NumberExpressionAST*>(ext.value().get())->setType(makeInt32());
       }
       if (!_isNumberType(ext.value()->type()->string()))
-         return _logError("exit statement expects a numeric value");
+         return _logError(&ext, "exit statement expects a numeric value");
    }
 
    void SemanticAnalyzer::visit(ReturnStatementAST& ret) {
       if (ret.type()->kind() == TypeKind::Void) {
          if (ret.value() != nullptr) {
             ret.value()->accept(*this);
-            return _logError("'void' function cannot return '{}'", fullTypeString(ret.value()->type()));
+            return _logError(&ret, "'void' function cannot return '{}'", fullTypeString(ret.value()->type()));
          }
          return;
       }
@@ -573,7 +613,7 @@ namespace tungsten {
       }
       if (!_isNumberType(ret.type()->string()) || !_isNumberType(ret.value()->type()->string())) {
          if (ret.type()->string() != ret.value()->type()->string())
-            return _logError("'{}' function cannot return '{}'", fullTypeString(ret.type()), fullTypeString(ret.value()->type()));
+            return _logError(&ret, "'{}' function cannot return '{}'", fullTypeString(ret.type()), fullTypeString(ret.value()->type()));
       } /*else {
          if (_checkNumericConversionLoss(baseType(ret.value()->type()), baseType(ret.type())))
             _logWarn("possible data loss converting from '{}' to '{}' in return statement", baseType(ret.value()->type()), baseType(ret.type()));
@@ -582,6 +622,26 @@ namespace tungsten {
 
    bool SemanticAnalyzer::_isSignedType(const std::string& type) {
       return type == "int"sv || type == "i8"sv || type == "i16"sv || type == "i32"sv || type == "i64"sv || type == "i128"sv;
+   }
+   size_t SemanticAnalyzer::_line(size_t position) const {
+      size_t line = 1;
+      const size_t safePosition = std::min(position, _raw.size());
+      for (size_t i = 0; i < safePosition; ++i) {
+         if (_raw[i] == '\n')
+            ++line;
+      }
+      return line;
+   }
+   size_t SemanticAnalyzer::_column(size_t position) const {
+      size_t column = 1;
+      const size_t safePosition = std::min(position, _raw.size());
+      for (size_t i = 0; i < safePosition; ++i) {
+         if (_raw[i] == '\n')
+            column = 1;
+         else
+            ++column;
+      }
+      return column;
    }
    bool SemanticAnalyzer::_isUnsignedType(const std::string& type) {
       return type == "uint"sv || type == "u8"sv || type == "u16"sv || type == "u32"sv || type == "u64"sv || type == "u128"sv;

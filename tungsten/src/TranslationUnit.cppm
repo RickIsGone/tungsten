@@ -62,7 +62,7 @@ namespace tungsten {
       Lexer lexer{path, _raw};
       Parser parser{path, lexer.tokenize(), _raw};
       parser.parse();
-      SemanticAnalyzer analyzer{parser.functions(), parser.classes(), parser.globalVariables(), parser.externs()};
+      SemanticAnalyzer analyzer{parser.functions(), parser.classes(), parser.globalVariables(), parser.externs(), path.string(), _raw};
       if (analyzer.analyze()) {
          for (auto& var : parser.externs()->variables) {
             var->codegen();

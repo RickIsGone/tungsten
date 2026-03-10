@@ -297,9 +297,20 @@ export namespace tungsten {
 
       _NODISCARD virtual ASTType astType() const noexcept { return ASTType::Expression; }
       _NODISCARD virtual std::shared_ptr<Type>& type() { return _Type; }
+      void setSource(size_t position, size_t length) {
+         _sourcePosition = position;
+         _sourceLength = length;
+         _hasSource = true;
+      }
+      _NODISCARD bool hasSource() const noexcept { return _hasSource; }
+      _NODISCARD size_t sourcePosition() const noexcept { return _sourcePosition; }
+      _NODISCARD size_t sourceLength() const noexcept { return _sourceLength; }
 
    protected:
       std::shared_ptr<Type> _Type;
+      size_t _sourcePosition{0};
+      size_t _sourceLength{0};
+      bool _hasSource{false};
    };
 
    // types declaration
