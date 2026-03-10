@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(tungsten_compiler VERSION 0.1.12)
+project(tungsten_compiler VERSION 0.1.13)
 
 # === Compiler Settings ===
 set(CMAKE_CXX_STANDARD 20)

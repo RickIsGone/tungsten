@@ -234,8 +234,8 @@ namespace tungsten {
       return _tokens.back();
    }
 
-   _NODISCARD Token Parser::_peekBack(size_t offset) const {
-      if (_index - offset - 1 >= 0)
+   _NODISCARD Token Parser::_peekBack(const size_t offset) const {
+      if (_index > offset && _index - offset >= 1)
          return _tokens.at(_index - offset - 1);
       return _tokens.at(0);
    }
