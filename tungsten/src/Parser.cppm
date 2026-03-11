@@ -183,7 +183,10 @@ namespace tungsten {
 
       std::cerr << _location(displayToken) << Colors::Red << " error: " << Colors::Reset << str << "\n";
       std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
-      std::cerr << " "sv * (lineLength + 3 + (column > 1 ? column - 1 : 0)) << Colors::Green << "^" << Colors::Reset << "\n";
+      std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << "^" << Colors::Reset << "\n";
+      if (isSemicolonError)
+         std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << ";" << Colors::Reset << "\n";
+      std::cerr << "\n";
       return nullptr;
    }
 
@@ -1113,9 +1116,13 @@ namespace tungsten {
       std::vector<std::unique_ptr<ExpressionAST>> statements{};
       bool hasErrors = false;
       while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile) {
-         if (auto expr = _parseExpression())
-            statements.push_back(std::move(expr));
+         statements.push_back(_parseExpression());
+
          if (!statements.empty()) {
+            if (!statements.back()) {
+               hasErrors = true;
+               continue;
+            }
             switch (statements.back()->astType()) {
                case ASTType::BlockStatement:
                case ASTType::ForStatement:
@@ -1132,8 +1139,7 @@ namespace tungsten {
                      // while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile && _peek().type != TokenType::Semicolon) {
                      //    _consume();
                      // }
-                     if (_peek().type == TokenType::Semicolon)
-                        _consume();
+
                   } else
                      _consume(); // consume ';'
             }
@@ -1142,8 +1148,8 @@ namespace tungsten {
       if (_peek().type != TokenType::CloseBrace)
          return _logError<BlockStatementAST>("expected '}'");
       _consume(); // consume }
-      if (hasErrors)
-         return nullptr;
+      // if (hasErrors)
+      //    return nullptr;
       return std::make_unique<BlockStatementAST>(std::move(statements));
    }
 

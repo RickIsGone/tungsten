@@ -111,7 +111,10 @@ namespace tungsten {
 
             std::cerr << _path << ":" << lineNum << ":" << _column(errorPosition) << Colors::Red << " error: " << Colors::White << message << "\n";
             std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
-            std::cerr << " "sv * (lineLength + 3 + (column > 1 ? column - 1 : 0)) << Colors::Green << "^" << Colors::Reset << "\n";
+            std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << "^" << Colors::Reset << "\n";
+            if (isSemicolonError)
+               std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << ";" << Colors::Reset << "\n";
+            std::cerr << "\n";
          } else {
             std::cerr << "error: " << message << "\n";
          }
@@ -122,7 +125,40 @@ namespace tungsten {
          _logError(nullptr, err, std::forward<Ty>(args)...);
       }
       template <typename... Ty>
-      void _logWarn(const std::string& warn, Ty&&... args) { std::cerr << "warning: " << std::vformat(warn, std::make_format_args(args...)) << "\n"; }
+      void _logWarn(const std::string& warn, Ty&&... args) {
+         _logWarn(nullptr, warn, std::forward<Ty>(args)...);
+      }
+      template <typename... Ty>
+      void _logWarn(const ExpressionAST* node, const std::string& warn, Ty&&... args) {
+         const std::string message = std::vformat(warn, std::make_format_args(args...));
+         if (node && node->hasSource() && !_raw.empty()) {
+            const size_t linePosition = node->sourcePosition();
+            const size_t errorPosition = node->sourcePosition();
+
+            const size_t start = _raw.rfind('\n', linePosition) == std::string::npos ? 0 : _raw.rfind('\n', linePosition) + 1;
+            const size_t end = _raw.find('\n', linePosition) == std::string::npos ? _raw.size() : _raw.find('\n', linePosition);
+
+            std::string line = _raw.substr(start, end - start);
+            size_t indentation = 0;
+            for (char c : line) {
+               if (c == ' ' || c == '\t')
+                  ++indentation;
+               else
+                  break;
+            }
+
+            size_t column = _column(errorPosition) > indentation ? _column(errorPosition) - indentation : 0;
+            size_t lineNum = _line(errorPosition);
+            size_t lineLength = std::to_string(lineNum).length();
+
+            std::cerr << _path << ":" << lineNum << ":" << _column(errorPosition) << Colors::Yellow << " warning: " << Colors::White << message << "\n";
+            std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
+            std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << "^" << Colors::Reset << "\n";
+            std::cerr << "\n";
+         } else {
+            std::cerr << "warning: " << message << "\n";
+         }
+      }
 
       size_t _line(size_t position) const;
       size_t _column(size_t position) const;
@@ -313,7 +349,15 @@ namespace tungsten {
       _scopes.push_back({});
       ++_currentScope;
       for (auto& expr : block.statements()) {
+         if (!expr) {
+            _hasErrors = true;
+            continue;
+         }
          expr->accept(*this);
+         if (expr->astType() == ASTType::VariableExpression) {
+            auto varExpr = static_cast<VariableExpressionAST*>(expr.get());
+            _logWarn(expr.get(), "unused result of expression '{}'", varExpr->name());
+         }
       }
       _scopes.pop_back();
       --_currentScope;
@@ -395,7 +439,7 @@ namespace tungsten {
       if (fun.name() == "main"sv) {
          if (fun.body()) {
             for (auto& expr : static_cast<BlockStatementAST*>(fun.body().get())->statements()) {
-               if (expr->astType() == ASTType::ReturnStatement)
+               if (expr && expr->astType() == ASTType::ReturnStatement)
                   static_cast<ReturnStatementAST*>(expr.get())->setType(makeInt32());
             }
          }
