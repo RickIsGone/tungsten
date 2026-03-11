@@ -16,6 +16,7 @@ import Tungsten.ast;
 import Tungsten.utils;
 
 using namespace std::string_view_literals;
+namespace fs = std::filesystem;
 
 namespace tungsten {
    export enum class SymbolType {
@@ -70,7 +71,7 @@ namespace tungsten {
 
    export class Parser {
    public:
-      Parser(const std::filesystem::path& file, const std::vector<Token>& tokens, const std::string& raw)
+      Parser(const fs::path& file, const std::vector<Token>& tokens, const std::string& raw)
           : _filePath{file}, _tokens{tokens}, _raw{raw} {
          initLLVM(file.filename().stem().string(), file.filename().string());
          _externs = std::make_unique<Externs>();
@@ -140,7 +141,7 @@ namespace tungsten {
 
       std::unordered_map<std::string, SymbolType> _symbolTable{};
       size_t _index{0};
-      const std::filesystem::path& _filePath{};
+      const fs::path& _filePath{};
       const std::vector<Token> _tokens{};
       const std::string& _raw;
 
@@ -219,7 +220,7 @@ namespace tungsten {
       return line;
    }
    std::string Parser::_file() {
-      return std::filesystem::absolute(_filePath).string();
+      return fs::absolute(_filePath).string();
    }
    std::string Parser::_function() {
       return _currentFunctionName;

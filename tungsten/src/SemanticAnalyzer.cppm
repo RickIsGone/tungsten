@@ -7,6 +7,7 @@ module;
 #include <iostream>
 #include <string>
 #include <unordered_map>
+#include <filesystem>
 #include <sstream>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
@@ -20,6 +21,7 @@ import Tungsten.parser;
 import Tungsten.utils;
 
 using namespace std::literals;
+namespace fs = std::filesystem;
 
 namespace tungsten {
    using Scope = std::unordered_map<std::string, std::shared_ptr<Type>>;
@@ -35,9 +37,9 @@ namespace tungsten {
                        std::vector<std::unique_ptr<ClassAST>>& classes,
                        std::vector<std::unique_ptr<ExpressionAST>>& globVars,
                        std::unique_ptr<Externs>& externs,
-                       std::string_view path,
+                       const fs::path& filePath,
                        const std::string& raw)
-          : _functions{functions}, _classes{classes}, _globalVariables{globVars}, _externs{externs}, _path{path}, _raw{raw} { _scopes.push_back({}); }
+          : _functions{functions}, _classes{classes}, _globalVariables{globVars}, _externs{externs}, _filePath{filePath}, _raw{raw} { _scopes.push_back({}); }
       SemanticAnalyzer(const SemanticAnalyzer&) = delete;
       SemanticAnalyzer& operator=(const SemanticAnalyzer&) = delete;
 
@@ -109,7 +111,7 @@ namespace tungsten {
             size_t lineNum = _line(errorPosition);
             size_t lineLength = std::to_string(lineNum).length();
 
-            std::cerr << _path << ":" << lineNum << ":" << _column(errorPosition) << Colors::Red << " error: " << Colors::White << message << "\n";
+            std::cerr << _filePath.string() << ":" << lineNum << ":" << _column(errorPosition) << Colors::Red << " error: " << Colors::White << message << "\n";
             std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
             std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << "^" << Colors::Reset << "\n";
             if (isSemicolonError)
@@ -151,7 +153,7 @@ namespace tungsten {
             size_t lineNum = _line(errorPosition);
             size_t lineLength = std::to_string(lineNum).length();
 
-            std::cerr << _path << ":" << lineNum << ":" << _column(errorPosition) << Colors::Yellow << " warning: " << Colors::White << message << "\n";
+            std::cerr << _filePath.string() << ":" << lineNum << ":" << _column(errorPosition) << Colors::Yellow << " warning: " << Colors::White << message << "\n";
             std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
             std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << "^" << Colors::Reset << "\n";
             std::cerr << "\n";
@@ -178,7 +180,7 @@ namespace tungsten {
       std::vector<std::unique_ptr<ClassAST>>& _classes;
       std::vector<std::unique_ptr<ExpressionAST>>& _globalVariables;
       std::unique_ptr<Externs>& _externs;
-      std::string_view _path;
+      const fs::path& _filePath;
       const std::string& _raw;
 
       std::vector<Scope> _scopes{};
