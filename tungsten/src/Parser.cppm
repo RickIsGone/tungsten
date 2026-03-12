@@ -1115,15 +1115,13 @@ namespace tungsten {
    std::unique_ptr<BlockStatementAST> Parser::_parseBlock() {
       _consume(); // consume {
       std::vector<std::unique_ptr<ExpressionAST>> statements{};
-      bool hasErrors = false;
       while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile) {
          statements.push_back(_parseExpression());
 
          if (!statements.empty()) {
-            if (!statements.back()) {
-               hasErrors = true;
+            if (!statements.back())
                continue;
-            }
+
             switch (statements.back()->astType()) {
                case ASTType::BlockStatement:
                case ASTType::ForStatement:
@@ -1135,7 +1133,6 @@ namespace tungsten {
                      break;
 
                   if (_peek().type != TokenType::Semicolon) {
-                     hasErrors = true;
                      _logError<BlockStatementAST>("expected ';' after '" + _lexeme(_peekBack()) + "'");
                      // while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile && _peek().type != TokenType::Semicolon) {
                      //    _consume();
@@ -1149,8 +1146,6 @@ namespace tungsten {
       if (_peek().type != TokenType::CloseBrace)
          return _logError<BlockStatementAST>("expected '}'");
       _consume(); // consume }
-      // if (hasErrors)
-      //    return nullptr;
       return std::make_unique<BlockStatementAST>(std::move(statements));
    }
 
