@@ -9,6 +9,9 @@ module;
 #include <unordered_map>
 #include <filesystem>
 #include <sstream>
+#include <cstdint>
+#include <cmath>
+#include <variant>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
 #endif
@@ -47,6 +50,7 @@ namespace tungsten {
 
       void visit(NumberExpressionAST&) override;
       void visit(VariableExpressionAST&) override;
+      void visit(IndexAccessAST&) override;
       void visit(StringExpression&) override {}
       void visit(UnaryExpressionAST&) override;
       void visit(BinaryExpressionAST&) override;
@@ -162,18 +166,21 @@ namespace tungsten {
          }
       }
 
-      size_t _line(size_t position) const;
-      size_t _column(size_t position) const;
+      _NODISCARD size_t _line(size_t position) const;
+      _NODISCARD size_t _column(size_t position) const;
 
       bool _isSignedType(const std::string& type);
       bool _isUnsignedType(const std::string& type);
       bool _isFloatingPointType(const std::string& type);
       bool _isNumberType(const std::string& type);
+      bool _isIntegerType(const std::string& type);
       bool _isBaseType(const std::string& type);
       bool _isClass(const std::string& cls);
       bool _isFunction(const std::string& fn);
       bool _checkNumericConversionLoss(const std::string& fromType, const std::string& toType);
       bool _doesVariableExist(const std::string& var);
+      bool _isConstexpr(const std::unique_ptr<ExpressionAST>& expr);
+      std::unique_ptr<ExpressionAST> _evaluateConstexpr(const std::unique_ptr<ExpressionAST>& expr);
       std::shared_ptr<Type> _variableType(const std::string& var);
 
       std::vector<std::unique_ptr<FunctionAST>>& _functions;
@@ -240,6 +247,38 @@ namespace tungsten {
             auto array = static_cast<ArrayTy*>(var.type().get());
             if (!_isBaseType(baseType(array->arrayType())) && !_isClass(baseType(array->arrayType())))
                return _logError(&var, "unknown type '{}' in variable declaration '{} {}'", baseType(array->arrayType()), fullTypeString(var.type()), var.name());
+
+            // Validate/fold every dimension: arr[a][b][c]
+            std::shared_ptr<Type> current = var.type();
+            while (current && current->kind() == TypeKind::Array) {
+               auto* dim = static_cast<ArrayTy*>(current.get());
+               dim->size()->accept(*this);
+               if (!dim->size()->type())
+                  return _logError(&var, "array size must be an integer type in variable declaration '{} {}'", fullTypeString(var.type()), var.name());
+               if (!_isConstexpr(dim->size()))
+                  return _logError(&var, "array size must be a compile-time constant in variable declaration '{} {}'", fullTypeString(var.type()), var.name());
+
+               auto foldedSizeExpr = _evaluateConstexpr(dim->size());
+               if (!foldedSizeExpr) {
+                  _hasErrors = true;
+                  return; // error already logged
+               }
+
+               if (foldedSizeExpr->astType() != ASTType::NumberExpression)
+                  return _logError(&var, "array size must be a numeric value in variable declaration '{} {}'", fullTypeString(var.type()), var.name());
+
+               auto* foldedNum = static_cast<NumberExpressionAST*>(foldedSizeExpr.get());
+               const Number foldedSize = foldedNum->value();
+               const double sizeAsDouble = std::holds_alternative<double>(foldedSize)
+                   ? std::get<double>(foldedSize)
+                   : static_cast<double>(std::get<uint64_t>(foldedSize));
+               if (!std::isfinite(sizeAsDouble) || std::floor(sizeAsDouble) != sizeAsDouble || sizeAsDouble < 1.0)
+                  return _logError(&var, "array size must be a positive integer in variable declaration '{} {}'", fullTypeString(var.type()), var.name());
+
+               dim->setSize(std::move(foldedSizeExpr));
+               static_cast<NumberExpressionAST*>(dim->size().get())->setType(makeUint32());
+               current = dim->arrayType();
+            }
          } break;
          case TypeKind::Pointer: {
             auto ptr = static_cast<PointerTy*>(var.type().get());
@@ -347,6 +386,85 @@ namespace tungsten {
       var.setType(_variableType(var.name()));
    }
 
+   void SemanticAnalyzer::visit(IndexAccessAST& access) {
+      access.array()->accept(*this);
+      access.index()->accept(*this);
+
+      if (!access.array()->type())
+         return _logError(&access, "cannot index expression with unknown type");
+      if (access.array()->type()->kind() != TypeKind::Array && access.array()->type()->kind() != TypeKind::Pointer)
+         return _logError(&access, "cannot index non-array/non-pointer type '{}'", fullTypeString(access.array()->type()));
+
+      if (_isConstexpr(access.index())) {
+         auto foldedIndexExpr = _evaluateConstexpr(access.index());
+         if (!foldedIndexExpr) {
+            _hasErrors = true;
+            return; // error already logged
+         }
+         access.index() = std::move(foldedIndexExpr);
+      }
+
+      // Numeric literals are currently parsed as `double`; accept them as indices
+      // only when they are finite, non-negative integer values.
+      if (access.index()->astType() == ASTType::NumberExpression) {
+         const Number indexNumber = static_cast<NumberExpressionAST*>(access.index().get())->value();
+         const double indexAsDouble = std::holds_alternative<double>(indexNumber)
+             ? std::get<double>(indexNumber)
+             : static_cast<double>(std::get<uint64_t>(indexNumber));
+
+         if (!std::isfinite(indexAsDouble) || std::floor(indexAsDouble) != indexAsDouble)
+            return _logError(access.index().get(), "array index must be an integer");
+         if (indexAsDouble < 0.0)
+            return _logError(access.index().get(), "array index cannot be negative");
+
+         static_cast<NumberExpressionAST*>(access.index().get())->setType(makeUint32());
+      }
+
+      if (!access.index()->type())
+         return _logError(&access, "cannot index expression with unknown type");
+      if (!_isNumberType(access.index()->type()->string()))
+         return _logError(&access, "cannot index non-numeric type '{}'", fullTypeString(access.index()->type()));
+
+      if (access.array()->type()->kind() == TypeKind::Array) {
+         auto* arrayTy = static_cast<ArrayTy*>(access.array()->type().get());
+         if (arrayTy->size() && _isConstexpr(arrayTy->size()) && _isConstexpr(access.index())) {
+            auto foldedSizeExpr = _evaluateConstexpr(arrayTy->size());
+            if (!foldedSizeExpr) {
+               _hasErrors = true;
+               return; // error already logged
+            }
+            arrayTy->setSize(std::move(foldedSizeExpr));
+            static_cast<NumberExpressionAST*>(arrayTy->size().get())->setType(makeUint32());
+
+            if (access.index()->astType() != ASTType::NumberExpression)
+               return _logError(access.index().get(), "constexpr array index must fold to a number");
+
+            const Number sizeNumber = static_cast<NumberExpressionAST*>(arrayTy->size().get())->value();
+            const Number indexNumber = static_cast<NumberExpressionAST*>(access.index().get())->value();
+            const double sizeAsDouble = std::holds_alternative<double>(sizeNumber)
+                ? std::get<double>(sizeNumber)
+                : static_cast<double>(std::get<uint64_t>(sizeNumber));
+            const double indexAsDouble = std::holds_alternative<double>(indexNumber)
+                ? std::get<double>(indexNumber)
+                : static_cast<double>(std::get<uint64_t>(indexNumber));
+            if (!std::isfinite(indexAsDouble) || std::floor(indexAsDouble) != indexAsDouble)
+               return _logError(access.index().get(), "array index must be an integer");
+            if (indexAsDouble < 0.0)
+               return _logError(access.index().get(), "array index cannot be negative");
+            if (!std::isfinite(sizeAsDouble) || std::floor(sizeAsDouble) != sizeAsDouble || sizeAsDouble < 1.0)
+               return _logError(arrayTy->size().get(), "array size must be a positive integer");
+            if (indexAsDouble >= sizeAsDouble)
+               return _logError(access.index().get(), "array index out of bounds: index {} but size is {}", indexAsDouble, sizeAsDouble);
+         }
+
+         access.setType(arrayTy->arrayType());
+         return;
+      }
+
+      auto* pointerTy = static_cast<PointerTy*>(access.array()->type().get());
+      access.setType(pointerTy->pointee());
+   }
+
    void SemanticAnalyzer::visit(BlockStatementAST& block) {
       _scopes.push_back({});
       ++_currentScope;
@@ -439,6 +557,20 @@ namespace tungsten {
       fun.prototype()->accept(*this);
       // temporary fix because of the single numeric type being a double
       if (fun.name() == "main"sv) {
+         if (fun.prototype()) {
+            if (!fun.prototype()->args().empty()) {
+               if (fun.prototype()->args().size() != 2 && fun.prototype()->args().size() != 0)
+                  return _logError("main function must have either 0 or 2 arguments, not {}", fun.prototype()->args().size());
+               if (fun.prototype()->args().size() == 2) {
+                  if (fullTypeString(fun.prototype()->args()[0]->type()) != "double"sv)
+                     return _logError("main function must have first argument of type 'num'");
+                  if (fullTypeString(fun.prototype()->args()[1]->type()) != "String*"sv && fullTypeString(fun.prototype()->args()[1]->type()) != "char**"sv)
+                     return _logError("main function must have second argument of type 'String*' or 'char**'");
+
+                  static_cast<VariableDeclarationAST*>(fun.prototype()->args()[0].get())->setType(makeInt32());
+               }
+            }
+         }
          if (fun.body()) {
             for (auto& expr : static_cast<BlockStatementAST*>(fun.body().get())->statements()) {
                if (expr && expr->astType() == ASTType::ReturnStatement)
@@ -701,6 +833,9 @@ namespace tungsten {
    bool SemanticAnalyzer::_isNumberType(const std::string& type) {
       return _isSignedType(type) || _isUnsignedType(type) || _isFloatingPointType(type);
    }
+   bool SemanticAnalyzer::_isIntegerType(const std::string& type) {
+      return _isSignedType(type) || _isUnsignedType(type);
+   }
    bool SemanticAnalyzer::_isBaseType(const std::string& type) {
       return _isNumberType(type) || type == "String"sv || type == "char"sv || type == "void"sv || type == "bool"sv || type == "ArgPack"sv;
    }
@@ -770,4 +905,213 @@ namespace tungsten {
       return nullptr;
    }
 
+   bool SemanticAnalyzer::_isConstexpr(const std::unique_ptr<ExpressionAST>& expr) {
+      if (!expr)
+         return false;
+
+      switch (expr->astType()) {
+         case ASTType::NumberExpression:
+         case ASTType::StringExpression:
+         case ASTType::BuiltinLine:
+         case ASTType::BuiltinColumn:
+         case ASTType::BuiltinFile:
+         case ASTType::BuiltinFunction:
+         case ASTType::NullPtr:
+            return true;
+
+         case ASTType::UnaryExpression: {
+            auto* unaryExpr = static_cast<UnaryExpressionAST*>(expr.get());
+            const auto& op = unaryExpr->op();
+            if (op != "+"sv && op != "-"sv && op != "!"sv)
+               return false;
+            return _isConstexpr(unaryExpr->operand());
+         }
+
+         case ASTType::BinaryExpression: {
+            auto* binaryExpr = static_cast<BinaryExpressionAST*>(expr.get());
+            const auto& op = binaryExpr->op();
+
+            if (op != "+"sv && op != "-"sv && op != "*"sv && op != "/"sv && op != "%"sv &&
+                op != "=="sv && op != "!="sv && op != "<"sv && op != "<="sv && op != ">"sv && op != ">="sv &&
+                op != "&&"sv && op != "||"sv &&
+                op != "&"sv && op != "|"sv && op != "^"sv && op != "<<"sv && op != ">>"sv)
+               return false;
+
+
+            return _isConstexpr(binaryExpr->LHS()) && _isConstexpr(binaryExpr->RHS());
+         }
+
+         default:
+            return false;
+      }
+   }
+
+   std::unique_ptr<ExpressionAST> SemanticAnalyzer::_evaluateConstexpr(const std::unique_ptr<ExpressionAST>& expr) {
+      if (!expr) {
+         _logError("invalid constexpr expression: null expression");
+         return nullptr;
+      }
+
+      auto makeFolded = [&](double value) -> std::unique_ptr<ExpressionAST> {
+         auto folded = std::make_unique<NumberExpressionAST>(value, makeDouble());
+         if (expr->hasSource())
+            folded->setSource(expr->sourcePosition(), expr->sourceLength());
+         return folded;
+      };
+
+      auto extractNumber = [&](const ExpressionAST* node, double& out) -> bool {
+         if (!node || node->astType() != ASTType::NumberExpression)
+            return false;
+
+         const Number number = static_cast<const NumberExpressionAST*>(node)->value();
+         out = std::holds_alternative<double>(number)
+             ? std::get<double>(number)
+             : static_cast<double>(std::get<uint64_t>(number));
+         return true;
+      };
+
+      switch (expr->astType()) {
+         case ASTType::NumberExpression: {
+            double value = 0.0;
+            if (!extractNumber(expr.get(), value)) {
+               _logError(expr.get(), "invalid numeric literal in constant expression");
+               return nullptr;
+            }
+            return makeFolded(value);
+         }
+
+         case ASTType::UnaryExpression: {
+            auto* unaryExpr = static_cast<UnaryExpressionAST*>(expr.get());
+            auto foldedOperand = _evaluateConstexpr(unaryExpr->operand());
+            if (!foldedOperand)
+               return nullptr;
+
+            double operandValue = 0.0;
+            if (!extractNumber(foldedOperand.get(), operandValue)) {
+               _logError(unaryExpr, "invalid operand in constant unary expression");
+               return nullptr;
+            }
+
+            if (unaryExpr->op() == "+"sv)
+               return makeFolded(operandValue);
+            if (unaryExpr->op() == "-"sv)
+               return makeFolded(-operandValue);
+            if (unaryExpr->op() == "!"sv)
+               return makeFolded(operandValue == 0.0 ? 1.0 : 0.0);
+
+            _logError(unaryExpr, "unsupported unary operator '{}' in constant expression", unaryExpr->op());
+            return nullptr;
+         }
+
+         case ASTType::BinaryExpression: {
+            auto* binaryExpr = static_cast<BinaryExpressionAST*>(expr.get());
+
+            auto foldedLHS = _evaluateConstexpr(binaryExpr->LHS());
+            if (!foldedLHS)
+               return nullptr;
+
+            auto foldedRHS = _evaluateConstexpr(binaryExpr->RHS());
+            if (!foldedRHS)
+               return nullptr;
+
+            double lhsValue = 0.0;
+            double rhsValue = 0.0;
+            if (!extractNumber(foldedLHS.get(), lhsValue) || !extractNumber(foldedRHS.get(), rhsValue)) {
+               _logError(binaryExpr, "invalid operands in constant binary expression");
+               return nullptr;
+            }
+
+            if (binaryExpr->op() == "+"sv)
+               return makeFolded(lhsValue + rhsValue);
+            if (binaryExpr->op() == "-"sv)
+               return makeFolded(lhsValue - rhsValue);
+            if (binaryExpr->op() == "*"sv)
+               return makeFolded(lhsValue * rhsValue);
+            if (binaryExpr->op() == "/"sv) {
+               if (rhsValue == 0.0) {
+                  _logError(binaryExpr, "division by zero in constant expression");
+                  return nullptr;
+               }
+               return makeFolded(lhsValue / rhsValue);
+            }
+            if (binaryExpr->op() == "%"sv) {
+               if (rhsValue == 0.0) {
+                  _logError(binaryExpr, "modulo by zero in constant expression");
+                  return nullptr;
+               }
+
+               if (lhsValue < 0.0 || rhsValue < 0.0) {
+                  _logError(binaryExpr, "modulo in constant expression requires non-negative integer operands");
+                  return nullptr;
+               }
+
+               const auto lhsInt = static_cast<uint64_t>(lhsValue);
+               const auto rhsInt = static_cast<uint64_t>(rhsValue);
+               if (static_cast<double>(lhsInt) != lhsValue || static_cast<double>(rhsInt) != rhsValue) {
+                  _logError(binaryExpr, "modulo in constant expression requires integer operands");
+                  return nullptr;
+               }
+               if (rhsInt == 0) {
+                  _logError(binaryExpr, "modulo by zero in constant expression");
+                  return nullptr;
+               }
+
+               return makeFolded(static_cast<double>(lhsInt % rhsInt));
+            }
+
+            if (binaryExpr->op() == "=="sv)
+               return makeFolded(lhsValue == rhsValue ? 1.0 : 0.0);
+            if (binaryExpr->op() == "!="sv)
+               return makeFolded(lhsValue != rhsValue ? 1.0 : 0.0);
+            if (binaryExpr->op() == "<"sv)
+               return makeFolded(lhsValue < rhsValue ? 1.0 : 0.0);
+            if (binaryExpr->op() == "<="sv)
+               return makeFolded(lhsValue <= rhsValue ? 1.0 : 0.0);
+            if (binaryExpr->op() == ">"sv)
+               return makeFolded(lhsValue > rhsValue ? 1.0 : 0.0);
+            if (binaryExpr->op() == ">="sv)
+               return makeFolded(lhsValue >= rhsValue ? 1.0 : 0.0);
+
+            if (binaryExpr->op() == "&&"sv)
+               return makeFolded((lhsValue != 0.0 && rhsValue != 0.0) ? 1.0 : 0.0);
+            if (binaryExpr->op() == "||"sv)
+               return makeFolded((lhsValue != 0.0 || rhsValue != 0.0) ? 1.0 : 0.0);
+
+            if (binaryExpr->op() == "&"sv || binaryExpr->op() == "|"sv || binaryExpr->op() == "^"sv ||
+                binaryExpr->op() == "<<"sv || binaryExpr->op() == ">>"sv) {
+               if (lhsValue < 0.0 || rhsValue < 0.0) {
+                  _logError(binaryExpr, "bitwise operators in constant expression require non-negative integer operands");
+                  return nullptr;
+               }
+
+               const auto lhsInt = static_cast<uint64_t>(lhsValue);
+               const auto rhsInt = static_cast<uint64_t>(rhsValue);
+               if (static_cast<double>(lhsInt) != lhsValue || static_cast<double>(rhsInt) != rhsValue) {
+                  _logError(binaryExpr, "bitwise operators in constant expression require integer operands");
+                  return nullptr;
+               }
+
+               if (binaryExpr->op() == "&"sv)
+                  return makeFolded(static_cast<double>(lhsInt & rhsInt));
+               if (binaryExpr->op() == "|"sv)
+                  return makeFolded(static_cast<double>(lhsInt | rhsInt));
+               if (binaryExpr->op() == "^"sv)
+                  return makeFolded(static_cast<double>(lhsInt ^ rhsInt));
+               if (binaryExpr->op() == "<<"sv) {
+                  return makeFolded(static_cast<double>(lhsInt << rhsInt));
+               }
+               if (binaryExpr->op() == ">>"sv) {
+                  return makeFolded(static_cast<double>(lhsInt >> rhsInt));
+               }
+            }
+
+            _logError(binaryExpr, "unsupported binary operator '{}' in constant expression", binaryExpr->op());
+            return nullptr;
+         }
+
+         default:
+            _logError(expr.get(), "expression is not a valid constant expression");
+            return nullptr;
+      }
+   }
 } // namespace tungsten

@@ -49,11 +49,14 @@ You have two options to get Tungsten:
 
 ## Option 1: Download Pre-compiled Binaries
 
-You can download pre-compiled binaries from the [GitHub Releases page](https://github.com/rickisgone/tungsten/releases/latest).
+You can download pre-compiled binaries from
+the [GitHub Releases page](https://github.com/rickisgone/tungsten/releases/latest).
 
 Available packages:
+
 - **Windows**: `.zip`, `.msi`, `.7z` packages
-- **Linux (Ubuntu)**: `.deb`, `.tar.gz`, `.7z`, `.sh` packages  
+- **Linux (Ubuntu)**: `.deb`, `.tar.gz`, `.7z`, `.sh` packages
+
 <!-- - **macOS**: `.tar.gz`, `.7z`, `.dmg` packages -->
 
 Simply download the appropriate package for your platform.
@@ -68,7 +71,7 @@ If you prefer to build from source or need the latest development version, follo
 |----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Ubuntu   | [![Ubuntu Build](https://github.com/rickisgone/tungsten/actions/workflows/Ubuntu%20build.yml/badge.svg)](https://github.com/rickisgone/tungsten/actions/workflows/Ubuntu%20build.yml)    |
 | Windows  | [![Windows Build](https://github.com/rickisgone/tungsten/actions/workflows/Windows%20Build.yml/badge.svg)](https://github.com/rickisgone/tungsten/actions/workflows/Windows%20Build.yml) |
-| Mac      | [![macOS build](https://github.com/RickIsGone/tungsten/actions/workflows/MacOS%20build.yml/badge.svg)](https://github.com/RickIsGone/tungsten/actions/workflows/MacOS%20build.yml)                                                                                                                                                                        |
+| Mac      | [![macOS build](https://github.com/RickIsGone/tungsten/actions/workflows/MacOS%20build.yml/badge.svg)](https://github.com/RickIsGone/tungsten/actions/workflows/MacOS%20build.yml)       |
 
 ## Prerequisites
 
@@ -323,11 +326,12 @@ extern fun myFun() -> void;
 
 ### Main Function
 
-The `main` function can return either `int` or `int32`. Command line arguments are passed as a `String` array.
+The `main` function can return either `int` or `int32`. Command line arguments are passed like in C with
+`num argc, String* argv` or`num argc, char** argv`.
 If no return value is provided, `0` will be returned by default.
 
 ```c++
-fun main(String[] args) -> num {
+fun main(num argc, String* argv) -> num {
     /* your code */
     ret CodeSuccess;
 }

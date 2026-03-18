@@ -106,6 +106,7 @@ namespace tungsten {
       // std::unique_ptr<ExpressionAST> _parseAlias();
       std::unique_ptr<ExpressionAST> _parseNumberExpression();
       std::unique_ptr<ExpressionAST> _parseIdentifierExpression();
+      std::unique_ptr<ExpressionAST> _parseIndexAccessExpression(std::unique_ptr<ExpressionAST> lhs);
       std::unique_ptr<ExpressionAST> _parseStringExpression();
       std::unique_ptr<ExpressionAST> _parseFunctionCall();
       std::unique_ptr<FunctionPrototypeAST> _parseExternFunctionStatement();
@@ -509,8 +510,27 @@ namespace tungsten {
       const Token token = _peek();
       std::string identifier = _lexeme(_peek());
       _consume();
+      if (_peek().type == TokenType::OpenBracket)
+         return _parseIndexAccessExpression(_setSource(std::make_unique<VariableExpressionAST>(identifier), token));
 
       return _setSource(std::make_unique<VariableExpressionAST>(identifier), token);
+   }
+
+   std::unique_ptr<ExpressionAST> Parser::_parseIndexAccessExpression(std::unique_ptr<ExpressionAST> lhs) {
+      const Token token = _peek();
+      _consume(); // consume [
+      auto index = _parseExpression();
+      if (!index)
+         return nullptr; // error already logged
+
+      if (_peek().type != TokenType::CloseBracket)
+         return _logError("expected ']' after index access");
+      _consume(); // consume ]
+
+      if (_peek().type == TokenType::OpenBracket)
+         return _parseIndexAccessExpression(_setSource(std::make_unique<IndexAccessAST>(std::move(lhs), std::move(index)), token));
+
+      return _setSource(std::make_unique<IndexAccessAST>(std::move(lhs), std::move(index)), token);
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseStringExpression() {

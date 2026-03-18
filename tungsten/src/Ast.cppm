@@ -175,6 +175,7 @@ export namespace tungsten {
       virtual ~ASTVisitor() = default;
       virtual void visit(class NumberExpressionAST&) = 0;
       virtual void visit(class VariableExpressionAST&) = 0;
+      virtual void visit(class IndexAccessAST&) = 0;
       virtual void visit(class StringExpression&) = 0;
       virtual void visit(class UnaryExpressionAST&) = 0;
       virtual void visit(class BinaryExpressionAST&) = 0;
@@ -242,6 +243,7 @@ export namespace tungsten {
       Expression,
       NumberExpression,
       VariableExpression,
+      IndexAccessExpression,
       StringExpression,
       UnaryExpression,
       BinaryExpression,
@@ -537,8 +539,10 @@ export namespace tungsten {
       _NODISCARD std::shared_ptr<Type>& arrayType() { return _arrayType; }
       _NODISCARD std::unique_ptr<ExpressionAST>& size() { return _arraySize; }
 
-      _NODISCARD llvm::Type* llvmType() const override {
-         return nullptr; // llvm::ArrayType::get();
+      _NODISCARD llvm::Type* llvmType() const override; // line 1880 cause of NumberExpressionAST not being declared yet
+
+      void setSize(std::unique_ptr<ExpressionAST> size) {
+         _arraySize = std::move(size);
       }
 
    private:
@@ -647,6 +651,8 @@ export namespace tungsten {
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::NumberExpression; }
 
+      _NODISCARD Number value() const { return _value; }
+
    private:
       Number _value;
    };
@@ -730,10 +736,30 @@ export namespace tungsten {
 
       _NODISCARD ASTType astType() const noexcept override { return ASTType::VariableDeclaration; }
 
+      void setType(std::shared_ptr<Type> type) { _Type = type; }
+
    private:
       std::string _name;
       bool _isGlobal;
       std::unique_ptr<ExpressionAST> _init;
+   };
+
+   // expression for index access array[index]
+   class IndexAccessAST : public ExpressionAST {
+   public:
+      IndexAccessAST(std::unique_ptr<ExpressionAST> array, std::unique_ptr<ExpressionAST> index)
+          : _array{std::move(array)}, _index{std::move(index)} {}
+      llvm::Value* codegen() override;
+
+      _NODISCARD std::unique_ptr<ExpressionAST>& array() { return _array; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& index() { return _index; }
+      void accept(ASTVisitor& v) override { v.visit(*this); }
+      void setType(std::shared_ptr<Type> type) { _Type = type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::IndexAccessExpression; }
+
+   private:
+      std::unique_ptr<ExpressionAST> _array;
+      std::unique_ptr<ExpressionAST> _index;
    };
 
    // expression for function calls
@@ -1315,7 +1341,7 @@ export namespace tungsten {
       llvm::Value* loadedL = loadIfPointer(LHS, _LHS->type()->llvmType(), "lval");
       llvm::Value* loadedR = loadIfPointer(RHS, _RHS->type()->llvmType(), "rval");
 
-      castToCommonType(loadedR, _LHS->type()->llvmType());
+      loadedR = castToCommonType(loadedR, _LHS->type()->llvmType());
 
       if (_op == "="sv || _op == "+="sv || _op == "-="sv || _op == "*="sv || _op == "/="sv || _op == "%="sv || _op == "|="sv || _op == "&="sv || _op == "^="sv || _op == "<<="sv || _op == ">>="sv) {
          if (_LHS->type()->kind() == TypeKind::String) {
@@ -1430,6 +1456,50 @@ export namespace tungsten {
       return allocInstance;
    }
 
+   llvm::Value* IndexAccessAST::codegen() {
+      llvm::Value* arrayPtr = _array->codegen();
+      llvm::Value* indexVal = _index->codegen();
+
+      if (!arrayPtr || !indexVal)
+         return nullptr;
+
+      if (indexVal->getType()->isPointerTy())
+         indexVal = Builder->CreateLoad(_index->type()->llvmType(), indexVal, "idx.load");
+
+      if (indexVal->getType()->isFloatingPointTy())
+         indexVal = Builder->CreateFPToUI(indexVal, Builder->getInt64Ty(), "idx.fptoui");
+      else if (!indexVal->getType()->isIntegerTy())
+         return LogErrorV("array index must be an integer value");
+      else if (!indexVal->getType()->isIntegerTy(64))
+         indexVal = Builder->CreateIntCast(indexVal, Builder->getInt64Ty(), false, "idx.cast");
+
+      llvm::Type* baseTy = _array->type()->llvmType();
+      if (!baseTy)
+         return LogErrorV("cannot index expression with unknown LLVM type");
+
+      if (baseTy->isArrayTy()) {
+         llvm::Value* zero = Builder->getInt64(0);
+         return Builder->CreateGEP(baseTy, arrayPtr, {zero, indexVal}, "elementptr");
+      }
+
+      if (_array->type()->kind() == TypeKind::Pointer) {
+         auto* ptrTy = static_cast<PointerTy*>(_array->type().get());
+
+         if (_array->astType() == ASTType::VariableExpression && arrayPtr->getType()->isPointerTy() && !llvm::isa<llvm::Argument>(arrayPtr))
+            arrayPtr = Builder->CreateLoad(arrayPtr->getType(), arrayPtr, "arrptr.load");
+
+         llvm::Type* gepType = ptrTy->pointee()->llvmType();
+         llvm::Value* elementPtr = Builder->CreateGEP(gepType, arrayPtr, indexVal, "elementptr");
+
+         if (ptrTy->pointee()->kind() == TypeKind::Pointer || ptrTy->pointee()->kind() == TypeKind::String)
+            elementPtr = Builder->CreateLoad(gepType, elementPtr, "element");
+
+         return elementPtr;
+      }
+
+      return LogErrorV("cannot index non-array, non-pointer value");
+   }
+
    llvm::Value* CallExpressionAST::codegen() {
       std::string name = _callee + "$";
       for (auto& arg : _args) {
@@ -1450,8 +1520,12 @@ export namespace tungsten {
          if (!argVal)
             return nullptr;
 
-         if (arg->astType() == ASTType::VariableExpression)
-            argVal = loadIfPointer(argVal, arg->type()->llvmType());
+         if (argVal->getType()->isPointerTy() &&
+             arg->type()->kind() != TypeKind::Pointer &&
+             arg->type()->kind() != TypeKind::String &&
+             arg->type()->kind() != TypeKind::Array) {
+            argVal = Builder->CreateLoad(arg->type()->llvmType(), argVal, "arg.load");
+         }
          if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "*"sv)
             argVal = Builder->CreateLoad(arg->type()->llvmType(), argVal, "derefl");
          args.push_back(argVal);
@@ -1840,6 +1914,15 @@ export namespace tungsten {
    }
    llvm::Value* ClassAST::codegen() {
       return nullptr;
+   }
+
+   llvm::Type* ArrayTy::llvmType() const {
+      auto* num = static_cast<NumberExpressionAST*>(_arraySize.get());
+      const Number rawSize = num->value();
+      uint64_t size = std::holds_alternative<double>(rawSize)
+          ? static_cast<uint64_t>(std::get<double>(rawSize))
+          : std::get<uint64_t>(rawSize);
+      return llvm::ArrayType::get(_arrayType->llvmType(), size);
    }
 
 } // namespace tungsten
