@@ -56,9 +56,9 @@ namespace tungsten {
       void visit(BinaryExpressionAST&) override;
       void visit(VariableDeclarationAST&) override;
       void visit(CallExpressionAST&) override;
-      void visit(TypeOfStatementAST&) override {}
-      void visit(NameOfStatementAST&) override {}
-      void visit(SizeOfStatementAST&) override {}
+      void visit(TypeOfStatementAST&) override;
+      void visit(NameOfStatementAST&) override;
+      void visit(SizeOfStatementAST&) override;
       void visit(__BuiltinFunctionAST&) override {}
       void visit(__BuiltinLineAST&) override {}
       void visit(__BuiltinColumnAST&) override {}
@@ -252,13 +252,13 @@ namespace tungsten {
             std::shared_ptr<Type> current = var.type();
             while (current && current->kind() == TypeKind::Array) {
                auto* dim = static_cast<ArrayTy*>(current.get());
-               dim->size()->accept(*this);
-               if (!dim->size()->type())
+               dim->sizeExpr()->accept(*this);
+               if (!dim->sizeExpr()->type())
                   return _logError(&var, "array size must be an integer type in variable declaration '{} {}'", fullTypeString(var.type()), var.name());
-               if (!_isConstexpr(dim->size()))
+               if (!_isConstexpr(dim->sizeExpr()))
                   return _logError(&var, "array size must be a compile-time constant in variable declaration '{} {}'", fullTypeString(var.type()), var.name());
 
-               auto foldedSizeExpr = _evaluateConstexpr(dim->size());
+               auto foldedSizeExpr = _evaluateConstexpr(dim->sizeExpr());
                if (!foldedSizeExpr) {
                   _hasErrors = true;
                   return; // error already logged
@@ -276,7 +276,7 @@ namespace tungsten {
                   return _logError(&var, "array size must be a positive integer in variable declaration '{} {}'", fullTypeString(var.type()), var.name());
 
                dim->setSize(std::move(foldedSizeExpr));
-               static_cast<NumberExpressionAST*>(dim->size().get())->setType(makeUint32());
+               static_cast<NumberExpressionAST*>(dim->sizeExpr().get())->setType(makeUint32());
                current = dim->arrayType();
             }
          } break;
@@ -303,6 +303,37 @@ namespace tungsten {
       }
 
       _scopes.at(_currentScope)[var.name()] = var.type();
+   }
+
+   void SemanticAnalyzer::visit(NameOfStatementAST& var) {
+      var.variable()->accept(*this);
+      if (var.variable()->astType() != ASTType::VariableExpression)
+         return _logError(&var, "cannot use 'nameof' on non-variable expression");
+   }
+   void SemanticAnalyzer::visit(SizeOfStatementAST& var) {
+      var.variable()->accept(*this);
+      switch (var.variable()->astType()) {
+         case ASTType::VariableExpression:
+         case ASTType::IndexAccessExpression:
+            break;
+         case ASTType::UnaryExpression:
+            if (static_cast<UnaryExpressionAST*>(var.variable().get())->op() == "*"sv)
+               break;
+            [[fallthrough]];
+         default:
+            return _logError(&var, "cannot use 'sizeof' on non-variable expressions");
+      }
+      var.setType(makeUint64());
+   }
+   void SemanticAnalyzer::visit(TypeOfStatementAST& var) {
+      var.variable()->accept(*this);
+      switch (var.variable()->astType()) {
+         case ASTType::VariableExpression:
+         case ASTType::IndexAccessExpression:
+            break;
+         default:
+            return _logError(&var, "cannot use 'typeof' on non-variable expressions");
+      }
    }
 
    void SemanticAnalyzer::visit(NumberExpressionAST& num) {
@@ -425,19 +456,19 @@ namespace tungsten {
 
       if (access.array()->type()->kind() == TypeKind::Array) {
          auto* arrayTy = static_cast<ArrayTy*>(access.array()->type().get());
-         if (arrayTy->size() && _isConstexpr(arrayTy->size()) && _isConstexpr(access.index())) {
-            auto foldedSizeExpr = _evaluateConstexpr(arrayTy->size());
+         if (arrayTy->sizeExpr() && _isConstexpr(arrayTy->sizeExpr()) && _isConstexpr(access.index())) {
+            auto foldedSizeExpr = _evaluateConstexpr(arrayTy->sizeExpr());
             if (!foldedSizeExpr) {
                _hasErrors = true;
                return; // error already logged
             }
             arrayTy->setSize(std::move(foldedSizeExpr));
-            static_cast<NumberExpressionAST*>(arrayTy->size().get())->setType(makeUint32());
+            static_cast<NumberExpressionAST*>(arrayTy->sizeExpr().get())->setType(makeUint32());
 
             if (access.index()->astType() != ASTType::NumberExpression)
                return _logError(access.index().get(), "constexpr array index must fold to a number");
 
-            const Number sizeNumber = static_cast<NumberExpressionAST*>(arrayTy->size().get())->value();
+            const Number sizeNumber = static_cast<NumberExpressionAST*>(arrayTy->sizeExpr().get())->value();
             const Number indexNumber = static_cast<NumberExpressionAST*>(access.index().get())->value();
             const double sizeAsDouble = std::holds_alternative<double>(sizeNumber)
                 ? std::get<double>(sizeNumber)
@@ -450,7 +481,7 @@ namespace tungsten {
             if (indexAsDouble < 0.0)
                return _logError(access.index().get(), "array index cannot be negative");
             if (!std::isfinite(sizeAsDouble) || std::floor(sizeAsDouble) != sizeAsDouble || sizeAsDouble < 1.0)
-               return _logError(arrayTy->size().get(), "array size must be a positive integer");
+               return _logError(arrayTy->sizeExpr().get(), "array size must be a positive integer");
             if (indexAsDouble >= sizeAsDouble)
                return _logError(access.index().get(), "array index out of bounds: index {} but size is {}", indexAsDouble, sizeAsDouble);
          }

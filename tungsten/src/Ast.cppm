@@ -285,6 +285,18 @@ export namespace tungsten {
       _NODISCARD virtual TypeKind kind() const noexcept = 0;
       _NODISCARD virtual const std::string string() const = 0;
       _NODISCARD virtual llvm::Type* llvmType() const = 0;
+      _NODISCARD virtual uint64_t size() const noexcept {
+         llvm::Type* ty = llvmType();
+         if (!ty)
+            return 0;
+         if (TheModule) {
+            const llvm::DataLayout& DL = TheModule->getDataLayout();
+            if (ty->isSized())
+               return DL.getTypeAllocSize(ty);
+         }
+         uint64_t bits = ty->getPrimitiveSizeInBits();
+         return bits > 0 ? bits / 8 : 0;
+      }
    };
 
    // base for all nodes in the AST
@@ -515,7 +527,7 @@ export namespace tungsten {
          return TypeKind::Pointer;
       }
       _NODISCARD const std::string string() const override {
-         return "Pointer";
+         return "pointer";
       }
       _NODISCARD std::shared_ptr<Type>& pointee() { return _pointee; }
       _NODISCARD llvm::Type* llvmType() const override {
@@ -534,10 +546,10 @@ export namespace tungsten {
          return TypeKind::Array;
       }
       _NODISCARD const std::string string() const override {
-         return "Array";
+         return "array";
       }
       _NODISCARD std::shared_ptr<Type>& arrayType() { return _arrayType; }
-      _NODISCARD std::unique_ptr<ExpressionAST>& size() { return _arraySize; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& sizeExpr() { return _arraySize; }
 
       _NODISCARD llvm::Type* llvmType() const override; // line 1880 cause of NumberExpressionAST not being declared yet
 
@@ -608,23 +620,9 @@ export namespace tungsten {
    inline std::shared_ptr<Type> makeArgPack() { return std::make_shared<ArgPackTy>(); }
    inline std::shared_ptr<Type> makeNullType() { return std::make_shared<NullTy>(); }
 
-   std::string fullTypeString(const std::shared_ptr<Type>& ty) {
-      if (!ty)
-         return "";
+   std::string fullTypeString(const std::shared_ptr<Type>& ty);
+   std::vector<uint64_t> getArrayDimensions(const std::shared_ptr<Type>& ty);
 
-      switch (ty->kind()) {
-         case TypeKind::Pointer: {
-            auto ptrTy = std::static_pointer_cast<PointerTy>(ty);
-            return fullTypeString(ptrTy->pointee()) + "*";
-         }
-         case TypeKind::Array: {
-            auto arrTy = std::static_pointer_cast<ArrayTy>(ty);
-            return fullTypeString(arrTy->arrayType()) + "[]";
-         }
-         default:
-            return ty->string();
-      }
-   }
    std::string baseType(const std::shared_ptr<Type>& ty) {
       switch (ty->kind()) {
          case TypeKind::Pointer: {
@@ -782,40 +780,46 @@ export namespace tungsten {
 
    class TypeOfStatementAST : public ExpressionAST {
    public:
-      TypeOfStatementAST(const std::string& variable) : _variable{variable} { _Type = makeString(); }
+      TypeOfStatementAST(std::unique_ptr<ExpressionAST> variable) : _variable{std::move(variable)} { _Type = makeString(); }
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::TypeOfStatement; }
 
+      _NODISCARD const std::unique_ptr<ExpressionAST>& variable() const { return _variable; }
+
    private:
-      std::string _variable;
+      std::unique_ptr<ExpressionAST> _variable;
    };
 
    class NameOfStatementAST : public ExpressionAST {
    public:
-      NameOfStatementAST(const std::string& variable) : _name{variable} { _Type = makeString(); }
+      NameOfStatementAST(std::unique_ptr<ExpressionAST> variable) : _variable{std::move(variable)} { _Type = makeString(); }
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::NameOfStatement; }
 
+      _NODISCARD const std::unique_ptr<ExpressionAST>& variable() const { return _variable; }
+
    private:
-      std::string _name;
+      std::unique_ptr<ExpressionAST> _variable;
    };
 
    class SizeOfStatementAST : public ExpressionAST {
    public:
-      SizeOfStatementAST(const std::string& variable) : _variable{variable} {}
+      SizeOfStatementAST(std::unique_ptr<ExpressionAST> variable) : _variable{std::move(variable)} {}
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::SizeOfStatement; }
 
+      _NODISCARD const std::unique_ptr<ExpressionAST>& variable() const { return _variable; }
+
    private:
-      std::string _variable;
+      std::unique_ptr<ExpressionAST> _variable;
    };
 
    class __BuiltinFunctionAST : public ExpressionAST {
@@ -1534,27 +1538,13 @@ export namespace tungsten {
    }
 
    llvm::Value* TypeOfStatementAST::codegen() {
-      if (!NamedValues.contains(_variable) || !VariableTypes.contains(_variable))
-         return LogErrorV("unknown variable '" + _variable + "'");
-
-      llvm::Type* type = VariableTypes[_variable];
-      return nullptr; // Builder->CreateGlobalStringPtr() TODO: fix
+      return Builder->CreateGlobalStringPtr(fullTypeString(_variable->type()));
    }
    llvm::Value* NameOfStatementAST::codegen() {
-      return Builder->CreateGlobalStringPtr(_name, "varname");
+      return Builder->CreateGlobalStringPtr(static_cast<VariableExpressionAST*>(_variable.get())->name());
    }
-   llvm::Value* SizeOfStatementAST::codegen() { // TODO: fix because of type rework
-      // if (!NamedValues.contains(_variable) || !VariableTypes.contains(_variable)) {
-      //    llvm::Type* type = _variable->type()->llvmType();
-      //    if (type)
-      //       return Builder->getInt64(TheModule->getDataLayout().getTypeAllocSize(type));
-      //    return LogErrorV("unknown type or variable '" + _variable + "'");
-      // }
-
-      // uint64_t size = TheModule->getDataLayout().getTypeAllocSize(VariableTypes[_variable]);
-
-      // return Builder->getInt64(size);
-      return nullptr;
+   llvm::Value* SizeOfStatementAST::codegen() {
+      return Builder->getInt64(_variable->type()->size());
    }
 
    llvm::Value* __BuiltinFunctionAST::codegen() {
@@ -1923,6 +1913,57 @@ export namespace tungsten {
           ? static_cast<uint64_t>(std::get<double>(rawSize))
           : std::get<uint64_t>(rawSize);
       return llvm::ArrayType::get(_arrayType->llvmType(), size);
+   }
+
+   std::vector<uint64_t> getArrayDimensions(const std::shared_ptr<Type>& ty) {
+      std::vector<uint64_t> dimensions;
+      auto current = ty;
+
+      while (current && current->kind() == TypeKind::Array) {
+         auto* arrTy = static_cast<ArrayTy*>(current.get());
+         if (arrTy->sizeExpr() && arrTy->sizeExpr()->astType() == ASTType::NumberExpression) {
+            auto* num = static_cast<NumberExpressionAST*>(arrTy->sizeExpr().get());
+            const Number rawSize = num->value();
+            const uint64_t size = std::holds_alternative<double>(rawSize)
+                ? static_cast<uint64_t>(std::get<double>(rawSize))
+                : std::get<uint64_t>(rawSize);
+            dimensions.push_back(size);
+         } else {
+            dimensions.push_back(0); // unknown size
+         }
+         current = arrTy->arrayType();
+      }
+
+      return dimensions;
+   }
+   std::string fullTypeString(const std::shared_ptr<Type>& ty) {
+      if (!ty)
+         return "";
+
+      switch (ty->kind()) {
+         case TypeKind::Pointer: {
+            auto ptrTy = std::static_pointer_cast<PointerTy>(ty);
+            return fullTypeString(ptrTy->pointee()) + "*";
+         }
+         case TypeKind::Array: {
+            auto dimensions = getArrayDimensions(ty);
+
+            auto current = ty;
+            while (current && current->kind() == TypeKind::Array)
+               current = static_cast<ArrayTy*>(current.get())->arrayType();
+
+            std::string result = fullTypeString(current);
+            for (uint64_t dim : dimensions) {
+               if (dim == 0)
+                  result += "[]";
+               else
+                  result += "[" + std::to_string(dim) + "]";
+            }
+            return result;
+         }
+         default:
+            return ty->string();
+      }
    }
 
 } // namespace tungsten

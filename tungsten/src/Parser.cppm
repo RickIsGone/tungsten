@@ -874,14 +874,13 @@ namespace tungsten {
       if (_peek().type != TokenType::OpenParen)
          return _logError("expected '(' after 'typeof'");
       _consume(); // consume '('
-      if (_peek().type != TokenType::Identifier)
-         return _logError("expected an identifier after '(' in 'typeof'");
-      std::string identifier = _lexeme(_peek());
-      _consume(); // consume identifier
+      auto expr = _parseExpression();
+      if (!expr)
+         return nullptr; // error already logged
       if (_peek().type != TokenType::CloseParen)
          return _logError("expected ')' after identifier in 'typeof'");
       _consume(); // consume ')'
-      return _setSource(std::make_unique<TypeOfStatementAST>(identifier), token);
+      return _setSource(std::make_unique<TypeOfStatementAST>(std::move(expr)), token);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseNameof() {
       const Token token = _peek();
@@ -889,14 +888,13 @@ namespace tungsten {
       if (_peek().type != TokenType::OpenParen)
          return _logError("expected '(' after 'nameof'");
       _consume(); // consume '('
-      if (_peek().type != TokenType::Identifier)
-         return _logError("expected an identifier after '(' in 'nameof'");
-      std::string identifier = _lexeme(_peek());
-      _consume(); // consume identifier
+      auto expr = _parseExpression();
+      if (!expr)
+         return nullptr; // error already logged
       if (_peek().type != TokenType::CloseParen)
          return _logError("expected ')' after identifier in 'nameof'");
       _consume(); // consume ')'
-      return _setSource(std::make_unique<NameOfStatementAST>(identifier), token);
+      return _setSource(std::make_unique<NameOfStatementAST>(std::move(expr)), token);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseSizeof() {
       const Token token = _peek();
@@ -904,14 +902,13 @@ namespace tungsten {
       if (_peek().type != TokenType::OpenParen)
          return _logError("expected '(' after 'nameof'");
       _consume(); // consume '('
-      if (_peek().type != TokenType::Identifier)
-         return _logError("expected an identifier after '(' in 'nameof'");
-      std::string identifier = _lexeme(_peek());
-      _consume(); // consume identifier
+      auto expr = _parseExpression();
+      if (!expr)
+         return nullptr; // error already logged
       if (_peek().type != TokenType::CloseParen)
          return _logError("expected ')' after identifier in 'nameof'");
       _consume(); // consume ')'
-      return _setSource(std::make_unique<SizeOfStatementAST>(identifier), token);
+      return _setSource(std::make_unique<SizeOfStatementAST>(std::move(expr)), token);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseStaticCast() {
       const Token token = _peek();
@@ -1032,24 +1029,27 @@ namespace tungsten {
       _consume(); // consume type
       if (type->kind() == TypeKind::ArgPack)
          return type;
-      while (_peek().type == TokenType::Multiply || _peek().type == TokenType::OpenBracket) {
-         switch (_peek().type) {
-            case TokenType::Multiply:
-               type = makePointer(type);
-               _consume(); // consume '*'
-               break;
-            case TokenType::OpenBracket:
-               _consume(); // consume '['
-               if (std::unique_ptr<ExpressionAST> expr = _parseExpression()) {
-                  if (_peek().type == TokenType::CloseBracket)
-                     _consume(); // consume ']'
-                  type = makeArray(type, std::move(expr));
-               }
-               break;
-            default:
-               break;
+
+      std::vector<std::unique_ptr<ExpressionAST>> sizes;
+      while (_peek().type == TokenType::OpenBracket) {
+         _consume(); // consume '['
+         if (auto expr = _parseExpression()) {
+            if (_peek().type == TokenType::CloseBracket)
+               _consume(); // consume ']'
+            sizes.push_back(std::move(expr));
+         }
+
+         while (!sizes.empty()) {
+            type = makeArray(type, std::move(sizes.back()));
+            sizes.pop_back();
          }
       }
+
+      while (_peek().type == TokenType::Multiply) {
+         type = makePointer(type);
+         _consume(); // consume '*'
+      }
+
       return type;
    }
 
