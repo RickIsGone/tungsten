@@ -189,7 +189,7 @@ num myVariable = 247;
 num myVariable{247};
 ```
 
-<!-- ### Heap allocation
+### Heap allocation
 
 ```c++
 int* myPointer = new int{247};
@@ -222,7 +222,24 @@ To free the array:
 
 ```c++
 free[] myArray;
-``` -->
+``` 
+> [!WARNING]  
+> new and free have yet to be added
+
+## References
+references just just like in C++ are pointers which can't be reassigned and you need to specify an address when declaring them:
+
+```c++
+num var;
+num& ref = &var;
+```
+
+unlike in C++ to pass them to functions you need to do it explicitly:
+
+```c++
+num var;
+fun(&var);
+```
 
 ## Control flow statements
 
