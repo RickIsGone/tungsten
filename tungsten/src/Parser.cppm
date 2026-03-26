@@ -1050,6 +1050,11 @@ namespace tungsten {
          _consume(); // consume '*'
       }
 
+      while (_peek().type == TokenType::BitwiseAnd) {
+         type = makeReference(type);
+         _consume(); // consume '&'
+      }
+
       return type;
    }
 
