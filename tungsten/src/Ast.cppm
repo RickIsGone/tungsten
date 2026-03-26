@@ -231,6 +231,7 @@ export namespace tungsten {
       Float,
       Double,
       Pointer,
+      Reference,
       Array,
       Class,
 
@@ -538,6 +539,24 @@ export namespace tungsten {
       std::shared_ptr<Type> _pointee;
    };
 
+   class ReferenceTy : public Type {
+   public:
+      ReferenceTy(std::shared_ptr<Type> ref) : _ref{ref} {}
+      _NODISCARD TypeKind kind() const noexcept override {
+         return TypeKind::Reference;
+      }
+      _NODISCARD const std::string string() const override {
+         return "reference";
+      }
+      std::shared_ptr<Type>& reference() { return _ref; }
+      _NODISCARD llvm::Type* llvmType() const override {
+         return Builder->getPtrTy();
+      }
+
+   private:
+      std::shared_ptr<Type> _ref;
+   };
+
    class ArrayTy : public Type {
    public:
       ArrayTy(std::shared_ptr<Type> type, std::unique_ptr<ExpressionAST> size) : _arrayType{type}, _arraySize{std::move(size)} {}
@@ -616,6 +635,7 @@ export namespace tungsten {
    inline std::shared_ptr<Type> makeDouble() { return std::make_shared<Double>(); }
    inline std::shared_ptr<Type> makeClass() { return std::make_shared<ClassTy>(); }
    inline std::shared_ptr<Type> makePointer(std::shared_ptr<Type> pt) { return std::make_shared<PointerTy>(std::move(pt)); }
+   inline std::shared_ptr<Type> makeReference(std::shared_ptr<Type> ref) { return std::make_shared<ReferenceTy>(std::move(ref)); }
    inline std::shared_ptr<Type> makeArray(std::shared_ptr<Type> pt, std::unique_ptr<ExpressionAST> size) { return std::make_shared<ArrayTy>(std::move(pt), std::move(size)); }
    inline std::shared_ptr<Type> makeArgPack() { return std::make_shared<ArgPackTy>(); }
    inline std::shared_ptr<Type> makeNullType() { return std::make_shared<NullTy>(); }
@@ -632,6 +652,10 @@ export namespace tungsten {
          case TypeKind::Array: {
             auto arrTy = std::static_pointer_cast<ArrayTy>(ty);
             return baseType(arrTy->arrayType());
+         }
+         case TypeKind::Reference: {
+            auto refTy = std::static_pointer_cast<ReferenceTy>(ty);
+            return baseType(refTy->reference());
          }
          default:
             return ty->string();
@@ -1231,9 +1255,9 @@ namespace tungsten {
 
    void addCoreLibFunctions() {
       const std::array coreFunctions = {
-          CoreFun{llvm::Type::getDoubleTy(*TheContext), "shell", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()}},
-          CoreFun{Builder->getVoidTy(), "input", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()}},
-          CoreFun(Builder->getVoidTy(), "print", {llvm::Type::getInt8Ty(*TheContext)->getPointerTo()})};
+          CoreFun{llvm::Type::getDoubleTy(*TheContext), "shell", {Builder->getPtrTy()}},
+          CoreFun{Builder->getVoidTy(), "input", {Builder->getPtrTy()}},
+          CoreFun(Builder->getVoidTy(), "print", {Builder->getPtrTy()})};
 
       for (auto& fun : coreFunctions) {
          std::vector<llvm::Type*> paramTypes;
@@ -1281,7 +1305,22 @@ export namespace tungsten {
 
       llvm::Value* result;
       if (_op == "++"sv || _op == "--"sv) {
-         llvm::Value* loadedOperand = Builder->CreateLoad(VariableTypes[static_cast<VariableExpressionAST*>(_operand.get())->name()], operandValue, "loadedoperand");
+         llvm::Value* targetAddr = operandValue;
+         llvm::Type* loadType = _operand->type()->llvmType();
+         if (_operand->type()->kind() == TypeKind::Reference)
+            loadType = static_cast<ReferenceTy*>(_operand->type().get())->reference()->llvmType();
+         else if (_operand->astType() == ASTType::VariableExpression)
+            loadType = VariableTypes[static_cast<VariableExpressionAST*>(_operand.get())->name()];
+
+         if (_operand->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_operand.get())->op() == "*"sv) {
+            auto& derefOperand = static_cast<UnaryExpressionAST*>(_operand.get())->operand();
+            if (derefOperand && (derefOperand->astType() == ASTType::VariableExpression || derefOperand->type()->kind() == TypeKind::Reference)) {
+               llvm::Type* pointerValueType = derefOperand->type()->llvmType();
+               targetAddr = Builder->CreateLoad(pointerValueType, targetAddr, "deref.addr");
+            }
+         }
+
+         llvm::Value* loadedOperand = Builder->CreateLoad(loadType, targetAddr, "loadedoperand");
          llvm::Type* operandType = loadedOperand->getType();
          if (_op == "++"sv) {
             if (operandType->isIntegerTy())
@@ -1290,7 +1329,7 @@ export namespace tungsten {
                result = Builder->CreateFAdd(loadedOperand, llvm::ConstantFP::get(operandType, 1.0), "increment");
             else
                return LogErrorV("unsupported type for increment operation");
-            Builder->CreateStore(result, operandValue);
+            Builder->CreateStore(result, targetAddr);
             return result;
          }
 
@@ -1300,7 +1339,7 @@ export namespace tungsten {
             result = Builder->CreateFSub(loadedOperand, llvm::ConstantFP::get(operandType, 1.0), "decrement");
          else
             return LogErrorV("unsupported type for decrement operation");
-         return Builder->CreateStore(result, operandValue);
+         return Builder->CreateStore(result, targetAddr);
       }
 
       llvm::Type* operandType = operandValue->getType(); // TODO: make it work with both L and R values
@@ -1335,17 +1374,27 @@ export namespace tungsten {
          return Builder->CreateLoad(ty, val);
       return val;
    }
+   llvm::Type* valueTypeForCodegen(const std::shared_ptr<Type>& ty) {
+      if (!ty)
+         return nullptr;
+      if (ty->kind() == TypeKind::Reference)
+         return static_cast<ReferenceTy*>(ty.get())->reference()->llvmType();
+      return ty->llvmType();
+   }
    llvm::Value* BinaryExpressionAST::codegen() {
       llvm::Value* LHS = _LHS->codegen();
       llvm::Value* RHS = _RHS->codegen();
 
+      llvm::Type* lhsValueType = valueTypeForCodegen(_LHS->type());
+      llvm::Type* rhsValueType = valueTypeForCodegen(_RHS->type());
+
       if (_RHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_RHS.get())->op() == "*"sv)
-         RHS = Builder->CreateLoad(_RHS->type()->llvmType()->getPointerTo(), RHS, "derefr");
+         RHS = Builder->CreateLoad(rhsValueType, RHS, "derefr");
 
-      llvm::Value* loadedL = loadIfPointer(LHS, _LHS->type()->llvmType(), "lval");
-      llvm::Value* loadedR = loadIfPointer(RHS, _RHS->type()->llvmType(), "rval");
+      llvm::Value* loadedL = loadIfPointer(LHS, lhsValueType, "lval");
+      llvm::Value* loadedR = loadIfPointer(RHS, rhsValueType, "rval");
 
-      loadedR = castToCommonType(loadedR, _LHS->type()->llvmType());
+      loadedR = castToCommonType(loadedR, lhsValueType);
 
       if (_op == "="sv || _op == "+="sv || _op == "-="sv || _op == "*="sv || _op == "/="sv || _op == "%="sv || _op == "|="sv || _op == "&="sv || _op == "^="sv || _op == "<<="sv || _op == ">>="sv) {
          if (_LHS->type()->kind() == TypeKind::String) {
@@ -1355,7 +1404,7 @@ export namespace tungsten {
 
          llvm::Value* targetAddr = LHS;
          if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*")
-            loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "derefl");
+            loadedL = Builder->CreateLoad(lhsValueType, LHS, "derefl");
 
          llvm::Value* result = nullptr;
          if (_op == "="sv) result = loadedR;
@@ -1385,7 +1434,7 @@ export namespace tungsten {
       }
 
       if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*"sv)
-         loadedL = Builder->CreateLoad(_LHS->type()->llvmType(), LHS, "derefl");
+         loadedL = Builder->CreateLoad(lhsValueType, LHS, "derefl");
 
       if (_op == "&&"sv) {
          LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
@@ -1436,6 +1485,21 @@ export namespace tungsten {
 
 
    llvm::Value* VariableDeclarationAST::codegen() {
+      if (_Type->kind() == TypeKind::Reference) {
+         llvm::Value* initVal = _init->codegen();
+         if (!initVal)
+            return nullptr;
+
+         if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*"sv)
+            initVal = Builder->CreateLoad(_Type->llvmType(), initVal, "ref.bind");
+
+         auto* refType = static_cast<ReferenceTy*>(_Type.get());
+         NamedValues[_name] = initVal;
+         VariableTypes[_name] = refType->reference()->llvmType();
+         return initVal;
+      }
+
+
       llvm::Type* type = _Type->llvmType();
       if (_isGlobal) {
          return nullptr;
@@ -1509,7 +1573,10 @@ export namespace tungsten {
       for (auto& arg : _args) {
          if (arg != _args.front())
             name += "$";
-         name += fullTypeString(arg->type());
+         if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "&"sv)
+            name += fullTypeString(static_cast<UnaryExpressionAST*>(arg.get())->operand()->type()) + "&";
+         else
+            name += fullTypeString(arg->type());
       }
       utils::debugLog("looking for function with mangled name: {}", name);
       llvm::Function* callee = TheModule->getFunction(name);
@@ -1519,19 +1586,26 @@ export namespace tungsten {
 
       std::vector<llvm::Value*> args;
       std::string argsTypes;
-      for (auto& arg : _args) {
+      for (size_t i = 0; i < _args.size(); ++i) {
+         auto& arg = _args[i];
          llvm::Value* argVal = arg->codegen();
          if (!argVal)
             return nullptr;
 
-         if (argVal->getType()->isPointerTy() &&
-             arg->type()->kind() != TypeKind::Pointer &&
-             arg->type()->kind() != TypeKind::String &&
-             arg->type()->kind() != TypeKind::Array) {
-            argVal = Builder->CreateLoad(arg->type()->llvmType(), argVal, "arg.load");
+         llvm::Type* expectedParamType = nullptr;
+         if (callee && i < callee->arg_size())
+            expectedParamType = callee->getFunctionType()->getParamType(static_cast<unsigned>(i));
+
+         if (argVal->getType()->isPointerTy() && expectedParamType && !expectedParamType->isPointerTy()) {
+            argVal = Builder->CreateLoad(valueTypeForCodegen(arg->type()), argVal, "arg.load");
+         } else if (argVal->getType()->isPointerTy() && !expectedParamType &&
+                    arg->type()->kind() != TypeKind::Pointer &&
+                    arg->type()->kind() != TypeKind::Reference &&
+                    arg->type()->kind() != TypeKind::String &&
+                    arg->type()->kind() != TypeKind::Array) {
+            argVal = Builder->CreateLoad(valueTypeForCodegen(arg->type()), argVal, "arg.load");
          }
-         if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "*"sv)
-            argVal = Builder->CreateLoad(arg->type()->llvmType(), argVal, "derefl");
+
          args.push_back(argVal);
       }
       return Builder->CreateCall(callee, args);
@@ -1588,7 +1662,7 @@ export namespace tungsten {
       return nullptr;
    }
    llvm::Value* NullPtrAST::codegen() {
-      return llvm::ConstantPointerNull::get(llvm::Type::getInt8Ty(*TheContext)->getPointerTo());
+      return llvm::Constant::getNullValue(Builder->getPtrTy());
    }
 
    llvm::Value* BlockStatementAST::codegen() {
@@ -1629,12 +1703,22 @@ export namespace tungsten {
       if (_value == nullptr)
          return Builder->CreateRetVoid();
 
+      const bool returnsReference = _Type->kind() == TypeKind::Reference;
       llvm::Value* returnValue = _value->codegen();
-      if (_value->astType() == ASTType::VariableExpression)
-         returnValue = loadIfPointer(returnValue, _value->type()->llvmType(), "rval");
-      if (_value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*"sv)
-         returnValue = Builder->CreateLoad(_value->type()->llvmType(), returnValue, "derefl");
-      returnValue = castToCommonType(returnValue, _Type->llvmType());
+
+      if (!returnsReference && _value->astType() == ASTType::VariableExpression)
+         returnValue = loadIfPointer(returnValue, valueTypeForCodegen(_value->type()), "rval");
+
+      if (!returnsReference && _value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*"sv)
+         returnValue = Builder->CreateLoad(valueTypeForCodegen(_value->type()), returnValue, "derefl");
+
+      if (returnsReference) {
+         if (!returnValue->getType()->isPointerTy())
+            return LogErrorV("reference return requires an lvalue/address expression");
+         return Builder->CreateRet(returnValue);
+      }
+
+      returnValue = castToCommonType(returnValue, valueTypeForCodegen(_Type));
       return Builder->CreateRet(returnValue);
    }
    llvm::Value* ExitStatement::codegen() {
@@ -1857,12 +1941,20 @@ export namespace tungsten {
 
       llvm::BasicBlock* BB = llvm::BasicBlock::Create(*TheContext, "entry", function);
       Builder->SetInsertPoint(BB);
+      llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
 
       size_t idx = 0;
       for (auto& arg : function->args()) {
          auto* varDecl = static_cast<VariableDeclarationAST*>(_prototype->args()[idx].get());
-         NamedValues[varDecl->name()] = &arg;
-         VariableTypes[varDecl->name()] = arg.getType();
+         if (varDecl->type()->kind() == TypeKind::Reference) {
+            NamedValues[varDecl->name()] = &arg;
+            VariableTypes[varDecl->name()] = static_cast<ReferenceTy*>(varDecl->type().get())->reference()->llvmType();
+         } else {
+            llvm::AllocaInst* paramAddr = tmpBuilder.CreateAlloca(arg.getType(), nullptr, varDecl->name());
+            tmpBuilder.CreateStore(&arg, paramAddr);
+            NamedValues[varDecl->name()] = paramAddr;
+            VariableTypes[varDecl->name()] = arg.getType();
+         }
          ++idx;
       }
 
@@ -1960,6 +2052,10 @@ export namespace tungsten {
                   result += "[" + std::to_string(dim) + "]";
             }
             return result;
+         }
+         case TypeKind::Reference: {
+            auto ref = std::static_pointer_cast<ReferenceTy>(ty);
+            return fullTypeString(ref->reference()) + "&";
          }
          default:
             return ty->string();

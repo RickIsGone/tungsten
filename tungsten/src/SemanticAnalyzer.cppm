@@ -194,6 +194,7 @@ namespace tungsten {
       std::unordered_map<std::string, std::vector<Overload>> _declaredFunctions{};
       size_t _currentScope{GlobalScope};
       bool _hasErrors{false};
+      bool _allowUninitializedReferenceDecl{false};
    };
 
    //  ========================================== implementation ==========================================
@@ -285,6 +286,11 @@ namespace tungsten {
             if (!_isBaseType(baseType(ptr->pointee())) && !_isClass(baseType(ptr->pointee())))
                return _logError(&var, "unknown type '{}' in variable declaration '{} {}'", baseType(ptr->pointee()), fullTypeString(var.type()), var.name());
          } break;
+         case TypeKind::Reference: {
+            auto ref = static_cast<ReferenceTy*>(var.type().get());
+            if (!_isBaseType(baseType(ref->reference())) && !_isClass(baseType(ref->reference())))
+               return _logError(&var, "unknown type '{}' in variable declaration '{} {}'", baseType(ref->reference()), fullTypeString(var.type()), var.name());
+         } break;
          default:
             if (!_isBaseType(var.type()->string()) && !_isClass(var.type()->string()))
                return _logError(&var, "unknown type '{}' in variable declaration '{} {}'", var.type()->string(), fullTypeString(var.type()), var.name());
@@ -293,13 +299,29 @@ namespace tungsten {
 
       if (var.initializer()) {
          var.initializer()->accept(*this);
-         if (!_isNumberType(var.type()->string()) || !_isNumberType(var.initializer()->type()->string())) {
+
+         if (var.type()->kind() == TypeKind::Reference) {
+            auto* refType = static_cast<ReferenceTy*>(var.type().get());
+            auto* initType = var.initializer()->type().get();
+            const std::string expected = fullTypeString(refType->reference());
+
+            bool compatible = false;
+            if (initType && initType->kind() == TypeKind::Pointer) {
+               auto* initPtr = static_cast<PointerTy*>(initType);
+               compatible = fullTypeString(initPtr->pointee()) == expected;
+            } else if (initType && initType->kind() == TypeKind::Reference) {
+               auto* initRef = static_cast<ReferenceTy*>(initType);
+               compatible = fullTypeString(initRef->reference()) == expected;
+            }
+
+            if (!compatible)
+               return _logError(&var, "type mismatch: cannot bind '{}' with non-reference initializer of type '{}'", fullTypeString(var.type()), fullTypeString(var.initializer()->type()));
+         } else if (!_isNumberType(var.type()->string()) || !_isNumberType(var.initializer()->type()->string())) {
             if (fullTypeString(var.type()) != fullTypeString(var.initializer()->type()))
                return _logError(&var, "type mismatch: cannot assign '{}' to variable of type '{}'", fullTypeString(var.initializer()->type()), fullTypeString(var.type()));
-
-         } /*else if (_checkNumericConversionLoss(baseType(var.initializer()->type()), baseType(var.type()))) {
-            _logWarn("possible data loss converting from '{}' to '{}' in variable ''", baseType(var.initializer()->type()), baseType(var.type()), var.name());
-         }*/
+         }
+      } else if (var.type()->kind() == TypeKind::Reference && !_allowUninitializedReferenceDecl) {
+         return _logError(&var, "reference variable '{}' must be initialized", var.name());
       }
 
       _scopes.at(_currentScope)[var.name()] = var.type();
@@ -345,7 +367,10 @@ namespace tungsten {
       op.operand()->accept(*this);
 
       if (op.op() == "--"sv || op.op() == "++"sv) {
-         if (op.operand()->astType() != ASTType::VariableExpression)
+         bool validIncrementTarget = op.operand()->astType() == ASTType::VariableExpression ||
+             op.operand()->astType() == ASTType::IndexAccessExpression ||
+             (op.operand()->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(op.operand().get())->op() == "*"sv);
+         if (!validIncrementTarget)
             return _logError(&op, "cannot use operator '{}' on non-variable expression", op.op());
          op.setType(op.operand()->type());
       }
@@ -527,11 +552,13 @@ namespace tungsten {
 
       Overload over;
       over.type = proto.type();
+      _allowUninitializedReferenceDecl = true;
       for (auto& arg : proto.args()) {
          auto cast = static_cast<VariableDeclarationAST*>(arg.get());
          cast->accept(*this);
          over.args.push_back(cast->type());
       }
+      _allowUninitializedReferenceDecl = false;
       auto& overloads = _declaredFunctions[proto.name()];
 
       auto sameSignature = [&](const Overload& o) {
@@ -576,7 +603,12 @@ namespace tungsten {
             return _logError("main function must have return type 'num'"); // will replace with Int32 after reintroducing numeric types
          proto.setType(makeInt32());
       }
-
+      std::string args;
+      for (const auto& arg : proto.args()) {
+         auto cast = static_cast<VariableDeclarationAST*>(arg.get());
+         args += fullTypeString(cast->type()) + (arg == proto.args().back() ? "" : ", ");
+      }
+      utils::debugLog("declared function: fun {}({}) -> {}", proto.name(), args, fullTypeString(proto.type()));
       overloads.push_back(over);
    }
 
@@ -646,16 +678,63 @@ namespace tungsten {
 
       bool valid = false;
       for (auto& overload : overloads) {
+         auto argsMatch = [&](const std::shared_ptr<Type>& expected, const std::shared_ptr<Type>& actual) {
+            if (fullTypeString(expected) == fullTypeString(actual))
+               return true;
+
+            if (expected->kind() == TypeKind::Pointer && actual->kind() == TypeKind::Array) {
+               auto* expectedPtr = static_cast<PointerTy*>(expected.get());
+               auto* actualArray = static_cast<ArrayTy*>(actual.get());
+               return fullTypeString(expectedPtr->pointee()) == fullTypeString(actualArray->arrayType());
+            }
+
+            if (expected->kind() != TypeKind::Reference)
+               return false;
+
+            auto* expectedRef = static_cast<ReferenceTy*>(expected.get());
+            const std::string expectedUnderlying = fullTypeString(expectedRef->reference());
+
+            if (actual->kind() == TypeKind::Pointer) {
+               auto* actualPtr = static_cast<PointerTy*>(actual.get());
+               return fullTypeString(actualPtr->pointee()) == expectedUnderlying;
+            }
+
+            if (actual->kind() == TypeKind::Reference) {
+               auto* actualRef = static_cast<ReferenceTy*>(actual.get());
+               return fullTypeString(actualRef->reference()) == expectedUnderlying;
+            }
+
+            return false;
+         };
+
+         auto applyCallDecay = [&](size_t count) {
+            for (size_t i = 0; i < count; ++i) {
+               if (i >= call.args().size() || i >= overload.args.size())
+                  break;
+
+               auto& actual = call.args()[i]->type();
+               auto& expected = overload.args[i];
+
+               if (expected->kind() == TypeKind::Pointer && actual->kind() == TypeKind::Array) {
+                  auto* expectedPtr = static_cast<PointerTy*>(expected.get());
+                  auto* actualArray = static_cast<ArrayTy*>(actual.get());
+                  if (fullTypeString(expectedPtr->pointee()) == fullTypeString(actualArray->arrayType()))
+                     actual = makePointer(actualArray->arrayType());
+               }
+            }
+         };
+
          // Check if function has variadic arguments (ArgPack)
          if (!overload.args.empty() && overload.args.back()->kind() == TypeKind::ArgPack && call.args().size() >= overload.args.size() - 1) {
             bool match = true;
             for (size_t i = 0; i < overload.args.size() - 1; ++i) {
-               if (fullTypeString(call.args()[i]->type()) != fullTypeString(overload.args[i])) {
+               if (!argsMatch(overload.args[i], call.args()[i]->type())) {
                   match = false;
                   break;
                }
             }
             if (match) {
+               applyCallDecay(overload.args.size() - 1);
                valid = true;
                call.setType(overload.type);
                break;
@@ -665,12 +744,13 @@ namespace tungsten {
                continue;
             bool match = true;
             for (size_t i = 0; i < call.args().size(); ++i) {
-               if (fullTypeString(call.args()[i]->type()) != fullTypeString(overload.args[i])) {
+               if (!argsMatch(overload.args[i], call.args()[i]->type())) {
                   match = false;
                   break;
                }
             }
             if (match) {
+               applyCallDecay(call.args().size());
                valid = true;
                call.setType(overload.type);
                break;
