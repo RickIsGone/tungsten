@@ -201,7 +201,7 @@ namespace tungsten {
    //  ========================================== implementation ==========================================
 
    bool SemanticAnalyzer::analyze() {
-      _declaredFunctions["shell"] = {{makeDouble(), std::vector{makeString()}}};
+      _declaredFunctions["shell"] = {{makeInt32(), std::vector{makeString()}}};
       _declaredFunctions["print"] = {{makeVoid(), std::vector{makeString(), makeArgPack()}}};
       _declaredFunctions["input"] = {{makeVoid(), std::vector{makeString(), makeArgPack()}}};
       for (auto& var : _externs->variables) {
@@ -369,8 +369,12 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(NumberExpressionAST& num) {
-      if (!num.type())
-         num.setType(makeDouble()); // only for now, will be changed later
+      if (!num.type()) {
+         if (std::holds_alternative<uint64_t>(num.value()))
+            num.setType(makeInt64());
+         else
+            num.setType(makeDouble());
+      }
    }
 
    void SemanticAnalyzer::visit(UnaryExpressionAST& op) {
@@ -609,9 +613,8 @@ namespace tungsten {
       }
 
       if (proto.name() == "main"sv) {
-         if (fullTypeString(proto.type()) != "double")
-            return _logError("main function must have return type 'num'"); // will replace with Int32 after reintroducing numeric types
-         proto.setType(makeInt32());
+         if (proto.type()->kind() != TypeKind::Int32)
+            return _logError("main function must have return type 'int' or 'i32'");
       }
       std::string args;
       for (const auto& arg : proto.args()) {
@@ -626,19 +629,17 @@ namespace tungsten {
       _scopes.push_back({}); // scope already created inside visit(BlockStatementAST&) but I need to make one for the function arguments
       ++_currentScope;
       fun.prototype()->accept(*this);
-      // temporary fix because of the single numeric type being a double
+      // Main has a fixed ABI-like signature: int/i32 main([int/i32 argc, String*|char** argv])
       if (fun.name() == "main"sv) {
          if (fun.prototype()) {
             if (!fun.prototype()->args().empty()) {
                if (fun.prototype()->args().size() != 2 && fun.prototype()->args().size() != 0)
                   return _logError("main function must have either 0 or 2 arguments, not {}", fun.prototype()->args().size());
                if (fun.prototype()->args().size() == 2) {
-                  if (fullTypeString(fun.prototype()->args()[0]->type()) != "double"sv)
-                     return _logError("main function must have first argument of type 'num'");
+                  if (fun.prototype()->args()[0]->type()->kind() != TypeKind::Int32)
+                     return _logError("main function must have first argument of type 'int' or 'i32'");
                   if (fullTypeString(fun.prototype()->args()[1]->type()) != "String*"sv && fullTypeString(fun.prototype()->args()[1]->type()) != "char**"sv)
                      return _logError("main function must have second argument of type 'String*' or 'char**'");
-
-                  static_cast<VariableDeclarationAST*>(fun.prototype()->args()[0].get())->setType(makeInt32());
                }
             }
          }
@@ -889,7 +890,7 @@ namespace tungsten {
       ext.value()->accept(*this);
       if (!ext.value()->type()) {
          if (ext.value()->astType() == ASTType::NumberExpression)
-            static_cast<NumberExpressionAST*>(ext.value().get())->setType(makeInt32());
+            static_cast<NumberExpressionAST*>(ext.value().get())->setType(makeInt64());
       }
       if (!_isNumberType(ext.value()->type()->string()))
          return _logError(&ext, "exit statement expects a numeric value");

@@ -70,6 +70,77 @@ namespace tungsten {
 
       return val;
    }
+   llvm::Type* commonNumericType(llvm::Type* leftType, llvm::Type* rightType) {
+      if (!leftType || !rightType)
+         return leftType ? leftType : rightType;
+
+      if (leftType->isFloatingPointTy() || rightType->isFloatingPointTy()) {
+         if (leftType->isDoubleTy() || rightType->isDoubleTy())
+            return llvm::Type::getDoubleTy(*TheContext);
+         return llvm::Type::getFloatTy(*TheContext);
+      }
+
+      if (leftType->isIntegerTy() && rightType->isIntegerTy()) {
+         unsigned width = std::max(leftType->getIntegerBitWidth(), rightType->getIntegerBitWidth());
+         return llvm::Type::getIntNTy(*TheContext, width);
+      }
+
+      return leftType;
+   }
+   llvm::Value* createNumericArithmeticOp(std::string_view op, llvm::Value* left, llvm::Value* right) {
+      if (!left || !right)
+         return nullptr;
+
+      llvm::Type* targetType = commonNumericType(left->getType(), right->getType());
+
+      left = castToCommonType(left, targetType);
+      right = castToCommonType(right, targetType);
+
+      llvm::Type* ty = left->getType();
+      if (ty->isFloatingPointTy()) {
+         if (op == "+"sv) return Builder->CreateFAdd(left, right);
+         if (op == "-"sv) return Builder->CreateFSub(left, right);
+         if (op == "*"sv) return Builder->CreateFMul(left, right);
+         if (op == "/"sv) return Builder->CreateFDiv(left, right);
+         if (op == "%"sv) return Builder->CreateFRem(left, right);
+      } else if (ty->isIntegerTy()) {
+         if (op == "+"sv) return Builder->CreateAdd(left, right);
+         if (op == "-"sv) return Builder->CreateSub(left, right);
+         if (op == "*"sv) return Builder->CreateMul(left, right);
+         if (op == "/"sv) return Builder->CreateSDiv(left, right);
+         if (op == "%"sv) return Builder->CreateSRem(left, right);
+      }
+
+      return nullptr;
+   }
+   llvm::Value* createNumericComparisonOp(std::string_view op, llvm::Value* left, llvm::Value* right) {
+      if (!left || !right)
+         return nullptr;
+
+      llvm::Type* targetType = commonNumericType(left->getType(), right->getType());
+
+      left = castToCommonType(left, targetType);
+      right = castToCommonType(right, targetType);
+
+      llvm::Type* ty = left->getType();
+      if (ty->isFloatingPointTy()) {
+         if (op == "=="sv) return Builder->CreateFCmpOEQ(left, right);
+         if (op == "!="sv) return Builder->CreateFCmpONE(left, right);
+         if (op == "<"sv) return Builder->CreateFCmpOLT(left, right);
+         if (op == "<="sv) return Builder->CreateFCmpOLE(left, right);
+         if (op == ">"sv) return Builder->CreateFCmpOGT(left, right);
+         if (op == ">="sv) return Builder->CreateFCmpOGE(left, right);
+      } else if (ty->isIntegerTy()) {
+         if (op == "=="sv) return Builder->CreateICmpEQ(left, right);
+         if (op == "!="sv) return Builder->CreateICmpNE(left, right);
+         if (op == "<"sv) return Builder->CreateICmpSLT(left, right);
+         if (op == "<="sv) return Builder->CreateICmpSLE(left, right);
+         if (op == ">"sv) return Builder->CreateICmpSGT(left, right);
+         if (op == ">="sv) return Builder->CreateICmpSGE(left, right);
+      }
+
+      return nullptr;
+   }
    std::string mapLLVMTypeToCustomType(llvm::Type* type) {
       if (type->isIntegerTy()) {
          unsigned bits = type->getIntegerBitWidth();
@@ -1279,14 +1350,18 @@ namespace tungsten {
 //  ========================================== implementation ==========================================
 export namespace tungsten {
    llvm::Value* NumberExpressionAST::codegen() { // TODO: fix
+      const double floatValue = std::holds_alternative<double>(_value) ? std::get<double>(_value) : static_cast<double>(std::get<uint64_t>(_value));
+      const uint64_t intValue = std::holds_alternative<uint64_t>(_value) ? std::get<uint64_t>(_value) : static_cast<uint64_t>(std::get<double>(_value));
+
       switch (_Type->kind()) {
          case TypeKind::Double:
+            return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*TheContext), floatValue);
          case TypeKind::Float:
-            return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*TheContext), std::get<double>(_value));
+            return llvm::ConstantFP::get(llvm::Type::getFloatTy(*TheContext), floatValue);
          case TypeKind::Bool:
-            return llvm::ConstantInt::getBool(*TheContext, std::get<uint64_t>(_value));
+            return llvm::ConstantInt::getBool(*TheContext, intValue != 0);
          default:
-            return Builder->getIntN(_Type->llvmType()->getIntegerBitWidth(), std::get<double>(_value)); // std::get<uint64_t>
+            return Builder->getIntN(_Type->llvmType()->getIntegerBitWidth(), intValue);
       }
    }
 
@@ -1404,16 +1479,9 @@ export namespace tungsten {
       if (_RHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_RHS.get())->op() == "*"sv)
          RHS = Builder->CreateLoad(rhsValueType, RHS, "derefr");
 
-      llvm::Value* loadedL = loadIfPointer(LHS, lhsValueType, "lval");
-      llvm::Value* loadedR = loadIfPointer(RHS, rhsValueType, "rval");
+      const bool isAssignmentOp = (_op == "="sv || _op == "+="sv || _op == "-="sv || _op == "*="sv || _op == "/="sv || _op == "%="sv || _op == "|="sv || _op == "&="sv || _op == "^="sv || _op == "<<="sv || _op == ">>="sv);
 
-      if (_RHS->astType() == ASTType::IndexAccessExpression &&
-          (_RHS->type()->kind() == TypeKind::Pointer || _RHS->type()->kind() == TypeKind::String))
-         loadedR = RHS;
-
-      loadedR = castToCommonType(loadedR, lhsValueType);
-
-      if (_op == "="sv || _op == "+="sv || _op == "-="sv || _op == "*="sv || _op == "/="sv || _op == "%="sv || _op == "|="sv || _op == "&="sv || _op == "^="sv || _op == "<<="sv || _op == ">>="sv) {
+      if (isAssignmentOp) {
          if (_LHS->type()->kind() == TypeKind::String) {
             Builder->CreateStore(RHS, LHS);
             return RHS;
@@ -1456,25 +1524,41 @@ export namespace tungsten {
             } else {
                return LogErrorV("cannot index non-array, non-pointer value");
             }
-
-            loadedL = Builder->CreateLoad(lhsValueType, targetAddr, "lval.idx");
          }
 
-         if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*")
-            loadedL = Builder->CreateLoad(lhsValueType, LHS, "derefl");
+         llvm::Value* loadedL = nullptr;
+         llvm::Value* loadedR = nullptr;
+
+         if (_op == "="sv) {
+            loadedR = RHS;
+            if (_RHS->astType() != ASTType::IndexAccessExpression && loadedR->getType()->isPointerTy())
+               loadedR = Builder->CreateLoad(rhsValueType, loadedR, "rval");
+            loadedR = castToCommonType(loadedR, lhsValueType);
+         } else {
+            loadedL = Builder->CreateLoad(lhsValueType, targetAddr, "lval");
+            if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*"sv)
+               loadedL = Builder->CreateLoad(lhsValueType, LHS, "derefl");
+
+            loadedR = loadIfPointer(RHS, rhsValueType, "rval");
+            if (_RHS->astType() == ASTType::IndexAccessExpression &&
+                (_RHS->type()->kind() == TypeKind::Pointer || _RHS->type()->kind() == TypeKind::String))
+               loadedR = RHS;
+
+            loadedR = castToCommonType(loadedR, lhsValueType);
+         }
 
          llvm::Value* result = nullptr;
          if (_op == "="sv) result = loadedR;
          else if (_op == "+="sv)
-            result = Builder->CreateFAdd(loadedL, loadedR);
+            result = createNumericArithmeticOp("+"sv, loadedL, loadedR);
          else if (_op == "-="sv)
-            result = Builder->CreateFSub(loadedL, loadedR);
+            result = createNumericArithmeticOp("-"sv, loadedL, loadedR);
          else if (_op == "*="sv)
-            result = Builder->CreateFMul(loadedL, loadedR);
+            result = createNumericArithmeticOp("*"sv, loadedL, loadedR);
          else if (_op == "/="sv)
-            result = Builder->CreateFDiv(loadedL, loadedR);
+            result = createNumericArithmeticOp("/"sv, loadedL, loadedR);
          else if (_op == "%="sv)
-            result = Builder->CreateFRem(loadedL, loadedR);
+            result = createNumericArithmeticOp("%"sv, loadedL, loadedR);
          else if (_op == "|="sv)
             result = Builder->CreateOr(loadedL, loadedR);
          else if (_op == "&="sv)
@@ -1486,9 +1570,21 @@ export namespace tungsten {
          else if (_op == ">>="sv)
             result = Builder->CreateLShr(loadedL, loadedR);
 
+         if (!result)
+            return LogErrorV("unsupported types for compound assignment operator '" + _op + "'");
+
          Builder->CreateStore(result, targetAddr);
          return result;
       }
+
+      llvm::Value* loadedL = loadIfPointer(LHS, lhsValueType, "lval");
+      llvm::Value* loadedR = loadIfPointer(RHS, rhsValueType, "rval");
+
+      if (_RHS->astType() == ASTType::IndexAccessExpression &&
+          (_RHS->type()->kind() == TypeKind::Pointer || _RHS->type()->kind() == TypeKind::String))
+         loadedR = RHS;
+
+      loadedR = castToCommonType(loadedR, lhsValueType);
 
       if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*"sv)
          loadedL = Builder->CreateLoad(lhsValueType, LHS, "derefl");
@@ -1505,27 +1601,27 @@ export namespace tungsten {
       }
 
       if (_op == "+"sv)
-         return Builder->CreateFAdd(loadedL, loadedR);
+         return createNumericArithmeticOp("+"sv, loadedL, loadedR);
       if (_op == "-"sv)
-         return Builder->CreateFSub(loadedL, loadedR);
+         return createNumericArithmeticOp("-"sv, loadedL, loadedR);
       if (_op == "*"sv)
-         return Builder->CreateFMul(loadedL, loadedR);
+         return createNumericArithmeticOp("*"sv, loadedL, loadedR);
       if (_op == "/"sv)
-         return Builder->CreateFDiv(loadedL, loadedR);
+         return createNumericArithmeticOp("/"sv, loadedL, loadedR);
       if (_op == "%"sv)
-         return Builder->CreateFRem(loadedL, loadedR);
+         return createNumericArithmeticOp("%"sv, loadedL, loadedR);
       if (_op == "=="sv)
-         return Builder->CreateFCmpOEQ(loadedL, loadedR);
+         return createNumericComparisonOp("=="sv, loadedL, loadedR);
       if (_op == "!="sv)
-         return Builder->CreateFCmpONE(loadedL, loadedR);
+         return createNumericComparisonOp("!="sv, loadedL, loadedR);
       if (_op == "<"sv)
-         return Builder->CreateFCmpOLT(loadedL, loadedR);
+         return createNumericComparisonOp("<"sv, loadedL, loadedR);
       if (_op == "<="sv)
-         return Builder->CreateFCmpOLE(loadedL, loadedR);
+         return createNumericComparisonOp("<="sv, loadedL, loadedR);
       if (_op == ">"sv)
-         return Builder->CreateFCmpOGT(loadedL, loadedR);
+         return createNumericComparisonOp(">"sv, loadedL, loadedR);
       if (_op == ">="sv)
-         return Builder->CreateFCmpOGE(loadedL, loadedR);
+         return createNumericComparisonOp(">="sv, loadedL, loadedR);
       if (_op == "^"sv)
          return Builder->CreateXor(loadedL, loadedR);
       if (_op == "|"sv)
@@ -1708,6 +1804,9 @@ export namespace tungsten {
                     arg->type()->kind() != TypeKind::Array) {
             argVal = Builder->CreateLoad(expressionValueTypeForCodegen(arg.get()), argVal, "arg.load");
          }
+
+         if (expectedParamType && !expectedParamType->isPointerTy())
+            argVal = castToCommonType(argVal, expectedParamType);
 
          args.push_back(argVal);
       }

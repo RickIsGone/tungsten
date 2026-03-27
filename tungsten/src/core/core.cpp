@@ -4,7 +4,7 @@
 // core tungsten functions
 
 extern "C" {
-double shell(char* command) {
+int shell(char* command) {
    if (!command)
       return -1;
 

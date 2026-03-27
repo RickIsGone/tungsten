@@ -280,7 +280,6 @@ namespace tungsten {
                _functions.push_back(_parseFunctionDeclaration());
                break;
 
-            case TokenType::Num:
             case TokenType::Int:
             case TokenType::Int8:
             case TokenType::Int16:
@@ -294,6 +293,8 @@ namespace tungsten {
             case TokenType::Uint64:
             case TokenType::Uint128:
             case TokenType::Float:
+            case TokenType::Float32:
+            case TokenType::Float64:
             case TokenType::Double:
             case TokenType::Bool:
             case TokenType::Char:
@@ -497,11 +498,11 @@ namespace tungsten {
    std::unique_ptr<ExpressionAST> Parser::_parseNumberExpression() {
       const Token token = _peek();
       auto num = _lexeme(_peek());
-      // auto type = _peek().type;
+      auto type = _peek().type;
       _consume();
-      // TODO: go back to uint64 and double after first ship
-      // if (type == TokenType::IntLiteral)
-      //    return std::make_unique<NumberExpressionAST>(std::stoull(num), makeInt32());
+
+      if (type == TokenType::IntLiteral)
+         return _setSource(std::make_unique<NumberExpressionAST>(std::stoull(num), makeInt64()), token);
 
       return _setSource(std::make_unique<NumberExpressionAST>(std::stod(num), makeDouble()), token);
    }
@@ -695,11 +696,10 @@ namespace tungsten {
             return std::make_unique<NumberExpressionAST>((uint64_t)0, makeBool());
          case TokenType::CodeSuccess:
             _consume();
-            // TODO: go back to Int32 after first ship
-            return std::make_unique<NumberExpressionAST>(double(0), makeDouble()); // makeInt32()
+            return std::make_unique<NumberExpressionAST>((uint64_t)0, makeInt32());
          case TokenType::CodeFailure:
             _consume();
-            return std::make_unique<NumberExpressionAST>(double(1), makeDouble()); // makeInt32()
+            return std::make_unique<NumberExpressionAST>((uint64_t)1, makeInt32());
 
          case TokenType::Null:
             _consume();
@@ -752,7 +752,6 @@ namespace tungsten {
          case TokenType::For:
             return _parseForStatement();
 
-         case TokenType::Num:
          case TokenType::Int:
          case TokenType::Int8:
          case TokenType::Int16:
@@ -766,6 +765,8 @@ namespace tungsten {
          case TokenType::Uint64:
          case TokenType::Uint128:
          case TokenType::Float:
+         case TokenType::Float32:
+         case TokenType::Float64:
          case TokenType::Double:
          case TokenType::Bool:
          case TokenType::Char:
@@ -969,9 +970,6 @@ namespace tungsten {
          case ArgPack:
             type = makeArgPack();
             break;
-         case Num:
-            type = makeDouble();
-            break;
          case Void:
             type = makeVoid();
             break;
@@ -1017,9 +1015,11 @@ namespace tungsten {
             type = makeUint128();
             break;
          case Float:
+         case Float32:
             type = makeFloat();
             break;
          case Double:
+         case Float64:
             type = makeDouble();
             break;
 

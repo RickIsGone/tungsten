@@ -121,14 +121,14 @@ export namespace tungsten::utils {
       std::ofstream mainFile("src/main.tgs");
       std::ofstream buildFile("build.tgs");
 
-      mainFile << "fun main() -> num {\n"
+      mainFile << "fun main(i32 argc, String* argv) -> i32 {\n"
                << "    print(\"Hello, World!\");\n"
                << "    ret CodeSuccess;\n"
                << "}\n";
 
       buildFile << "import build;\n"
                 << "Project " << name << "{Executable, " << name << "};\n\n"
-                << "fun main() -> num {\n"
+                << "fun main(i32 argc, String* argv) -> i32 {\n"
                 << "    " << name << ".addSource(\"main.tgs\");\n"
                 << "    " << name << ".build();\n"
                 << "}\n";

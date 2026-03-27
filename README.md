@@ -147,13 +147,15 @@ cmake --build build --config Release
 Tungsten has a similar naming convention to Rust, where base types are written in **camelCase** and structs and classes
 are written in **PascalCase**
 
-<!-- | Type      | Alignment (Bytes) |
+| Type      | Alignment (Bytes) |
 |-----------|-------------------|
 | `void`    | N/A               |
 | `int`     | 4                 |
 | `uint`    | 4                 |
-| `Float`   | 4                 |
-| `Double`  | 8                 |
+| `float`   | 4                 |
+| `f32`     | 4                 |
+| `double`  | 8                 |
+| `f64`     | 8                 |
 | `char`    | 2                 |
 | `bool`    | 1                 |
 | `String`  | N/A               |
@@ -166,27 +168,16 @@ are written in **PascalCase**
 | `u16`     | 2                 |
 | `u32`     | 4                 |
 | `u64`     | 8                 |
-| `u128`    | 16                | -->
+| `u128`    | 16                |
 
-| Type     | Alignment (Bytes) |
-|----------|-------------------|
-| `void`   | N/A               |
-| `char`   | 2                 |
-| `bool`   | 1                 |
-| `String` | N/A               |
-| `num`    | 8                 |
-
-> [!IMPORTANT]
-> `num` is a `double` so to use functions like `print` and `input` you need to use the `%lf` format
-> specifier
 
 Tungsten has also a variadic type called `ArgPack` which is just like `...` in C
 
 ### Stack allocation
 
-```c++
-num myVariable = 247;
-num myVariable{247};
+```rust
+i64 myVariable = 247;
+i64 myVariable{247};
 ```
 
 ### Heap allocation
@@ -230,14 +221,14 @@ free[] myArray;
 references just just like in C++ are pointers which can't be reassigned and you need to specify an address when declaring them:
 
 ```c++
-num var;
-num& ref = &var;
+int var;
+int& ref = &var;
 ```
 
 unlike in C++ to pass them to functions you need to do it explicitly:
 
-```c++
-num var;
+```rust
+i64 var;
 fun(&var);
 ```
 
@@ -288,8 +279,8 @@ do {
 
 For statements just like while statements require braces to work
 
-```c++
-for (num i = 0; i < 10; ++i) {
+```rust
+for (i64 i = 0; i < 10; ++i) {
     // do stuff
 }
 ```
@@ -298,8 +289,8 @@ for (num i = 0; i < 10; ++i) {
 
 Rather than a C++ aproach, functions are more similar to Rust's:
 
-```c++
-fun myFunction() -> num {
+```rust
+fun myFunction() -> i64 {
     ret 247;
 }
 ```
@@ -343,14 +334,22 @@ extern fun myFun() -> void;
 
 ### Main Function
 
-The `main` function can return either `int` or `int32`. Command line arguments are passed like in C with
-`num argc, String* argv` or`num argc, char** argv`.
+The `main` function can return either `int` or `i32`. Command line arguments are passed like in C with `int argc, String* argv` or `i32 argc, char** argv`.
 If no return value is provided, `0` will be returned by default.
 
 ```c++
-fun main(num argc, String* argv) -> num {
+fun main(int argc, String* argv) -> int {
     /* your code */
     ret CodeSuccess;
+}
+```
+
+If you don't need the command-line arguments, you can simply omit them:
+
+```c++
+fun main() -> int {
+    /* your code */
+    ret 0;
 }
 ```
 
@@ -360,26 +359,17 @@ Tungsten has a reduced number of integrated core functions
 
 | Type     | Name              | Arguments             | functionality                                |
 |----------|-------------------|-----------------------|----------------------------------------------|
-| `num`    | shell             | (String cmd)          | same function as `system()` in C             |
+| `i32`    | shell             | (String cmd)          | same function as `system()` in C             |
 | `void`   | print             | (String fmt, ArgPack) | same function as `printf()` in C             |
 | `void`   | input             | (String fmt, ArgPack) | same function as `scanf()` in C              |  
 | `String` | __builtinFile     | no arguments          | returns the name of the file                 |
 | `String` | __builtinFunction | no arguments          | returns the name of the function             |
-| `num`    | __builtinColumn   | no arguments          | returns the number of the column             |
-| `num`    | __builtinLine     | no arguments          | returns the number of the line               |
+| `u64`    | __builtinColumn   | no arguments          | returns the number of the column             |
+| `u64`    | __builtinLine     | no arguments          | returns the number of the line               |
 | `String` | nameof            | (any variable)        | returns the name of the variable             |
 | `String` | typeof            | (any variable)        | returns the type of the variable             |
-| `num`    | sizeof            | (any variable)        | returns the size of the type of the variable |
+| `u64`    | sizeof            | (any variable)        | returns the size of the type of the variable |
 
-<!-- 
-If you don't need the command-line arguments, you can simply omit them:
-
-```c++
-fun main() -> num {
-    /* your code */
-    ret 0;
-}
-``` -->
 
 ## Building a project
 
@@ -409,7 +399,7 @@ import build;
 
 Project myProject{Executable, "myProject"};
 
-fun main() -> num {
+fun main() -> i32 {
     myProject.addSource("main.tgs");
     myProject.build();
 }
