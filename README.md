@@ -22,7 +22,7 @@ fun fibonacci(i64 n) -> i64 {
 
 fun main() -> i32 {
    for (i64 i = 0; i < 10; ++i) {
-      print("fibonacci(%.0lf) = %.0lf\n", i, fibonacci(i));
+      print("fibonacci(%lu) = %lu\n", i, fibonacci(i));
    }
    ret CodeSuccess;
 }
@@ -147,29 +147,28 @@ cmake --build build --config Release
 Tungsten has a similar naming convention to Rust, where base types are written in **camelCase** and structs and classes
 are written in **PascalCase**
 
-| Type      | Alignment (Bytes) |
-|-----------|-------------------|
-| `void`    | N/A               |
-| `int`     | 4                 |
-| `uint`    | 4                 |
-| `float`   | 4                 |
-| `f32`     | 4                 |
-| `double`  | 8                 |
-| `f64`     | 8                 |
-| `char`    | 2                 |
-| `bool`    | 1                 |
-| `String`  | N/A               |
-| `i8`      | 1                 |
-| `i16`     | 2                 |
-| `i32`     | 4                 |
-| `i64`     | 8                 |
-| `i128`    | 16                |
-| `u8`      | 1                 |
-| `u16`     | 2                 |
-| `u32`     | 4                 |
-| `u64`     | 8                 |
-| `u128`    | 16                |
-
+| Type     | Alignment (Bytes) |
+|----------|-------------------|
+| `void`   | N/A               |
+| `int`    | 4                 |
+| `uint`   | 4                 |
+| `float`  | 4                 |
+| `f32`    | 4                 |
+| `double` | 8                 |
+| `f64`    | 8                 |
+| `char`   | 2                 |
+| `bool`   | 1                 |
+| `String` | N/A               |
+| `i8`     | 1                 |
+| `i16`    | 2                 |
+| `i32`    | 4                 |
+| `i64`    | 8                 |
+| `i128`   | 16                |
+| `u8`     | 1                 |
+| `u16`    | 2                 |
+| `u32`    | 4                 |
+| `u64`    | 8                 |
+| `u128`   | 16                |
 
 Tungsten has also a variadic type called `ArgPack` which is just like `...` in C
 
@@ -214,11 +213,14 @@ To free the array:
 ```c++
 free[] myArray;
 ``` 
+
 > [!WARNING]  
 > new and free have yet to be added
 
 ## References
-references just just like in C++ are pointers which can't be reassigned and you need to specify an address when declaring them:
+
+references just just like in C++ are pointers which can't be reassigned and you need to specify an address when
+declaring them:
 
 ```c++
 int var;
@@ -229,7 +231,7 @@ unlike in C++ to pass them to functions you need to do it explicitly:
 
 ```rust
 i64 var;
-fun(&var);
+fun( & var);
 ```
 
 ## Control flow statements
@@ -280,8 +282,8 @@ do {
 For statements just like while statements require braces to work
 
 ```rust
-for (i64 i = 0; i < 10; ++i) {
-    // do stuff
+for (i64 i = 0; i < 10; + + i) {
+// do stuff
 }
 ```
 
@@ -291,7 +293,7 @@ Rather than a C++ aproach, functions are more similar to Rust's:
 
 ```rust
 fun myFunction() -> i64 {
-    ret 247;
+ret 247;
 }
 ```
 
@@ -334,7 +336,8 @@ extern fun myFun() -> void;
 
 ### Main Function
 
-The `main` function can return either `int` or `i32`. Command line arguments are passed like in C with `int argc, String* argv` or `i32 argc, char** argv`.
+The `main` function can return either `int` or `i32`. Command line arguments are passed like in C with
+`int argc, String* argv` or `i32 argc, char** argv`.
 If no return value is provided, `0` will be returned by default.
 
 ```c++
@@ -369,7 +372,6 @@ Tungsten has a reduced number of integrated core functions
 | `String` | nameof            | (any variable)        | returns the name of the variable             |
 | `String` | typeof            | (any variable)        | returns the type of the variable             |
 | `u64`    | sizeof            | (any variable)        | returns the size of the type of the variable |
-
 
 ## Building a project
 
