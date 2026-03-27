@@ -167,7 +167,7 @@ namespace tungsten {
        // {"private", TokenType::Private},
        // {"protected", TokenType::Protected},
        // {"static", TokenType::Static},
-       // {"namespace", TokenType::Namespace},
+       {"namespace", TokenType::Namespace},
        {"staticCast", TokenType::StaticCast},
        // {"constCast", TokenType::ConstCast},
        // {"alias", TokenType::Alias},
