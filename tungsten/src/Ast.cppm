@@ -1292,16 +1292,27 @@ export namespace tungsten {
 
    class NamespaceAST : public ExpressionAST {
    public:
-      NamespaceAST(const std::string& name, std::vector<std::unique_ptr<ExpressionAST>> variables, std::vector<std::unique_ptr<FunctionAST>> functions, std::vector<std::unique_ptr<ClassAST>> classes)
-          : _name{name}, _variables{std::move(variables)}, _functions{std::move(functions)}, _classes{std::move(classes)} {}
+      NamespaceAST(const std::string& name, std::vector<std::unique_ptr<ExpressionAST>> variables, std::vector<std::unique_ptr<FunctionAST>> functions,
+                   std::vector<std::unique_ptr<FunctionPrototypeAST>> externs, std::vector<std::unique_ptr<ClassAST>> classes, std::vector<std::unique_ptr<ExpressionAST>> namespaces)
+          : _name{name}, _variables{std::move(variables)}, _functions{std::move(functions)}, _externFunctions{std::move(externs)}, _classes{std::move(classes)}, _namespaces{std::move(namespaces)} {}
       llvm::Value* codegen() override;
       void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::Namespace; }
+
+      _NODISCARD const std::string& name() const { return _name; }
+      _NODISCARD const std::vector<std::unique_ptr<ExpressionAST>>& variables() const { return _variables; }
+      _NODISCARD const std::vector<std::unique_ptr<FunctionAST>>& functions() const { return _functions; }
+      _NODISCARD const std::vector<std::unique_ptr<FunctionPrototypeAST>>& externFunctions() const { return _externFunctions; }
+      _NODISCARD const std::vector<std::unique_ptr<ClassAST>>& classes() const { return _classes; }
+      _NODISCARD const std::vector<std::unique_ptr<ExpressionAST>>& namespaces() const { return _namespaces; }
 
    private:
       std::string _name;
       std::vector<std::unique_ptr<ExpressionAST>> _variables;
       std::vector<std::unique_ptr<FunctionAST>> _functions;
+      std::vector<std::unique_ptr<FunctionPrototypeAST>> _externFunctions;
       std::vector<std::unique_ptr<ClassAST>> _classes;
+      std::vector<std::unique_ptr<ExpressionAST>> _namespaces;
    };
 
    class ImportStatementAST : public ExpressionAST {
