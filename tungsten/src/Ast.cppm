@@ -613,7 +613,7 @@ export namespace tungsten {
          return "NullTy";
       }
       _NODISCARD llvm::Type* llvmType() const override {
-         return nullptr;
+         return Builder->getPtrTy();
       }
    };
 
@@ -749,7 +749,7 @@ export namespace tungsten {
    class VariableDeclarationAST : public ExpressionAST {
    public:
       VariableDeclarationAST(std::shared_ptr<Type> type, const std::string& name, std::unique_ptr<ExpressionAST> init, bool isGlobal = false)
-          : _name{name}, _init{std::move(init)}, _isGlobal{isGlobal}, ExpressionAST{type} {}
+          : ExpressionAST{type}, _name{name}, _isGlobal{isGlobal}, _init{std::move(init)} {}
       llvm::Value* codegen() override;
 
       _NODISCARD const std::string& name() const { return _name; }
@@ -903,6 +903,7 @@ export namespace tungsten {
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::StaticCast; }
+      _NODISCARD const std::unique_ptr<ExpressionAST>& value() const { return _value; }
 
    private:
       std::unique_ptr<ExpressionAST> _value;
@@ -922,7 +923,7 @@ export namespace tungsten {
    };
    class NullPtrAST : public ExpressionAST {
    public:
-      NullPtrAST() : ExpressionAST{makePointer(makeNullType())} {}
+      NullPtrAST() : ExpressionAST{makeNullType()} {}
       llvm::Value* codegen() override;
 
       _NODISCARD ASTType astType() const noexcept override { return ASTType::NullPtr; }
@@ -1381,18 +1382,34 @@ export namespace tungsten {
          return static_cast<ReferenceTy*>(ty.get())->reference()->llvmType();
       return ty->llvmType();
    }
+   llvm::Type* expressionValueTypeForCodegen(ExpressionAST* expr) {
+      if (!expr || !expr->type())
+         return nullptr;
+
+      if (expr->astType() == ASTType::VariableExpression) {
+         const auto& varName = static_cast<VariableExpressionAST*>(expr)->name();
+         if (VariableTypes.contains(varName))
+            return VariableTypes[varName];
+      }
+
+      return valueTypeForCodegen(expr->type());
+   }
    llvm::Value* BinaryExpressionAST::codegen() {
       llvm::Value* LHS = _LHS->codegen();
       llvm::Value* RHS = _RHS->codegen();
 
-      llvm::Type* lhsValueType = valueTypeForCodegen(_LHS->type());
-      llvm::Type* rhsValueType = valueTypeForCodegen(_RHS->type());
+      llvm::Type* lhsValueType = expressionValueTypeForCodegen(_LHS.get());
+      llvm::Type* rhsValueType = expressionValueTypeForCodegen(_RHS.get());
 
       if (_RHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_RHS.get())->op() == "*"sv)
          RHS = Builder->CreateLoad(rhsValueType, RHS, "derefr");
 
       llvm::Value* loadedL = loadIfPointer(LHS, lhsValueType, "lval");
       llvm::Value* loadedR = loadIfPointer(RHS, rhsValueType, "rval");
+
+      if (_RHS->astType() == ASTType::IndexAccessExpression &&
+          (_RHS->type()->kind() == TypeKind::Pointer || _RHS->type()->kind() == TypeKind::String))
+         loadedR = RHS;
 
       loadedR = castToCommonType(loadedR, lhsValueType);
 
@@ -1403,6 +1420,46 @@ export namespace tungsten {
          }
 
          llvm::Value* targetAddr = LHS;
+         if (_LHS->astType() == ASTType::IndexAccessExpression) {
+            auto* indexExpr = static_cast<IndexAccessAST*>(_LHS.get());
+            llvm::Value* arrayPtr = indexExpr->array()->codegen();
+            llvm::Value* indexVal = indexExpr->index()->codegen();
+
+            if (!arrayPtr || !indexVal)
+               return nullptr;
+
+            if (indexVal->getType()->isPointerTy())
+               indexVal = Builder->CreateLoad(expressionValueTypeForCodegen(indexExpr->index().get()), indexVal, "idx.load");
+
+            if (indexVal->getType()->isFloatingPointTy())
+               indexVal = Builder->CreateFPToUI(indexVal, Builder->getInt64Ty(), "idx.fptoui");
+            else if (!indexVal->getType()->isIntegerTy())
+               return LogErrorV("array index must be an integer value");
+            else if (!indexVal->getType()->isIntegerTy(64))
+               indexVal = Builder->CreateIntCast(indexVal, Builder->getInt64Ty(), false, "idx.cast");
+
+            llvm::Type* baseTy = indexExpr->array()->type()->llvmType();
+            if (!baseTy)
+               return LogErrorV("cannot index expression with unknown LLVM type");
+
+            if (baseTy->isArrayTy()) {
+               llvm::Value* zero = Builder->getInt64(0);
+               targetAddr = Builder->CreateGEP(baseTy, arrayPtr, {zero, indexVal}, "elementptr");
+            } else if (indexExpr->array()->type()->kind() == TypeKind::Pointer) {
+               auto* ptrTy = static_cast<PointerTy*>(indexExpr->array()->type().get());
+
+               if (indexExpr->array()->astType() == ASTType::VariableExpression && arrayPtr->getType()->isPointerTy() && !llvm::isa<llvm::Argument>(arrayPtr))
+                  arrayPtr = Builder->CreateLoad(arrayPtr->getType(), arrayPtr, "arrptr.load");
+
+               llvm::Type* gepType = ptrTy->pointee()->llvmType();
+               targetAddr = Builder->CreateGEP(gepType, arrayPtr, indexVal, "elementptr");
+            } else {
+               return LogErrorV("cannot index non-array, non-pointer value");
+            }
+
+            loadedL = Builder->CreateLoad(lhsValueType, targetAddr, "lval.idx");
+         }
+
          if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*")
             loadedL = Builder->CreateLoad(lhsValueType, LHS, "derefl");
 
@@ -1485,6 +1542,56 @@ export namespace tungsten {
 
 
    llvm::Value* VariableDeclarationAST::codegen() {
+      if (_isGlobal) {
+         if (_Type->kind() == TypeKind::Reference) {
+            if (!_init)
+               return LogErrorV("global reference requires an initializer");
+
+            llvm::Value* initVal = _init->codegen();
+            if (!initVal)
+               return nullptr;
+
+            if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*"sv)
+               initVal = Builder->CreateLoad(_Type->llvmType(), initVal, "ref.bind");
+
+            if (!initVal->getType()->isPointerTy())
+               return LogErrorV("reference initializer must be an lvalue/address expression");
+
+            auto* refType = static_cast<ReferenceTy*>(_Type.get());
+            NamedValues[_name] = initVal;
+            VariableTypes[_name] = refType->reference()->llvmType();
+            return initVal;
+         }
+
+         llvm::Type* type = _Type->llvmType();
+         llvm::Constant* initConstant = llvm::Constant::getNullValue(type);
+         if (_init) {
+            llvm::Value* initVal = _init->codegen();
+            if (!initVal)
+               return nullptr;
+
+            if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*"sv)
+               initVal = Builder->CreateLoad(type, initVal, "derefl");
+
+            if (auto* constInit = llvm::dyn_cast<llvm::Constant>(initVal))
+               initConstant = constInit;
+            else
+               return LogErrorV("global variable initializer must be a constant expression");
+         }
+
+         auto* globalVar = new llvm::GlobalVariable(
+             *TheModule,
+             type,
+             false,
+             llvm::GlobalValue::ExternalLinkage,
+             initConstant,
+             _name);
+
+         NamedValues[_name] = globalVar;
+         VariableTypes[_name] = type;
+         return globalVar;
+      }
+
       if (_Type->kind() == TypeKind::Reference) {
          llvm::Value* initVal = _init->codegen();
          if (!initVal)
@@ -1499,11 +1606,7 @@ export namespace tungsten {
          return initVal;
       }
 
-
       llvm::Type* type = _Type->llvmType();
-      if (_isGlobal) {
-         return nullptr;
-      }
       llvm::Function* function = Builder->GetInsertBlock()->getParent();
       llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
       llvm::AllocaInst* allocInstance = tmpBuilder.CreateAlloca(type, nullptr, _name);
@@ -1597,13 +1700,13 @@ export namespace tungsten {
             expectedParamType = callee->getFunctionType()->getParamType(static_cast<unsigned>(i));
 
          if (argVal->getType()->isPointerTy() && expectedParamType && !expectedParamType->isPointerTy()) {
-            argVal = Builder->CreateLoad(valueTypeForCodegen(arg->type()), argVal, "arg.load");
+            argVal = Builder->CreateLoad(expressionValueTypeForCodegen(arg.get()), argVal, "arg.load");
          } else if (argVal->getType()->isPointerTy() && !expectedParamType &&
                     arg->type()->kind() != TypeKind::Pointer &&
                     arg->type()->kind() != TypeKind::Reference &&
                     arg->type()->kind() != TypeKind::String &&
                     arg->type()->kind() != TypeKind::Array) {
-            argVal = Builder->CreateLoad(valueTypeForCodegen(arg->type()), argVal, "arg.load");
+            argVal = Builder->CreateLoad(expressionValueTypeForCodegen(arg.get()), argVal, "arg.load");
          }
 
          args.push_back(argVal);
@@ -1639,20 +1742,74 @@ export namespace tungsten {
 
       if (!_value)
          return nullptr;
+      const auto& fromType = _value->type();
+      const auto& toType = _Type;
       llvm::Value* castedValue = _value->codegen();
       if (castedValue == nullptr)
          return nullptr;
 
-      if (castedValue->getType()->isPointerTy()) // didn't add pointers yet so this check is ok
-         castedValue = Builder->CreateLoad(VariableTypes[static_cast<VariableExpressionAST*>(_value.get())->name()], castedValue, "lval");
+      if (castedValue->getType()->isPointerTy()) {
+         const bool isAddressLikeExpr =
+             _value->astType() == ASTType::VariableExpression ||
+             _value->astType() == ASTType::IndexAccessExpression ||
+             (_value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*"sv);
+
+         if (isAddressLikeExpr) {
+            llvm::Type* sourceValueType = expressionValueTypeForCodegen(_value.get());
+            castedValue = Builder->CreateLoad(sourceValueType, castedValue, "lval");
+         }
+      }
+
+      const bool sameType = fullTypeString(fromType) == fullTypeString(toType);
+      const bool numericCast = isSignedType(fromType->string()) || isUnsignedType(fromType->string()) || isFloatingPointType(fromType->string());
+      const bool numericTarget = isSignedType(toType->string()) || isUnsignedType(toType->string()) || isFloatingPointType(toType->string());
+      const bool pointerCast = fromType->kind() == TypeKind::Pointer && toType->kind() == TypeKind::Pointer;
+      const bool pointerIntegerCast =
+          (fromType->kind() == TypeKind::Pointer && (isSignedType(toType->string()) || isUnsignedType(toType->string()))) ||
+          (toType->kind() == TypeKind::Pointer && (isSignedType(fromType->string()) || isUnsignedType(fromType->string())));
+
+      if (!sameType && !(numericCast && numericTarget) && !pointerCast && !pointerIntegerCast)
+         return LogErrorV("cannot cast from type '" + fullTypeString(fromType) + "' to '" + fullTypeString(toType) + "'");
+
+      if (pointerCast) {
+         if (!castedValue->getType()->isPointerTy())
+            return LogErrorV("internal error: expected pointer value during pointer cast");
+         return Builder->CreatePointerCast(castedValue, type, "staticCast");
+      }
+
+      if (toType->kind() == TypeKind::Pointer) {
+         if (castedValue->getType()->isPointerTy())
+            return Builder->CreatePointerCast(castedValue, type, "staticCast");
+         if (castedValue->getType()->isIntegerTy())
+            return Builder->CreateIntToPtr(castedValue, type, "staticCast");
+         return LogErrorV("unsupported cast to pointer type");
+      }
+
+      if (fromType->kind() == TypeKind::Pointer) {
+         if (type->isIntegerTy())
+            return Builder->CreatePtrToInt(castedValue, type, "staticCast");
+         return LogErrorV("unsupported cast from pointer type");
+      }
+
+      if (sameType)
+         return castedValue;
 
       if (isSignedType(_Type->string())) {
+         if (castedValue->getType()->isFloatingPointTy())
+            return Builder->CreateFPToSI(castedValue, type, "staticCast");
          return Builder->CreateIntCast(castedValue, type, true, "staticCast");
       }
       if (isUnsignedType(_Type->string())) {
+         if (castedValue->getType()->isFloatingPointTy())
+            return Builder->CreateFPToUI(castedValue, type, "staticCast");
          return Builder->CreateIntCast(castedValue, type, false, "staticCast");
       }
       if (isFloatingPointType(_Type->string())) {
+         if (castedValue->getType()->isIntegerTy()) {
+            if (isUnsignedType(fromType->string()))
+               return Builder->CreateUIToFP(castedValue, type, "staticCast");
+            return Builder->CreateSIToFP(castedValue, type, "staticCast");
+         }
          return Builder->CreateFPCast(castedValue, type, "staticCast");
       }
 
@@ -1707,7 +1864,7 @@ export namespace tungsten {
       llvm::Value* returnValue = _value->codegen();
 
       if (!returnsReference && _value->astType() == ASTType::VariableExpression)
-         returnValue = loadIfPointer(returnValue, valueTypeForCodegen(_value->type()), "rval");
+         returnValue = loadIfPointer(returnValue, expressionValueTypeForCodegen(_value.get()), "rval");
 
       if (!returnsReference && _value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*"sv)
          returnValue = Builder->CreateLoad(valueTypeForCodegen(_value->type()), returnValue, "derefl");

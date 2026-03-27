@@ -126,7 +126,7 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parseSizeof();
       std::unique_ptr<ExpressionAST> _parseStaticCast();
       std::unique_ptr<ExpressionAST> _parseConstCast();
-      std::unique_ptr<ExpressionAST> _parseVariableDeclaration();
+      std::unique_ptr<ExpressionAST> _parseVariableDeclaration(bool global = false);
       std::unique_ptr<FunctionAST> _parseFunctionDeclaration();
       std::unique_ptr<ExpressionAST> _parseArgument();
       std::unique_ptr<BlockStatementAST> _parseBlock();
@@ -300,7 +300,7 @@ namespace tungsten {
             case TokenType::String:
             case TokenType::Void:
             case TokenType::Identifier: {
-               auto expr = _parseVariableDeclaration();
+               auto expr = _parseVariableDeclaration(true);
                if (_peek().type != TokenType::Semicolon)
                   _logError("expected ';' after variable declaration");
                _consume(); // consume ';'
@@ -700,9 +700,13 @@ namespace tungsten {
          case TokenType::CodeFailure:
             _consume();
             return std::make_unique<NumberExpressionAST>(double(1), makeDouble()); // makeInt32()
+
          case TokenType::Null:
             _consume();
             return std::make_unique<NumberExpressionAST>(double(0), makeDouble()); // makeInt32()
+         case TokenType::Nullptr:
+            _consume();
+            return std::make_unique<NullPtrAST>();
 
          case TokenType::OpenBrace:
             return _parseBlock();
@@ -1061,7 +1065,7 @@ namespace tungsten {
    // std::unique_ptr<ExpressionAST> Parser::_parseAlias() {
    // }
 
-   std::unique_ptr<ExpressionAST> Parser::_parseVariableDeclaration() {
+   std::unique_ptr<ExpressionAST> Parser::_parseVariableDeclaration(bool global) {
       const Token token = _peek();
       std::shared_ptr<Type> type = _parseType();
 
@@ -1090,7 +1094,7 @@ namespace tungsten {
 
       // utils::debugLog("definition of variable '{}' with type '{}'", name, type);
 
-      return _setSource(std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr)), token);
+      return _setSource(std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr), global), token);
    }
 
    std::unique_ptr<FunctionAST> Parser::_parseFunctionDeclaration() {

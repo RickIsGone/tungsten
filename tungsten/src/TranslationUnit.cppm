@@ -94,7 +94,7 @@ namespace tungsten {
          std::string libs = libDir.string() + "/libcore.a" + " " + libDir.string() + "/libstdlib.a";
          system(("clang++ " + path.stem().string() + ".ll " + libs + " -o " + path.stem().string() + " -O3").c_str());
 #endif
-         fs::remove(path.stem().string() + ".ll");
+         // fs::remove(path.stem().string() + ".ll");
       } else
          exit(EXIT_FAILURE);
    }

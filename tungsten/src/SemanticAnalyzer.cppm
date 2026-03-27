@@ -63,7 +63,7 @@ namespace tungsten {
       void visit(__BuiltinLineAST&) override {}
       void visit(__BuiltinColumnAST&) override {}
       void visit(__BuiltinFileAST&) override {}
-      void visit(StaticCastAST&) override {}
+      void visit(StaticCastAST&) override;
       void visit(ConstCastAST&) override {}
       void visit(NullPtrAST&) override {}
       void visit(IfStatementAST&) override;
@@ -180,6 +180,7 @@ namespace tungsten {
       bool _checkNumericConversionLoss(const std::string& fromType, const std::string& toType);
       bool _doesVariableExist(const std::string& var);
       bool _isConstexpr(const std::unique_ptr<ExpressionAST>& expr);
+      bool _canCast(std::shared_ptr<Type> from, std::shared_ptr<Type> to);
       std::unique_ptr<ExpressionAST> _evaluateConstexpr(const std::unique_ptr<ExpressionAST>& expr);
       std::shared_ptr<Type> _variableType(const std::string& var);
 
@@ -317,8 +318,10 @@ namespace tungsten {
             if (!compatible)
                return _logError(&var, "type mismatch: cannot bind '{}' with non-reference initializer of type '{}'", fullTypeString(var.type()), fullTypeString(var.initializer()->type()));
          } else if (!_isNumberType(var.type()->string()) || !_isNumberType(var.initializer()->type()->string())) {
-            if (fullTypeString(var.type()) != fullTypeString(var.initializer()->type()))
-               return _logError(&var, "type mismatch: cannot assign '{}' to variable of type '{}'", fullTypeString(var.initializer()->type()), fullTypeString(var.type()));
+            if (fullTypeString(var.type()) != fullTypeString(var.initializer()->type())) {
+               if (var.type()->kind() != TypeKind::Pointer && var.initializer()->astType() != ASTType::NullPtr)
+                  return _logError(&var, "type mismatch: cannot assign '{}' to variable of type '{}'", fullTypeString(var.initializer()->type()), fullTypeString(var.type()));
+            }
          }
       } else if (var.type()->kind() == TypeKind::Reference && !_allowUninitializedReferenceDecl) {
          return _logError(&var, "reference variable '{}' must be initialized", var.name());
@@ -346,6 +349,13 @@ namespace tungsten {
             return _logError(&var, "cannot use 'sizeof' on non-variable expressions");
       }
       var.setType(makeUint64());
+   }
+   void SemanticAnalyzer::visit(StaticCastAST& cast) {
+      cast.value()->accept(*this);
+      if (!cast.value()->type())
+         return; // error already logged
+      if (!_canCast(cast.value()->type(), cast.type()))
+         return _logError(&cast, "cannot cast from type '{}' to '{}'", fullTypeString(cast.value()->type()), fullTypeString(cast.type()));
    }
    void SemanticAnalyzer::visit(TypeOfStatementAST& var) {
       var.variable()->accept(*this);
@@ -1223,4 +1233,19 @@ namespace tungsten {
             return nullptr;
       }
    }
+
+   bool SemanticAnalyzer::_canCast(std::shared_ptr<Type> from, std::shared_ptr<Type> to) {
+      if (fullTypeString(from) == fullTypeString(to))
+         return true;
+      if (_isNumberType(from->string()) && _isNumberType(to->string()))
+         return true;
+      if (from->kind() == TypeKind::Pointer && to->kind() == TypeKind::Pointer)
+         return true; // probably will change
+      if (from->kind() == TypeKind::Pointer && _isIntegerType(to->string()))
+         return true;
+      if (to->kind() == TypeKind::Pointer && _isIntegerType(from->string()))
+         return true;
+      return false;
+   }
+
 } // namespace tungsten
