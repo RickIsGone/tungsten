@@ -14,14 +14,14 @@ by C++ and Java
 Below is a snippet of code which shows some of the basic functionalities of tungsten
 
 ```c++
-fun fibonacci(num n) -> num {
+fun fibonacci(i64 n) -> i64 {
    if (n <= 1) 
       ret n;
    ret fibonacci(n - 1) + fibonacci(n - 2);
 }
 
-fun main() -> num {
-   for (num i = 0; i < 10; ++i) {
+fun main() -> i32 {
+   for (i64 i = 0; i < 10; ++i) {
       print("fibonacci(%.0lf) = %.0lf\n", i, fibonacci(i));
    }
    ret CodeSuccess;
@@ -82,7 +82,7 @@ Global
 
 Compiler
 
-- LLVM
+- LLVM 15 or newer
 
 Package Manager
 
