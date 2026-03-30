@@ -85,7 +85,6 @@ namespace tungsten {
       _NODISCARD std::vector<std::unique_ptr<FunctionAST>>& functions() { return _functions; }
       _NODISCARD std::vector<std::unique_ptr<ClassAST>>& classes() { return _classes; }
       _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& globalVariables() { return _globalVariables; }
-      _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& namespaces() { return _namespaces; }
       _NODISCARD std::unique_ptr<Externs>& externs() { return _externs; }
 
    private:
@@ -139,7 +138,7 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parseImport();
       // std::unique_ptr<FunctionAST> _parseConstructorOrDestructor(const std::string& className);
       // std::unique_ptr<ClassAST> _parseClass();
-      std::unique_ptr<ExpressionAST> _parseNamespace();
+      void _parseNamespace();
 
       std::unordered_map<std::string, SymbolType> _symbolTable{};
       size_t _index{0};
@@ -151,9 +150,9 @@ namespace tungsten {
       std::vector<std::unique_ptr<FunctionAST>> _functions;
       std::vector<std::unique_ptr<ClassAST>> _classes;
       std::vector<std::unique_ptr<ExpressionAST>> _globalVariables;
-      std::vector<std::unique_ptr<ExpressionAST>> _namespaces;
       std::shared_ptr<Type> _currentFunctionReturnType;
       std::string _currentFunctionName;
+      std::string _namespacePrefix{""};
    };
    //  ========================================== implementation ==========================================
 
@@ -311,7 +310,7 @@ namespace tungsten {
                break;
             }
             case TokenType::Namespace:
-               _namespaces.push_back(_parseNamespace());
+               _parseNamespace();
                break;
                // case TokenType::Class:
                //    _classes.push_back(_parseClass());
@@ -325,39 +324,50 @@ namespace tungsten {
          }
       }
    }
-   std::unique_ptr<ExpressionAST> Parser::_parseNamespace() {
+   void Parser::_parseNamespace() {
       _consume(); // consume namespace
-      if (_peek().type != TokenType::Identifier)
-         return _logError("expected a namespace name");
+
+      if (_peek().type != TokenType::Identifier) {
+         _logError("expected a namespace name");
+         return;
+      }
       std::string name = _lexeme(_peek());
       _consume(); // consume identifier
 
-      if (_peek().type != TokenType::OpenBrace)
-         return _logError("expected '{' after namespace name");
+      while (_peek().type == TokenType::Colon && _peek(1).type == TokenType::Colon) {
+         _consume(2); // consume ::
+         if (_peek().type != TokenType::Identifier) {
+            _logError("expected a namespace name after '" + name + "::'");
+            return;
+         }
+         name += "::" + _lexeme(_peek());
+         _consume(); // consume identifier
+      }
+      _namespacePrefix += name + "::";
+
+      if (_peek().type != TokenType::OpenBrace) {
+         _logError("expected '{' after namespace name");
+         return;
+      }
       _consume(); // consume {
-      std::vector<std::unique_ptr<ExpressionAST>> variables;
-      std::vector<std::unique_ptr<FunctionAST>> functions;
-      std::vector<std::unique_ptr<FunctionPrototypeAST>> externFunctions;
-      std::vector<std::unique_ptr<ClassAST>> classes;
-      std::vector<std::unique_ptr<ExpressionAST>> namespaces;
+
       while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile) {
          switch (_peek().type) {
             using enum TokenType;
             case Namespace:
-               namespaces.push_back(_parseNamespace());
+               _parseNamespace();
                break;
 
             case Fun:
-               functions.push_back(_parseFunctionDeclaration());
+               _functions.push_back(_parseFunctionDeclaration());
                break;
-            case Extern: {
-               externFunctions.push_back(_parseExternFunctionStatement());
+            case Extern:
+               _externs->functions.push_back(_parseExternFunctionStatement());
                if (_peek().type != Semicolon)
                   _logError("expected ';' after extern statement");
                _consume(); // consume ';'
-            }
+               break;
 
-            break;
             case Int:
             case Int8:
             case Int16:
@@ -378,7 +388,8 @@ namespace tungsten {
             case Char:
             case String:
             case Void:
-               variables.push_back(_parseVariableDeclaration(true));
+            case Identifier:
+               _globalVariables.push_back(_parseVariableDeclaration(true));
                break;
 
             case Semicolon:
@@ -391,10 +402,12 @@ namespace tungsten {
                break;
          }
       }
-      if (_peek().type != TokenType::CloseBrace)
-         return _logError("expected '}' after namespace");
-      _consume(); // consume '{'
-      return std::make_unique<NamespaceAST>(name, std::move(variables), std::move(functions), std::move(externFunctions), std::move(classes), std::move(namespaces));
+      if (_peek().type != TokenType::CloseBrace) {
+         _logError("expected '}' after namespace");
+         return;
+      }
+      _consume(); // consume '}'
+      _namespacePrefix.erase(_namespacePrefix.size() - name.size() - 2);
    }
    // std::unique_ptr<FunctionAST> Parser::_parseConstructorOrDestructor(const std::string& className) {
    //    std::string name = _lexeme(_peek());
@@ -709,7 +722,7 @@ namespace tungsten {
       const Token token = _peek();
       _consume(); // consume return
       if (_peek().type == TokenType::Semicolon)
-         return _setSource(std::make_unique<ReturnStatementAST>(nullptr, makeNullType()), token);
+         return _setSource(std::make_unique<ReturnStatementAST>(nullptr, makeVoid()), token);
 
       return _setSource(std::make_unique<ReturnStatementAST>(_parseExpression(), _currentFunctionReturnType), token);
    }
@@ -1133,7 +1146,7 @@ namespace tungsten {
 
       // utils::debugLog("definition of variable '{}' with type '{}'", name, type);
 
-      return _setSource(std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr), global), token);
+      return _setSource(std::make_unique<VariableDeclarationAST>(type, _namespacePrefix + name, std::move(initExpr), global), token);
    }
 
    std::unique_ptr<FunctionAST> Parser::_parseFunctionDeclaration() {
@@ -1251,7 +1264,7 @@ namespace tungsten {
       if (type->kind() == TypeKind::ArgPack)
          return _logError<FunctionPrototypeAST>("variadic arguments are not allowed as type");
 
-      return std::make_unique<FunctionPrototypeAST>(type, name, std::move(args));
+      return std::make_unique<FunctionPrototypeAST>(type, _namespacePrefix + name, std::move(args));
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseIfStatement() {

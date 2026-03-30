@@ -75,7 +75,6 @@ namespace tungsten {
       void visit(ExitStatement&) override;
       void visit(ExternFunctionStatementAST&) override;
       void visit(ExternVariableStatementAST&) override {}
-      void visit(NamespaceAST&) override {}
       void visit(ImportStatementAST&) override {}
 
       void visit(FunctionPrototypeAST&) override;
@@ -89,43 +88,7 @@ namespace tungsten {
 
    private:
       template <typename... Ty>
-      void _logError(const ExpressionAST* node, const std::string& err, Ty&&... args) {
-         const std::string message = std::vformat(err, std::make_format_args(args...));
-         if (node && node->hasSource() && !_raw.empty()) {
-            const bool isSemicolonError = message.find("expected ';'") != std::string::npos;
-
-            const size_t linePosition = node->sourcePosition();
-            const size_t errorPosition = isSemicolonError && node->sourceLength() > 0
-                ? node->sourcePosition() + node->sourceLength()
-                : node->sourcePosition();
-
-            const size_t start = _raw.rfind('\n', linePosition) == std::string::npos ? 0 : _raw.rfind('\n', linePosition) + 1;
-            const size_t end = _raw.find('\n', linePosition) == std::string::npos ? _raw.size() : _raw.find('\n', linePosition);
-
-            std::string line = _raw.substr(start, end - start);
-            size_t indentation = 0;
-            for (char c : line) {
-               if (c == ' ' || c == '\t')
-                  ++indentation;
-               else
-                  break;
-            }
-
-            size_t column = _column(errorPosition) > indentation ? _column(errorPosition) - indentation : 0;
-            size_t lineNum = _line(errorPosition);
-            size_t lineLength = std::to_string(lineNum).length();
-
-            std::cerr << _filePath.string() << ":" << lineNum << ":" << _column(errorPosition) << Colors::Red << " error: " << Colors::White << message << "\n";
-            std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
-            std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << "^" << Colors::Reset << "\n";
-            if (isSemicolonError)
-               std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << ";" << Colors::Reset << "\n";
-            std::cerr << "\n";
-         } else {
-            std::cerr << "error: " << message << "\n";
-         }
-         _hasErrors = true;
-      }
+      void _logError(const ExpressionAST* node, const std::string& err, Ty&&... args);
       template <typename... Ty>
       void _logError(const std::string& err, Ty&&... args) {
          _logError(nullptr, err, std::forward<Ty>(args)...);
@@ -135,36 +98,7 @@ namespace tungsten {
          _logWarn(nullptr, warn, std::forward<Ty>(args)...);
       }
       template <typename... Ty>
-      void _logWarn(const ExpressionAST* node, const std::string& warn, Ty&&... args) {
-         const std::string message = std::vformat(warn, std::make_format_args(args...));
-         if (node && node->hasSource() && !_raw.empty()) {
-            const size_t linePosition = node->sourcePosition();
-            const size_t errorPosition = node->sourcePosition();
-
-            const size_t start = _raw.rfind('\n', linePosition) == std::string::npos ? 0 : _raw.rfind('\n', linePosition) + 1;
-            const size_t end = _raw.find('\n', linePosition) == std::string::npos ? _raw.size() : _raw.find('\n', linePosition);
-
-            std::string line = _raw.substr(start, end - start);
-            size_t indentation = 0;
-            for (char c : line) {
-               if (c == ' ' || c == '\t')
-                  ++indentation;
-               else
-                  break;
-            }
-
-            size_t column = _column(errorPosition) > indentation ? _column(errorPosition) - indentation : 0;
-            size_t lineNum = _line(errorPosition);
-            size_t lineLength = std::to_string(lineNum).length();
-
-            std::cerr << _filePath.string() << ":" << lineNum << ":" << _column(errorPosition) << Colors::Yellow << " warning: " << Colors::White << message << "\n";
-            std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
-            std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << "^" << Colors::Reset << "\n";
-            std::cerr << "\n";
-         } else {
-            std::cerr << "warning: " << message << "\n";
-         }
-      }
+      void _logWarn(const ExpressionAST* node, const std::string& warn, Ty&&... args);
 
       _NODISCARD size_t _line(size_t position) const;
       _NODISCARD size_t _column(size_t position) const;
@@ -1249,4 +1183,74 @@ namespace tungsten {
       return false;
    }
 
+   template <typename... Ty>
+   void SemanticAnalyzer::_logError(const ExpressionAST* node, const std::string& err, Ty&&... args) {
+      const std::string message = std::vformat(err, std::make_format_args(args...));
+      if (node && node->hasSource() && !_raw.empty()) {
+         const bool isSemicolonError = message.find("expected ';'") != std::string::npos;
+
+         const size_t linePosition = node->sourcePosition();
+         const size_t errorPosition = isSemicolonError && node->sourceLength() > 0
+             ? node->sourcePosition() + node->sourceLength()
+             : node->sourcePosition();
+
+         const size_t start = _raw.rfind('\n', linePosition) == std::string::npos ? 0 : _raw.rfind('\n', linePosition) + 1;
+         const size_t end = _raw.find('\n', linePosition) == std::string::npos ? _raw.size() : _raw.find('\n', linePosition);
+
+         std::string line = _raw.substr(start, end - start);
+         size_t indentation = 0;
+         for (char c : line) {
+            if (c == ' ' || c == '\t')
+               ++indentation;
+            else
+               break;
+         }
+
+         size_t column = _column(errorPosition) > indentation ? _column(errorPosition) - indentation : 0;
+         size_t lineNum = _line(errorPosition);
+         size_t lineLength = std::to_string(lineNum).length();
+
+         std::cerr << _filePath.string() << ":" << lineNum << ":" << _column(errorPosition) << Colors::Red << " error: " << Colors::White << message << "\n";
+         std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
+         std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << "^" << Colors::Reset << "\n";
+         if (isSemicolonError)
+            std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << ";" << Colors::Reset << "\n";
+         std::cerr << "\n";
+      } else {
+         std::cerr << "error: " << message << "\n";
+      }
+      _hasErrors = true;
+   }
+
+   template <typename... Ty>
+   void SemanticAnalyzer::_logWarn(const ExpressionAST* node, const std::string& warn, Ty&&... args) {
+      const std::string message = std::vformat(warn, std::make_format_args(args...));
+      if (node && node->hasSource() && !_raw.empty()) {
+         const size_t linePosition = node->sourcePosition();
+         const size_t errorPosition = node->sourcePosition();
+
+         const size_t start = _raw.rfind('\n', linePosition) == std::string::npos ? 0 : _raw.rfind('\n', linePosition) + 1;
+         const size_t end = _raw.find('\n', linePosition) == std::string::npos ? _raw.size() : _raw.find('\n', linePosition);
+
+         std::string line = _raw.substr(start, end - start);
+         size_t indentation = 0;
+         for (char c : line) {
+            if (c == ' ' || c == '\t')
+               ++indentation;
+            else
+               break;
+         }
+
+         size_t column = _column(errorPosition) > indentation ? _column(errorPosition) - indentation : 0;
+         size_t lineNum = _line(errorPosition);
+         size_t lineLength = std::to_string(lineNum).length();
+
+         std::cerr << _filePath.string() << ":" << lineNum << ":" << _column(errorPosition) << Colors::Yellow << " warning: " << Colors::White << message << "\n";
+         std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
+         std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << "^" << Colors::Reset << "\n";
+         std::cerr << "\n";
+      } else {
+         std::cerr << "warning: " << message << "\n";
+      }
+   }
 } // namespace tungsten
