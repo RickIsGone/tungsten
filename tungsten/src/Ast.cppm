@@ -70,6 +70,40 @@ namespace tungsten {
 
       return val;
    }
+   llvm::Value* castValueToType(llvm::Value* val, llvm::Type* targetType) {
+      if (!val || !targetType)
+         return val;
+
+      llvm::Type* srcType = val->getType();
+      if (srcType == targetType)
+         return val;
+
+      if (auto* constant = llvm::dyn_cast<llvm::Constant>(val)) {
+         if (srcType->isIntegerTy() && targetType->isFloatingPointTy())
+            return llvm::ConstantExpr::getCast(llvm::Instruction::SIToFP, constant, targetType);
+         if (srcType->isFloatingPointTy() && targetType->isIntegerTy())
+            return llvm::ConstantExpr::getCast(llvm::Instruction::FPToSI, constant, targetType);
+         if (srcType->isIntegerTy() && targetType->isIntegerTy()) {
+            const auto srcBits = srcType->getIntegerBitWidth();
+            const auto dstBits = targetType->getIntegerBitWidth();
+            if (srcBits == dstBits)
+               return constant;
+            const auto op = dstBits > srcBits ? llvm::Instruction::SExt : llvm::Instruction::Trunc;
+            return llvm::ConstantExpr::getCast(op, constant, targetType);
+         }
+         if (srcType->isFloatingPointTy() && targetType->isFloatingPointTy()) {
+            const auto srcBits = srcType->getPrimitiveSizeInBits();
+            const auto dstBits = targetType->getPrimitiveSizeInBits();
+            if (srcBits == dstBits)
+               return constant;
+            const auto op = dstBits > srcBits ? llvm::Instruction::FPExt : llvm::Instruction::FPTrunc;
+            return llvm::ConstantExpr::getCast(op, constant, targetType);
+         }
+         return val;
+      }
+
+      return castToCommonType(val, targetType);
+   }
    llvm::Type* commonNumericType(llvm::Type* leftType, llvm::Type* rightType) {
       if (!leftType || !rightType)
          return leftType ? leftType : rightType;
@@ -269,7 +303,6 @@ export namespace tungsten {
       virtual void visit(class BlockStatementAST&) = 0;
       virtual void visit(class ReturnStatementAST&) = 0;
       virtual void visit(class ExitStatement&) = 0;
-      virtual void visit(class ExternFunctionStatementAST&) = 0;
       virtual void visit(class ExternVariableStatementAST&) = 0;
       virtual void visit(class ImportStatementAST&) = 0;
 
@@ -337,7 +370,6 @@ export namespace tungsten {
       BlockStatement,
       ReturnStatement,
       ExitStatement,
-      ExternFunctionStatement,
       ExternVariableStatement,
       Namespace,
       ImportStatement,
@@ -1161,18 +1193,7 @@ export namespace tungsten {
       std::vector<std::unique_ptr<ExpressionAST>> _args;
    };
 
-   // expression for external function declarations
-   class ExternFunctionStatementAST : public ExpressionAST {
-   public:
-      ExternFunctionStatementAST(std::unique_ptr<FunctionPrototypeAST> fun) : _fun{std::move(fun)} {}
-      llvm::Value* codegen() override;
 
-      void accept(ASTVisitor& v) override { v.visit(*this); }
-      _NODISCARD ASTType astType() const noexcept override { return ASTType::ExternFunctionStatement; }
-
-   private:
-      std::unique_ptr<FunctionPrototypeAST> _fun;
-   };
    class ExternVariableStatementAST : public ExpressionAST {
    public:
       ExternVariableStatementAST(std::unique_ptr<ExpressionAST> var) : _var{std::move(var)} {}
@@ -1654,6 +1675,10 @@ export namespace tungsten {
             if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*"sv)
                initVal = Builder->CreateLoad(type, initVal, "derefl");
 
+            initVal = castValueToType(initVal, type);
+            if (initVal->getType() != type)
+               return LogErrorV("global variable initializer type does not match global variable type");
+
             if (auto* constInit = llvm::dyn_cast<llvm::Constant>(initVal))
                initConstant = constInit;
             else
@@ -1698,6 +1723,17 @@ export namespace tungsten {
             initVal = Builder->CreateLoad(type, initVal, "derefl");
          if (!initVal)
             return nullptr;
+
+         if (initVal->getType()->isPointerTy() && !type->isPointerTy()) {
+            llvm::Type* initValueType = expressionValueTypeForCodegen(_init.get());
+            if (!initValueType)
+               initValueType = type;
+            initVal = Builder->CreateLoad(initValueType, initVal, "init.load");
+         }
+
+         initVal = castValueToType(initVal, type);
+         if (initVal->getType() != type)
+            return LogErrorV("variable initializer type does not match variable type");
 
          Builder->CreateStore(initVal, allocInstance);
       }
@@ -1919,25 +1955,6 @@ export namespace tungsten {
 
    llvm::Value* ExternVariableStatementAST::codegen() {
       return nullptr;
-   }
-   llvm::Value* ExternFunctionStatementAST::codegen() {
-      if (auto* existing = TheModule->getFunction(_fun->name()))
-         return existing;
-
-      std::vector<llvm::Type*> paramTypes;
-      for (const auto& arg : _fun->args()) {
-         paramTypes.push_back(arg->type()->llvmType());
-      }
-
-      llvm::FunctionType* functionType = llvm::FunctionType::get(_fun->type()->llvmType(), paramTypes, false);
-
-      llvm::Function* function = llvm::Function::Create(
-          functionType,
-          llvm::Function::ExternalLinkage,
-          _fun->name(),
-          TheModule.get());
-
-      return function;
    }
 
    llvm::Value* ReturnStatementAST::codegen() {

@@ -43,39 +43,39 @@ namespace tungsten {
       Alias,
 
       // operators
-      Plus,
-      PlusEqual,
-      PlusPlus,
-      Minus,
-      MinusEqual,
-      MinusMinus,
-      Equal,
-      EqualEqual,
-      Multiply,
-      MultiplyEqual,
-      Divide,
-      DivideEqual,
-      ModuleOperator,
-      ModuleEqual,
-      LogicalAnd,
-      BitwiseAnd,
-      AndEqual,
-      LogicalOr,
-      BitwiseOr,
-      OrEqual,
-      BitwiseXor,
-      XorEqual,
-      LogicalNot,
-      NotEqual,
-      Ternary,
-      Greater,
-      GreaterEqual,
-      Less,
-      LessEqual,
-      ShiftLeft,
-      ShiftLeftEqual,
-      ShiftRight,
-      ShiftRightEqual,
+      Plus, // +
+      PlusEqual, // +=
+      PlusPlus, // ++
+      Minus, // --
+      MinusEqual, // -=
+      MinusMinus, // --
+      Equal, // =
+      EqualEqual, // ==
+      Multiply, // *
+      MultiplyEqual, // *=
+      Divide, // /
+      DivideEqual, // /=
+      ModuleOperator, // %
+      ModuleEqual, // %=
+      LogicalAnd, // &&
+      BitwiseAnd, // &
+      AndEqual, // &=
+      LogicalOr, // ||
+      BitwiseOr, // |
+      OrEqual, // |=
+      BitwiseXor, // ^
+      XorEqual, // ^=
+      LogicalNot, // !
+      NotEqual, // !=
+      Ternary, // ?
+      Greater, // >
+      GreaterEqual, // >=
+      Less, // <
+      LessEqual, // <=
+      ShiftLeft, // <<
+      ShiftLeftEqual, // <<=
+      ShiftRight, // >>
+      ShiftRightEqual, // >>=
 
       // types
       ArgPack,
@@ -114,18 +114,19 @@ namespace tungsten {
       CodeSuccess,
       CodeFailure,
 
-      OpenParen,
-      CloseParen,
-      OpenBrace,
-      CloseBrace,
-      OpenBracket,
-      CloseBracket,
+      OpenParen, // (
+      CloseParen, // )
+      OpenBrace, // {
+      CloseBrace, // }
+      OpenBracket, // [
+      CloseBracket, // ]
 
-      Semicolon,
-      Dot,
-      Arrow,
-      Comma,
-      Colon,
+      Semicolon, // ;
+      Dot, // .
+      Arrow, // ->
+      Comma, // ,
+      Colon, // :
+      DoubleColon, // ::
 
       // core functions
       __BuiltinFunction,

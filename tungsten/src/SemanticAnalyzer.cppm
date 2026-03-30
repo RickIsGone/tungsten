@@ -73,7 +73,6 @@ namespace tungsten {
       void visit(BlockStatementAST&) override;
       void visit(ReturnStatementAST&) override;
       void visit(ExitStatement&) override;
-      void visit(ExternFunctionStatementAST&) override;
       void visit(ExternVariableStatementAST&) override {}
       void visit(ImportStatementAST&) override {}
 
@@ -145,10 +144,14 @@ namespace tungsten {
             _hasErrors = true;
       }
       for (auto& fun : _externs->functions) {
+         _scopes.push_back({}); // creating a new scope for the arguments declaration
+         ++_currentScope;
          if (fun)
             fun->accept(*this);
          else
             _hasErrors = true;
+         _scopes.pop_back();
+         --_currentScope;
       }
       for (auto& var : _globalVariables) {
          if (var)
@@ -234,6 +237,9 @@ namespace tungsten {
 
       if (var.initializer()) {
          var.initializer()->accept(*this);
+
+         if (var.initializer()->astType() == ASTType::NumberExpression && _isNumberType(var.type()->string()))
+            static_cast<NumberExpressionAST*>(var.initializer().get())->setType(var.type());
 
          if (var.type()->kind() == TypeKind::Reference) {
             auto* refType = static_cast<ReferenceTy*>(var.type().get());
@@ -485,9 +491,6 @@ namespace tungsten {
       --_currentScope;
    }
 
-   void SemanticAnalyzer::visit(ExternFunctionStatementAST& fun) {
-      fun.accept(*this);
-   }
    // void SemanticAnalyzer::visit(ExternVariableStatementAST& fun) {
    // }
 

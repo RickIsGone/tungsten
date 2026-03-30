@@ -97,6 +97,8 @@ namespace tungsten {
       size_t _line(const Token& token);
       std::string _file();
       std::string _function();
+      std::string _parseQualifiedName();
+      std::string _parseIdentifierName(bool allowQualified = false);
       int _getPrecedence(TokenType type);
       template <typename Ty = ExpressionAST>
       std::unique_ptr<Ty> _logError(const std::string& str);
@@ -108,7 +110,7 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parseIdentifierExpression();
       std::unique_ptr<ExpressionAST> _parseIndexAccessExpression(std::unique_ptr<ExpressionAST> lhs);
       std::unique_ptr<ExpressionAST> _parseStringExpression();
-      std::unique_ptr<ExpressionAST> _parseFunctionCall();
+      std::unique_ptr<ExpressionAST> _parseFunctionCall(const std::string& identifier, const Token& token);
       std::unique_ptr<FunctionPrototypeAST> _parseExternFunctionStatement();
       // std::unique_ptr<ExpressionAST> _parseExternVariableStatement();
       std::unique_ptr<ExpressionAST> _parseReturnStatement();
@@ -227,6 +229,34 @@ namespace tungsten {
    std::string Parser::_function() {
       return _currentFunctionName;
    }
+   std::string Parser::_parseQualifiedName() {
+      if (_peek().type != TokenType::Identifier)
+         return "";
+
+      std::string name = _lexeme(_peek());
+      _consume(); // consume first identifier
+
+      while (_peek().type == TokenType::DoubleColon) {
+         _consume(); // consume '::'
+         if (_peek().type != TokenType::Identifier)
+            return "";
+         name += "::" + _lexeme(_peek());
+         _consume(); // consume next identifier
+      }
+
+      return name;
+   }
+   std::string Parser::_parseIdentifierName(bool allowQualified) {
+      if (allowQualified)
+         return _parseQualifiedName();
+
+      if (_peek().type != TokenType::Identifier)
+         return "";
+
+      std::string name = _lexeme(_peek());
+      _consume(); // consume identifier
+      return name;
+   }
 
    int Parser::_getPrecedence(TokenType type) {
       if (operatorPrecedence.contains(type))
@@ -334,8 +364,8 @@ namespace tungsten {
       std::string name = _lexeme(_peek());
       _consume(); // consume identifier
 
-      while (_peek().type == TokenType::Colon && _peek(1).type == TokenType::Colon) {
-         _consume(2); // consume ::
+      while (_peek().type == TokenType::DoubleColon) {
+         _consume(); // consume ::
          if (_peek().type != TokenType::Identifier) {
             _logError("expected a namespace name after '" + name + "::'");
             return;
@@ -561,8 +591,16 @@ namespace tungsten {
 
    std::unique_ptr<ExpressionAST> Parser::_parseIdentifierExpression() {
       const Token token = _peek();
-      std::string identifier = _lexeme(_peek());
-      _consume();
+      std::string identifier = _parseQualifiedName();
+      if (identifier.empty()) {
+         if (_peekBack().type == TokenType::DoubleColon)
+            return _logError("expected an identifier after '::' in qualified name but got: '" + _lexeme(_peek()) + "'");
+         return _logError("expected an identifier in qualified name but got: '" + _lexeme(_peek()) + "'");
+      }
+
+      if (_peek().type == TokenType::OpenParen)
+         return _parseFunctionCall(identifier, token);
+
       if (_peek().type == TokenType::OpenBracket)
          return _parseIndexAccessExpression(_setSource(std::make_unique<VariableExpressionAST>(identifier), token));
 
@@ -668,10 +706,7 @@ namespace tungsten {
       return _setSource(std::make_unique<StringExpression>(result), token);
    }
 
-   std::unique_ptr<ExpressionAST> Parser::_parseFunctionCall() {
-      const Token token = _peek();
-      std::string identifier = _lexeme(_peek());
-      _consume(); // consume identifier
+   std::unique_ptr<ExpressionAST> Parser::_parseFunctionCall(const std::string& identifier, const Token& token) {
       _consume(); // consume (
       std::vector<std::unique_ptr<ExpressionAST>> args;
       while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile) {
@@ -687,11 +722,10 @@ namespace tungsten {
          return _logError("expected ')' after function call");
       _consume(); // consume )
 
-      // utils::debugLog("function call: '{}', args number: {}", identifier, args.size());
-      // if (!_symbolTable.contains(identifier))
-      //    return _logError("unknown function: '" + identifier + "'");
-
-      return _setSource(std::make_unique<CallExpressionAST>(identifier, std::move(args)), token);
+      auto call = _setSource(std::make_unique<CallExpressionAST>(identifier, std::move(args)), token);
+      if (_peek().type == TokenType::OpenBracket)
+         return _parseIndexAccessExpression(std::move(call));
+      return call;
    }
 
    std::unique_ptr<FunctionPrototypeAST> Parser::_parseExternFunctionStatement() {
@@ -775,8 +809,6 @@ namespace tungsten {
          case TokenType::Identifier:
             if (_symbolTable.contains(_lexeme(_peek())) && _symbolTable.at(_lexeme(_peek())) == SymbolType::Class)
                return _parseVariableDeclaration();
-            if (_peek(1).type == TokenType::OpenParen)
-               return _parseFunctionCall();
             return _parseIdentifierExpression();
 
          case TokenType::IntLiteral:
@@ -1121,11 +1153,17 @@ namespace tungsten {
       const Token token = _peek();
       std::shared_ptr<Type> type = _parseType();
 
-      if (_peek().type != TokenType::Identifier)
+      std::string name = _parseIdentifierName(global);
+      if (name.empty()) {
+         if (global && _peekBack().type == TokenType::DoubleColon)
+            return _logError("expected an identifier after '::' in qualified name but got: '" + _lexeme(_peek()) + "'");
+         if (global)
+            return _logError("expected an identifier in qualified name but got: '" + _lexeme(_peek()) + "'");
          return _logError("expected an identifier after type in variable declaration but got: '" + _lexeme(_peek()) + "'");
+      }
 
-      std::string name = _lexeme(_peek());
-      _consume(); // consume identifier
+      if (!global && name.find("::") != std::string::npos)
+         return _logError("namespace-qualified variable declarations are only allowed outside functions");
 
       std::unique_ptr<ExpressionAST> initExpr = nullptr;
 
@@ -1146,7 +1184,7 @@ namespace tungsten {
 
       // utils::debugLog("definition of variable '{}' with type '{}'", name, type);
 
-      return _setSource(std::make_unique<VariableDeclarationAST>(type, _namespacePrefix + name, std::move(initExpr), global), token);
+      return _setSource(std::make_unique<VariableDeclarationAST>(type, global ? _namespacePrefix + name : name, std::move(initExpr), global), token);
    }
 
    std::unique_ptr<FunctionAST> Parser::_parseFunctionDeclaration() {
@@ -1233,10 +1271,12 @@ namespace tungsten {
    std::unique_ptr<FunctionPrototypeAST> Parser::_parseFunctionPrototype() {
       _consume(); // consume 'fun'
 
-      if (_peek().type != TokenType::Identifier)
+      std::string name = _parseQualifiedName();
+      if (name.empty()) {
+         if (_peekBack().type == TokenType::DoubleColon)
+            return _logError<FunctionPrototypeAST>("expected an identifier after '::' in qualified name but got: '" + _lexeme(_peek()) + "'");
          return _logError<FunctionPrototypeAST>("expected an identifier after fun in function declaration but got: '" + _lexeme(_peek()) + "'");
-      std::string name = _lexeme(_peek());
-      _consume(); // consume identifier
+      }
 
       std::vector<std::unique_ptr<ExpressionAST>> args;
 

@@ -166,8 +166,6 @@ namespace tungsten {
             return token.length() == 1 ? Dot : Invalid;
          case ',':
             return token.length() == 1 ? Comma : Invalid;
-         case ':':
-            return token.length() == 1 ? Colon : Invalid;
 
          case '(':
             return token.length() == 1 ? OpenParen : Invalid;
@@ -184,6 +182,13 @@ namespace tungsten {
          case '?':
             return token.length() == 1 ? Ternary : Invalid;
 
+         case ':':
+            if (token.length() > 1) {
+               if (token[1] == ':')
+                  return DoubleColon;
+               return Invalid;
+            }
+            return Colon;
          case '>':
             if (token.length() > 1) {
                if (token[1] == '=')
