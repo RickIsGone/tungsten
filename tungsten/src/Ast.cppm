@@ -175,81 +175,6 @@ namespace tungsten {
 
       return nullptr;
    }
-   std::string mapLLVMTypeToCustomType(llvm::Type* type) {
-      if (type->isIntegerTy()) {
-         unsigned bits = type->getIntegerBitWidth();
-         switch (bits) {
-            case 1:
-               return "bool";
-            case 8:
-               return "i8";
-            case 16:
-               return "i16";
-            case 32:
-               return "i32";
-            case 64:
-               return "i64";
-            case 128:
-               return "i128";
-            default:
-               return "i" + std::to_string(bits); // fallback
-         }
-      }
-
-      if (type->isFloatingPointTy()) {
-         if (type->isFloatTy()) return "float";
-         if (type->isDoubleTy()) return "double";
-         return "FloatN";
-      }
-
-      if (type->isVoidTy()) {
-         return "void";
-      }
-
-      if (type->isPointerTy()) { // TODO: fix infinite recursive calling
-         llvm::Type* pointee = type->getPointerTo();
-         if (pointee->isIntegerTy(8)) {
-            return "String";
-         }
-
-         if (pointee->isIntegerTy(8)) {
-            return "char";
-         }
-
-         if (pointee->isStructTy()) { // classes
-            llvm::StructType* structTy = llvm::cast<llvm::StructType>(pointee);
-            if (structTy->hasName()) {
-               llvm::StringRef name = structTy->getName();
-               if (name.starts_with("class.")) {
-                  return name.substr(6).str();
-               }
-               return name.str();
-            }
-            return "AnonymousClass";
-         }
-
-         return "Ptr<" + mapLLVMTypeToCustomType(pointee) + ">";
-      }
-
-
-      if (type->isStructTy()) {
-         llvm::StructType* structTy = llvm::cast<llvm::StructType>(type);
-         if (structTy->hasName()) {
-            llvm::StringRef name = structTy->getName();
-            if (name.starts_with("class.")) {
-               return name.substr(6).str();
-            }
-            return name.str();
-         }
-         return "AnonymousStruct";
-      }
-
-      return "UnknownType";
-   }
-
-   std::string getTypeString(llvm::Value* val) {
-      return mapLLVMTypeToCustomType(val->getType());
-   }
 
 } // namespace tungsten
 
@@ -320,7 +245,6 @@ export namespace tungsten {
       Void,
       Char,
       Bool,
-      String,
       Int8,
       Int16,
       Int32,
@@ -464,18 +388,6 @@ export namespace tungsten {
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return Builder->getInt1Ty();
-      }
-   };
-
-   class String : public Type {
-      _NODISCARD TypeKind kind() const noexcept override {
-         return TypeKind::String;
-      }
-      _NODISCARD const std::string string() const override {
-         return "String";
-      }
-      _NODISCARD llvm::Type* llvmType() const override {
-         return Builder->getPtrTy();
       }
    };
 
@@ -722,7 +634,7 @@ export namespace tungsten {
    inline std::shared_ptr<Type> makeVoid() { return std::make_shared<Void>(); }
    inline std::shared_ptr<Type> makeBool() { return std::make_shared<Bool>(); }
    inline std::shared_ptr<Type> makeChar() { return std::make_shared<Char>(); }
-   inline std::shared_ptr<Type> makeString() { return std::make_shared<String>(); }
+   inline std::shared_ptr<Type> makeString() { return std::make_shared<PointerTy>(makeChar()); }
    inline std::shared_ptr<Type> makeInt8() { return std::make_shared<Int8>(); }
    inline std::shared_ptr<Type> makeInt16() { return std::make_shared<Int16>(); }
    inline std::shared_ptr<Type> makeInt32() { return std::make_shared<Int32>(); }
@@ -906,46 +818,66 @@ export namespace tungsten {
 
    class TypeOfStatementAST : public ExpressionAST {
    public:
-      TypeOfStatementAST(std::unique_ptr<ExpressionAST> variable) : _variable{std::move(variable)} { _Type = makeString(); }
+      TypeOfStatementAST(std::unique_ptr<ExpressionAST> statement) : _statement{std::move(statement)} { _Type = makeString(); }
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::TypeOfStatement; }
 
-      _NODISCARD const std::unique_ptr<ExpressionAST>& variable() const { return _variable; }
+      _NODISCARD const std::unique_ptr<ExpressionAST>& statement() const { return _statement; }
 
    private:
-      std::unique_ptr<ExpressionAST> _variable;
+      std::unique_ptr<ExpressionAST> _statement;
    };
 
    class NameOfStatementAST : public ExpressionAST {
    public:
-      NameOfStatementAST(std::unique_ptr<ExpressionAST> variable) : _variable{std::move(variable)} { _Type = makeString(); }
+      NameOfStatementAST(std::unique_ptr<ExpressionAST> statement) : _statement{std::move(statement)} { _Type = makeString(); }
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::NameOfStatement; }
 
-      _NODISCARD const std::unique_ptr<ExpressionAST>& variable() const { return _variable; }
+      _NODISCARD const std::unique_ptr<ExpressionAST>& statement() const { return _statement; }
 
    private:
-      std::unique_ptr<ExpressionAST> _variable;
+      std::unique_ptr<ExpressionAST> _statement;
    };
 
    class SizeOfStatementAST : public ExpressionAST {
    public:
-      SizeOfStatementAST(std::unique_ptr<ExpressionAST> variable) : _variable{std::move(variable)} {}
+      SizeOfStatementAST(std::unique_ptr<ExpressionAST> statement)
+          : _argument{std::move(statement)} {}
+      SizeOfStatementAST(std::shared_ptr<Type> targetType)
+          : _argument{std::move(targetType)} {}
       llvm::Value* codegen() override;
 
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::SizeOfStatement; }
 
-      _NODISCARD const std::unique_ptr<ExpressionAST>& variable() const { return _variable; }
+      _NODISCARD ExpressionAST* statement() {
+         if (!std::holds_alternative<std::unique_ptr<ExpressionAST>>(_argument))
+            return nullptr;
+         return std::get<std::unique_ptr<ExpressionAST>>(_argument).get();
+      }
+      _NODISCARD const ExpressionAST* statement() const {
+         if (!std::holds_alternative<std::unique_ptr<ExpressionAST>>(_argument))
+            return nullptr;
+         return std::get<std::unique_ptr<ExpressionAST>>(_argument).get();
+      }
+      _NODISCARD bool hasExplicitType() const {
+         return std::holds_alternative<std::shared_ptr<Type>>(_argument) && static_cast<bool>(std::get<std::shared_ptr<Type>>(_argument));
+      }
+      _NODISCARD std::shared_ptr<Type> explicitType() const {
+         if (!std::holds_alternative<std::shared_ptr<Type>>(_argument))
+            return nullptr;
+         return std::get<std::shared_ptr<Type>>(_argument);
+      }
 
    private:
-      std::unique_ptr<ExpressionAST> _variable;
+      std::variant<std::unique_ptr<ExpressionAST>, std::shared_ptr<Type>> _argument;
    };
 
    class __BuiltinFunctionAST : public ExpressionAST {
@@ -1019,6 +951,7 @@ export namespace tungsten {
       void accept(ASTVisitor& v) override { v.visit(*this); }
       void setType(std::shared_ptr<Type> type) { _Type = type; }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::ConstCast; }
+      _NODISCARD const std::unique_ptr<ExpressionAST>& value() const { return _value; }
 
    private:
       std::unique_ptr<ExpressionAST> _value;
@@ -1475,6 +1408,83 @@ export namespace tungsten {
 
       return valueTypeForCodegen(expr->type());
    }
+   bool tryBuildNameOfExpression(ExpressionAST* expr, std::string& outName) {
+      if (!expr)
+         return false;
+
+      switch (expr->astType()) {
+         case ASTType::VariableExpression:
+            outName = static_cast<VariableExpressionAST*>(expr)->name();
+            return true;
+         case ASTType::NumberExpression: {
+            auto value = static_cast<NumberExpressionAST*>(expr)->value();
+            if (std::holds_alternative<uint64_t>(value)) {
+               outName = std::to_string(std::get<uint64_t>(value));
+               return true;
+            }
+            outName = std::to_string(std::get<double>(value));
+            return true;
+         }
+         case ASTType::StringExpression:
+            outName = "\"" + static_cast<StringExpression*>(expr)->value() + "\"";
+            return true;
+         case ASTType::NullPtr:
+            outName = "nullptr";
+            return true;
+         case ASTType::CallExpression: {
+            auto* call = static_cast<CallExpressionAST*>(expr);
+            if (call->callee().empty())
+               return false;
+
+            outName = call->callee() + "(";
+            auto& args = call->args();
+            for (size_t i = 0; i < args.size(); ++i) {
+               std::string argName;
+               if (!tryBuildNameOfExpression(args[i].get(), argName))
+                  return false;
+               if (i != 0)
+                  outName += ",";
+               outName += argName;
+            }
+            outName += ")";
+            return true;
+         }
+         case ASTType::IndexAccessExpression: {
+            auto* index = static_cast<IndexAccessAST*>(expr);
+            std::string baseName;
+            if (!tryBuildNameOfExpression(index->array().get(), baseName))
+               return false;
+            std::string indexName;
+            if (!tryBuildNameOfExpression(index->index().get(), indexName))
+               return false;
+            outName = baseName + "[" + indexName + "]";
+            return true;
+         }
+         case ASTType::UnaryExpression: {
+            auto* unary = static_cast<UnaryExpressionAST*>(expr);
+            std::string operandName;
+            if (!tryBuildNameOfExpression(unary->operand().get(), operandName))
+               return false;
+            outName = unary->op() + operandName;
+            return true;
+         }
+         case ASTType::BinaryExpression: {
+            auto* binary = static_cast<BinaryExpressionAST*>(expr);
+            std::string lhsName;
+            std::string rhsName;
+            if (!tryBuildNameOfExpression(binary->LHS().get(), lhsName) || !tryBuildNameOfExpression(binary->RHS().get(), rhsName))
+               return false;
+            outName = lhsName + binary->op() + rhsName;
+            return true;
+         }
+         case ASTType::StaticCast:
+            return tryBuildNameOfExpression(static_cast<StaticCastAST*>(expr)->value().get(), outName);
+         case ASTType::ConstCast:
+            return tryBuildNameOfExpression(static_cast<ConstCastAST*>(expr)->value().get(), outName);
+         default:
+            return false;
+      }
+   }
    llvm::Value* BinaryExpressionAST::codegen() {
       llvm::Value* LHS = _LHS->codegen();
       llvm::Value* RHS = _RHS->codegen();
@@ -1488,7 +1498,7 @@ export namespace tungsten {
       const bool isAssignmentOp = (_op == "="sv || _op == "+="sv || _op == "-="sv || _op == "*="sv || _op == "/="sv || _op == "%="sv || _op == "|="sv || _op == "&="sv || _op == "^="sv || _op == "<<="sv || _op == ">>="sv);
 
       if (isAssignmentOp) {
-         if (_LHS->type()->kind() == TypeKind::String) {
+         if (_LHS->type()->kind() == TypeKind::Pointer) {
             Builder->CreateStore(RHS, LHS);
             return RHS;
          }
@@ -1547,7 +1557,7 @@ export namespace tungsten {
 
             loadedR = loadIfPointer(RHS, rhsValueType, "rval");
             if (_RHS->astType() == ASTType::IndexAccessExpression &&
-                (_RHS->type()->kind() == TypeKind::Pointer || _RHS->type()->kind() == TypeKind::String))
+                _RHS->type()->kind() == TypeKind::Pointer)
                loadedR = RHS;
 
             loadedR = castToCommonType(loadedR, lhsValueType);
@@ -1587,7 +1597,7 @@ export namespace tungsten {
       llvm::Value* loadedR = loadIfPointer(RHS, rhsValueType, "rval");
 
       if (_RHS->astType() == ASTType::IndexAccessExpression &&
-          (_RHS->type()->kind() == TypeKind::Pointer || _RHS->type()->kind() == TypeKind::String))
+          _RHS->type()->kind() == TypeKind::Pointer)
          loadedR = RHS;
 
       loadedR = castToCommonType(loadedR, lhsValueType);
@@ -1779,7 +1789,7 @@ export namespace tungsten {
          llvm::Type* gepType = ptrTy->pointee()->llvmType();
          llvm::Value* elementPtr = Builder->CreateGEP(gepType, arrayPtr, indexVal, "elementptr");
 
-         if (ptrTy->pointee()->kind() == TypeKind::Pointer || ptrTy->pointee()->kind() == TypeKind::String)
+         if (ptrTy->pointee()->kind() == TypeKind::Pointer)
             elementPtr = Builder->CreateLoad(gepType, elementPtr, "element");
 
          return elementPtr;
@@ -1812,6 +1822,14 @@ export namespace tungsten {
          if (!argVal)
             return nullptr;
 
+         if (arg->astType() == ASTType::VariableExpression &&
+             argVal->getType()->isPointerTy() &&
+             arg->type()->kind() != TypeKind::Array) {
+            llvm::Type* loadedType = expressionValueTypeForCodegen(arg.get());
+            if (loadedType)
+               argVal = Builder->CreateLoad(loadedType, argVal, "arg.varload");
+         }
+
          llvm::Type* expectedParamType = nullptr;
          if (callee && i < callee->arg_size())
             expectedParamType = callee->getFunctionType()->getParamType(static_cast<unsigned>(i));
@@ -1821,7 +1839,6 @@ export namespace tungsten {
          } else if (argVal->getType()->isPointerTy() && !expectedParamType &&
                     arg->type()->kind() != TypeKind::Pointer &&
                     arg->type()->kind() != TypeKind::Reference &&
-                    arg->type()->kind() != TypeKind::String &&
                     arg->type()->kind() != TypeKind::Array) {
             argVal = Builder->CreateLoad(expressionValueTypeForCodegen(arg.get()), argVal, "arg.load");
          }
@@ -1835,13 +1852,18 @@ export namespace tungsten {
    }
 
    llvm::Value* TypeOfStatementAST::codegen() {
-      return Builder->CreateGlobalStringPtr(fullTypeString(_variable->type()));
+      return Builder->CreateGlobalStringPtr(fullTypeString(_statement->type()));
    }
    llvm::Value* NameOfStatementAST::codegen() {
-      return Builder->CreateGlobalStringPtr(static_cast<VariableExpressionAST*>(_variable.get())->name());
+      std::string name;
+      if (!tryBuildNameOfExpression(_statement.get(), name))
+         return LogErrorV("cannot use 'nameof' on expression without a stable name");
+      return Builder->CreateGlobalStringPtr(name);
    }
    llvm::Value* SizeOfStatementAST::codegen() {
-      return Builder->getInt64(_variable->type()->size());
+      if (hasExplicitType())
+         return Builder->getInt64(explicitType()->size());
+      return Builder->getInt64(statement()->type()->size());
    }
 
    llvm::Value* __BuiltinFunctionAST::codegen() {

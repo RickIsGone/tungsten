@@ -25,6 +25,7 @@ namespace tungsten {
       Class,
       NoType
    };
+
    std::unordered_map<TokenType, int> operatorPrecedence = {
        {TokenType::LogicalOr, 15}, // ||
        {TokenType::LogicalAnd, 14}, // &&
@@ -991,6 +992,48 @@ namespace tungsten {
       if (_peek().type != TokenType::OpenParen)
          return _logError("expected '(' after 'nameof'");
       _consume(); // consume '('
+
+      bool canStartType = false;
+      switch (_peek().type) {
+         case TokenType::Void:
+         case TokenType::Char:
+         case TokenType::Bool:
+         case TokenType::String:
+         case TokenType::Int:
+         case TokenType::Int8:
+         case TokenType::Int16:
+         case TokenType::Int32:
+         case TokenType::Int64:
+         case TokenType::Int128:
+         case TokenType::Uint:
+         case TokenType::Uint8:
+         case TokenType::Uint16:
+         case TokenType::Uint32:
+         case TokenType::Uint64:
+         case TokenType::Uint128:
+         case TokenType::Float:
+         case TokenType::Float32:
+         case TokenType::Float64:
+         case TokenType::Double:
+            canStartType = true;
+            break;
+         case TokenType::Identifier:
+            canStartType = _symbolTable.contains(_lexeme(_peek())) && _symbolTable.at(_lexeme(_peek())) == SymbolType::Class;
+            break;
+         default:
+            break;
+      }
+
+      if (canStartType) {
+         const size_t previousIndex = _index;
+         std::shared_ptr<Type> type = _parseType();
+         if (type && _peek().type == TokenType::CloseParen) {
+            _consume(); // consume ')'
+            return _setSource(std::make_unique<SizeOfStatementAST>(type), token);
+         }
+         _index = previousIndex;
+      }
+
       auto expr = _parseExpression();
       if (!expr)
          return nullptr; // error already logged
@@ -1285,12 +1328,19 @@ namespace tungsten {
       _consume(); // consume '('
 
       while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile) {
+         const size_t argStart = _index;
          auto arg = _parseArgument();
-         if (arg)
-            args.push_back(std::move(arg));
+         if (!arg) {
+            if (_index == argStart)
+               return _logError<FunctionPrototypeAST>("invalid function argument near '" + _lexeme(_peek()) + "'");
+            continue;
+         }
+         args.push_back(std::move(arg));
          // utils::debugLog("argument {}: {}", args.size(), _lexeme(tok));
          if (_peek().type == TokenType::Comma)
             _consume(); // consume ,
+         else if (_peek().type != TokenType::CloseParen)
+            return _logError<FunctionPrototypeAST>("expected ',' or ')' after function argument but got: '" + _lexeme(_peek()) + "'");
       }
       if (_peek().type == TokenType::EndOFFile)
          return _logError<FunctionPrototypeAST>("expected ')'");

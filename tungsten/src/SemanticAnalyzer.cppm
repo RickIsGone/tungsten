@@ -271,23 +271,38 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(NameOfStatementAST& var) {
-      var.variable()->accept(*this);
-      if (var.variable()->astType() != ASTType::VariableExpression)
-         return _logError(&var, "cannot use 'nameof' on non-variable expression");
-   }
-   void SemanticAnalyzer::visit(SizeOfStatementAST& var) {
-      var.variable()->accept(*this);
-      switch (var.variable()->astType()) {
+      var.statement()->accept(*this);
+
+      switch (var.statement()->astType()) {
          case ASTType::VariableExpression:
          case ASTType::IndexAccessExpression:
+         case ASTType::CallExpression:
             break;
          case ASTType::UnaryExpression:
-            if (static_cast<UnaryExpressionAST*>(var.variable().get())->op() == "*"sv)
+            if (static_cast<UnaryExpressionAST*>(var.statement().get())->op() == "*"sv)
                break;
             [[fallthrough]];
+         case ASTType::StaticCast:
+         case ASTType::ConstCast:
+            break;
          default:
-            return _logError(&var, "cannot use 'sizeof' on non-variable expressions");
+            return _logError(&var, "cannot use 'nameof' on expression without a name");
       }
+   }
+   void SemanticAnalyzer::visit(SizeOfStatementAST& var) {
+      if (var.hasExplicitType()) {
+         if (!var.explicitType())
+            return _logError(&var, "cannot use 'sizeof' on invalid type");
+         var.setType(makeUint64());
+         return;
+      }
+
+      if (!var.statement())
+         return _logError(&var, "cannot use 'sizeof' without a valid argument");
+
+      var.statement()->accept(*this);
+      if (!var.statement()->type())
+         return _logError(&var, "cannot use 'sizeof' on expression without a type");
       var.setType(makeUint64());
    }
    void SemanticAnalyzer::visit(StaticCastAST& cast) {
@@ -298,14 +313,9 @@ namespace tungsten {
          return _logError(&cast, "cannot cast from type '{}' to '{}'", fullTypeString(cast.value()->type()), fullTypeString(cast.type()));
    }
    void SemanticAnalyzer::visit(TypeOfStatementAST& var) {
-      var.variable()->accept(*this);
-      switch (var.variable()->astType()) {
-         case ASTType::VariableExpression:
-         case ASTType::IndexAccessExpression:
-            break;
-         default:
-            return _logError(&var, "cannot use 'typeof' on non-variable expressions");
-      }
+      var.statement()->accept(*this);
+      if (!var.statement()->type())
+         return _logError(&var, "cannot use 'typeof' on expression without a type");
    }
 
    void SemanticAnalyzer::visit(NumberExpressionAST& num) {
@@ -356,7 +366,7 @@ namespace tungsten {
          if (!_isNumberType(fullTypeString(binop.LHS()->type())) || !_isNumberType(fullTypeString(binop.RHS()->type()))) {
             if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type()))
                return _logError(&binop, "type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
-            if (fullTypeString(binop.LHS()->type()) == "String"sv)
+            if (fullTypeString(binop.LHS()->type()) == "char*"sv)
                return _logError(&binop, "cannot do comparison between strings with operator '{}'", binop.op());
          }
          binop.setType(makeBool());
@@ -380,7 +390,7 @@ namespace tungsten {
          if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type()))
             return _logError(&binop, "type mismatch: cannot operate '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
 
-         if (fullTypeString(binop.LHS()->type()) == "String"sv && binop.op() != "=")
+         if (fullTypeString(binop.LHS()->type()) == "char*"sv && binop.op() != "=")
             return _logError(&binop, "strings can only be assigned, not operated on with '{}'", binop.op());
       }
 
@@ -615,6 +625,34 @@ namespace tungsten {
             overloads.push_back(over);
          }
       }
+
+      auto sameOverload = [](const Overload& lhs, const Overload& rhs) {
+         if (fullTypeString(lhs.type) != fullTypeString(rhs.type))
+            return false;
+         if (lhs.args.size() != rhs.args.size())
+            return false;
+         for (size_t i = 0; i < lhs.args.size(); ++i) {
+            if (fullTypeString(lhs.args[i]) != fullTypeString(rhs.args[i]))
+               return false;
+         }
+         return true;
+      };
+
+      std::vector<Overload> uniqueOverloads;
+      uniqueOverloads.reserve(overloads.size());
+      for (const auto& over : overloads) {
+         bool alreadyPresent = false;
+         for (const auto& existing : uniqueOverloads) {
+            if (sameOverload(existing, over)) {
+               alreadyPresent = true;
+               break;
+            }
+         }
+         if (!alreadyPresent)
+            uniqueOverloads.push_back(over);
+      }
+      overloads = std::move(uniqueOverloads);
+
       if (overloads.empty()) {
          call.setType(makeNullType()); // temporary fix (if I don't fucking forget to fix it *again*)
          return _logError(&call, "unknown function '{}'", call.callee());
@@ -624,87 +662,149 @@ namespace tungsten {
          arg->accept(*this);
       }
 
-      bool valid = false;
-      for (auto& overload : overloads) {
-         auto argsMatch = [&](const std::shared_ptr<Type>& expected, const std::shared_ptr<Type>& actual) {
-            if (fullTypeString(expected) == fullTypeString(actual))
-               return true;
+      struct OverloadCandidate {
+         size_t index{};
+         int score{};
+         bool valid{};
+         size_t fixedArgs{};
+         bool variadic{};
+         std::vector<std::shared_ptr<Type>> castTargets;
+         std::vector<bool> applyDecay;
+      };
 
-            if (expected->kind() == TypeKind::Pointer && actual->kind() == TypeKind::Array) {
-               auto* expectedPtr = static_cast<PointerTy*>(expected.get());
-               auto* actualArray = static_cast<ArrayTy*>(actual.get());
-               return fullTypeString(expectedPtr->pointee()) == fullTypeString(actualArray->arrayType());
+      auto scoreArgument = [&](const std::shared_ptr<Type>& expected,
+                               const std::shared_ptr<Type>& actual,
+                               std::shared_ptr<Type>& castTarget,
+                               bool& decay) -> int {
+         castTarget = nullptr;
+         decay = false;
+
+         if (fullTypeString(expected) == fullTypeString(actual))
+            return 0;
+
+         if (expected->kind() == TypeKind::Pointer && actual->kind() == TypeKind::Array) {
+            auto* expectedPtr = static_cast<PointerTy*>(expected.get());
+            auto* actualArray = static_cast<ArrayTy*>(actual.get());
+            if (fullTypeString(expectedPtr->pointee()) == fullTypeString(actualArray->arrayType())) {
+               decay = true;
+               return 1;
             }
+         }
 
-            if (expected->kind() != TypeKind::Reference)
-               return false;
 
+         if (expected->kind() == TypeKind::Reference) {
             auto* expectedRef = static_cast<ReferenceTy*>(expected.get());
             const std::string expectedUnderlying = fullTypeString(expectedRef->reference());
 
             if (actual->kind() == TypeKind::Pointer) {
                auto* actualPtr = static_cast<PointerTy*>(actual.get());
-               return fullTypeString(actualPtr->pointee()) == expectedUnderlying;
+               if (fullTypeString(actualPtr->pointee()) == expectedUnderlying)
+                  return 0;
             }
 
             if (actual->kind() == TypeKind::Reference) {
                auto* actualRef = static_cast<ReferenceTy*>(actual.get());
-               return fullTypeString(actualRef->reference()) == expectedUnderlying;
-            }
-
-            return false;
-         };
-
-         auto applyCallDecay = [&](size_t count) {
-            for (size_t i = 0; i < count; ++i) {
-               if (i >= call.args().size() || i >= overload.args.size())
-                  break;
-
-               auto& actual = call.args()[i]->type();
-               auto& expected = overload.args[i];
-
-               if (expected->kind() == TypeKind::Pointer && actual->kind() == TypeKind::Array) {
-                  auto* expectedPtr = static_cast<PointerTy*>(expected.get());
-                  auto* actualArray = static_cast<ArrayTy*>(actual.get());
-                  if (fullTypeString(expectedPtr->pointee()) == fullTypeString(actualArray->arrayType()))
-                     actual = makePointer(actualArray->arrayType());
-               }
-            }
-         };
-
-         // Check if function has variadic arguments (ArgPack)
-         if (!overload.args.empty() && overload.args.back()->kind() == TypeKind::ArgPack && call.args().size() >= overload.args.size() - 1) {
-            bool match = true;
-            for (size_t i = 0; i < overload.args.size() - 1; ++i) {
-               if (!argsMatch(overload.args[i], call.args()[i]->type())) {
-                  match = false;
-                  break;
-               }
-            }
-            if (match) {
-               applyCallDecay(overload.args.size() - 1);
-               valid = true;
-               call.setType(overload.type);
-               break;
-            }
-         } else {
-            if (call.args().size() != overload.args.size())
-               continue;
-            bool match = true;
-            for (size_t i = 0; i < call.args().size(); ++i) {
-               if (!argsMatch(overload.args[i], call.args()[i]->type())) {
-                  match = false;
-                  break;
-               }
-            }
-            if (match) {
-               applyCallDecay(call.args().size());
-               valid = true;
-               call.setType(overload.type);
-               break;
+               if (fullTypeString(actualRef->reference()) == expectedUnderlying)
+                  return 0;
             }
          }
+
+         if (_isNumberType(expected->string()) && _isNumberType(actual->string())) {
+            castTarget = expected;
+            int score = 10;
+            if (_checkNumericConversionLoss(actual->string(), expected->string()))
+               score += 5;
+            return score;
+         }
+
+         return -1;
+      };
+
+      auto evaluateOverload = [&](size_t index, const Overload& overload) -> OverloadCandidate {
+         OverloadCandidate candidate;
+         candidate.index = index;
+         candidate.valid = false;
+         candidate.score = 0;
+         candidate.castTargets.resize(call.args().size());
+         candidate.applyDecay.resize(call.args().size(), false);
+
+         candidate.variadic = !overload.args.empty() && overload.args.back()->kind() == TypeKind::ArgPack;
+         candidate.fixedArgs = candidate.variadic ? overload.args.size() - 1 : overload.args.size();
+
+         if (candidate.variadic) {
+            if (call.args().size() < candidate.fixedArgs)
+               return candidate;
+            candidate.score += 2;
+         } else {
+            if (call.args().size() != candidate.fixedArgs)
+               return candidate;
+         }
+
+         for (size_t i = 0; i < candidate.fixedArgs; ++i) {
+            auto expected = overload.args[i];
+            auto actual = call.args()[i]->type();
+            if (!expected || !actual)
+               return candidate;
+
+            std::shared_ptr<Type> castTarget;
+            bool decay = false;
+            int argScore = scoreArgument(expected, actual, castTarget, decay);
+            if (argScore < 0)
+               return candidate;
+
+            candidate.score += argScore;
+            candidate.castTargets[i] = castTarget;
+            candidate.applyDecay[i] = decay;
+         }
+
+         candidate.valid = true;
+         return candidate;
+      };
+
+      bool valid = false;
+      bool ambiguous = false;
+      OverloadCandidate best;
+      int bestScore = std::numeric_limits<int>::max();
+
+      for (size_t i = 0; i < overloads.size(); ++i) {
+         auto candidate = evaluateOverload(i, overloads[i]);
+         if (!candidate.valid)
+            continue;
+
+         if (candidate.score < bestScore) {
+            bestScore = candidate.score;
+            best = std::move(candidate);
+            valid = true;
+            ambiguous = false;
+         } else if (candidate.score == bestScore) {
+            ambiguous = true;
+         }
       }
+
+      if (valid && ambiguous) {
+         call.setType(makeNullType());
+         return _logError(&call, "ambiguous call to function '{}'", call.callee());
+      }
+
+      if (valid) {
+         auto& chosen = overloads[best.index];
+
+         for (size_t i = 0; i < best.fixedArgs; ++i) {
+            if (best.applyDecay[i]) {
+               auto actual = call.args()[i]->type();
+               auto* actualArray = static_cast<ArrayTy*>(actual.get());
+               call.args()[i]->type() = makePointer(actualArray->arrayType());
+            }
+
+            if (best.castTargets[i]) {
+               call.args()[i] = std::make_unique<StaticCastAST>(best.castTargets[i], std::move(call.args()[i]));
+            }
+         }
+
+         call.setType(chosen.type);
+         return;
+      }
+
       if (!valid) {
          std::string args;
          for (size_t i = 0; i < call.args().size(); ++i) {
@@ -894,7 +994,7 @@ namespace tungsten {
       return _isSignedType(type) || _isUnsignedType(type);
    }
    bool SemanticAnalyzer::_isBaseType(const std::string& type) {
-      return _isNumberType(type) || type == "String"sv || type == "char"sv || type == "void"sv || type == "bool"sv || type == "ArgPack"sv;
+      return _isNumberType(type) || type == "char*"sv || type == "char"sv || type == "void"sv || type == "bool"sv || type == "ArgPack"sv;
    }
    bool SemanticAnalyzer::_isClass(const std::string& cls) {
       for (auto& clss : _classes) {

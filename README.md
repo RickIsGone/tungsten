@@ -170,7 +170,7 @@ are written in **PascalCase**
 | `u64`    | 8                 |
 | `u128`   | 16                |
 
-Tungsten has also a variadic type called `ArgPack` which is just like `...` in C
+Tungsten has also a variadic type called `argPack` which is just like `...` in C
 
 ### Stack allocation
 
@@ -231,7 +231,7 @@ unlike in C++ to pass them to functions you need to do it explicitly:
 
 ```rust
 i64 var;
-fun( & var);
+fun(&var);
 ```
 
 ## Control flow statements
@@ -293,14 +293,14 @@ Rather than a C++ aproach, functions are more similar to Rust's:
 
 ```rust
 fun myFunction() -> i64 {
-ret 247;
+    ret 247;
 }
 ```
 
-<!-- You can return arrays by doing:
+You can return arrays by doing:
 
 ```c++
-fun myfunction() -> int[] {
+fun myfunction() -> int[3] {
     int[3] array{2, 4, 7};
     ret array;
 }
@@ -313,7 +313,7 @@ fun myFunction() -> int* {
     int* array = new int[3]{2, 4, 7};
     ret array;
 }
-``` -->
+```
 
 ### Extern Functions
 
@@ -369,9 +369,28 @@ Tungsten has a reduced number of integrated core functions
 | `String` | __builtinFunction | no arguments          | returns the name of the function             |
 | `u64`    | __builtinColumn   | no arguments          | returns the number of the column             |
 | `u64`    | __builtinLine     | no arguments          | returns the number of the line               |
-| `String` | nameof            | (any variable)        | returns the name of the variable             |
-| `String` | typeof            | (any variable)        | returns the type of the variable             |
-| `u64`    | sizeof            | (any variable)        | returns the size of the type of the variable |
+| `String` | nameof            | (any statement with a name)        | returns the name of the variable             |
+| `String` | typeof            | (any statement with a type)        | returns the type of the variable             |
+| `u64`    | sizeof            | (any statement with a type or a type itself)        | returns the size of the type of the variable |
+
+## Namespaces
+
+You can declare namespaces the same as c++:
+
+```c++
+namespace std {
+    fun a() -> void {}
+}
+```
+
+but in tungsten you can also declare namespace members outside the namespace block like this:
+
+```c++
+namespace std {
+    fun a() -> void {}
+}
+fun std::b() -> void {}
+```
 
 ## Building a project
 
