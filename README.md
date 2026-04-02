@@ -132,7 +132,6 @@ cmake --build build --config Release
 
 <ins> **2. Compiling the project:** </ins>  
 
-
 ```bash
 cmake -DLLVM_DIR=$(brew --prefix llvm)/lib/cmake/llvm -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
 cmake --build build --config Release
@@ -211,11 +210,11 @@ int* myArray = new int[10];
 To free the array:
 
 ```c++
-free[] myArray;
-``` 
+free myArray;
+```
 
-> [!WARNING]  
-> new and free have yet to be added
+this works for both normal and multidimensional arrays.  
+free also sets the address pointed by the pointer to `nullptr`
 
 ## References
 

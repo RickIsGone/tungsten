@@ -105,6 +105,7 @@ namespace tungsten {
       IntLiteral,
       FloatLiteral,
       StringLiteral,
+      CharLiteral,
       Identifier,
 
       // constants

@@ -230,7 +230,8 @@ export namespace tungsten {
       virtual void visit(class ExitStatement&) = 0;
       virtual void visit(class ExternVariableStatementAST&) = 0;
       virtual void visit(class ImportStatementAST&) = 0;
-
+      virtual void visit(class NewStatementAST&) = 0;
+      virtual void visit(class FreeStatementAST&) = 0;
       virtual void visit(class FunctionPrototypeAST&) = 0;
       virtual void visit(class FunctionAST&) = 0;
 
@@ -297,6 +298,8 @@ export namespace tungsten {
       ExternVariableStatement,
       Namespace,
       ImportStatement,
+      NewStatement,
+      FreeStatement,
       FunctionPrototype,
       Function,
       ClassMethod,
@@ -1255,6 +1258,31 @@ export namespace tungsten {
    private:
       std::string _module;
    };
+
+   class NewStatementAST : public ExpressionAST {
+   public:
+      NewStatementAST(std::shared_ptr<Type> type) : ExpressionAST{type} {}
+      llvm::Value* codegen() override;
+
+      void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::NewStatement; }
+      void setType(std::shared_ptr<Type> type) { _Type = type; }
+   };
+
+   class FreeStatementAST : public ExpressionAST {
+   public:
+      FreeStatementAST(std::unique_ptr<ExpressionAST> variable) : _variable{std::move(variable)} { _Type = makeNullType(); }
+      llvm::Value* codegen() override;
+      void accept(ASTVisitor& v) override { v.visit(*this); }
+
+      _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::FreeStatement; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& variable() { return _variable; }
+
+   private:
+      std::unique_ptr<ExpressionAST> _variable{};
+   };
 } // namespace tungsten
 
 namespace tungsten {
@@ -1389,6 +1417,21 @@ export namespace tungsten {
          return Builder->CreateLoad(ty, val);
       return val;
    }
+   llvm::Value* loadDereferenceAddressIfUnaryStar(ExpressionAST* expr, llvm::Value* exprValue, const std::string& name) {
+      if (!expr || expr->astType() != ASTType::UnaryExpression)
+         return exprValue;
+
+      auto* unary = static_cast<UnaryExpressionAST*>(expr);
+      if (unary->op() != "*"sv)
+         return exprValue;
+
+      auto& derefOperand = unary->operand();
+      if (!derefOperand)
+         return nullptr;
+
+      llvm::Type* pointerValueType = derefOperand->type()->llvmType();
+      return Builder->CreateLoad(pointerValueType, exprValue, name);
+   }
    llvm::Type* valueTypeForCodegen(const std::shared_ptr<Type>& ty) {
       if (!ty)
          return nullptr;
@@ -1492,18 +1535,31 @@ export namespace tungsten {
       llvm::Type* lhsValueType = expressionValueTypeForCodegen(_LHS.get());
       llvm::Type* rhsValueType = expressionValueTypeForCodegen(_RHS.get());
 
-      if (_RHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_RHS.get())->op() == "*"sv)
+      if (_RHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_RHS.get())->op() == "*"sv) {
+         RHS = loadDereferenceAddressIfUnaryStar(_RHS.get(), RHS, "derefr.addr");
+         if (!RHS)
+            return LogErrorV("invalid dereference operand");
          RHS = Builder->CreateLoad(rhsValueType, RHS, "derefr");
+      }
 
       const bool isAssignmentOp = (_op == "="sv || _op == "+="sv || _op == "-="sv || _op == "*="sv || _op == "/="sv || _op == "%="sv || _op == "|="sv || _op == "&="sv || _op == "^="sv || _op == "<<="sv || _op == ">>="sv);
 
       if (isAssignmentOp) {
-         if (_LHS->type()->kind() == TypeKind::Pointer) {
+         llvm::Value* targetAddr = LHS;
+         if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*"sv) {
+            auto& derefOperand = static_cast<UnaryExpressionAST*>(_LHS.get())->operand();
+            if (!derefOperand)
+               return LogErrorV("invalid dereference target");
+
+            llvm::Type* pointerValueType = derefOperand->type()->llvmType();
+            targetAddr = Builder->CreateLoad(pointerValueType, LHS, "deref.addr");
+         }
+
+         if (_LHS->type()->kind() == TypeKind::Pointer && _LHS->astType() != ASTType::UnaryExpression) {
             Builder->CreateStore(RHS, LHS);
             return RHS;
          }
 
-         llvm::Value* targetAddr = LHS;
          if (_LHS->astType() == ASTType::IndexAccessExpression) {
             auto* indexExpr = static_cast<IndexAccessAST*>(_LHS.get());
             llvm::Value* arrayPtr = indexExpr->array()->codegen();
@@ -1552,8 +1608,6 @@ export namespace tungsten {
             loadedR = castToCommonType(loadedR, lhsValueType);
          } else {
             loadedL = Builder->CreateLoad(lhsValueType, targetAddr, "lval");
-            if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*"sv)
-               loadedL = Builder->CreateLoad(lhsValueType, LHS, "derefl");
 
             loadedR = loadIfPointer(RHS, rhsValueType, "rval");
             if (_RHS->astType() == ASTType::IndexAccessExpression &&
@@ -1596,14 +1650,18 @@ export namespace tungsten {
       llvm::Value* loadedL = loadIfPointer(LHS, lhsValueType, "lval");
       llvm::Value* loadedR = loadIfPointer(RHS, rhsValueType, "rval");
 
+      if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*"sv) {
+         llvm::Value* derefAddr = loadDereferenceAddressIfUnaryStar(_LHS.get(), LHS, "lval.deref.addr");
+         if (!derefAddr)
+            return LogErrorV("invalid dereference operand");
+         loadedL = Builder->CreateLoad(lhsValueType, derefAddr, "lval.deref");
+      }
+
       if (_RHS->astType() == ASTType::IndexAccessExpression &&
           _RHS->type()->kind() == TypeKind::Pointer)
          loadedR = RHS;
 
       loadedR = castToCommonType(loadedR, lhsValueType);
-
-      if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*"sv)
-         loadedL = Builder->CreateLoad(lhsValueType, LHS, "derefl");
 
       if (_op == "&&"sv) {
          LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
@@ -1654,45 +1712,73 @@ export namespace tungsten {
 
 
    llvm::Value* VariableDeclarationAST::codegen() {
-      if (_isGlobal) {
-         if (_Type->kind() == TypeKind::Reference) {
-            if (!_init)
-               return LogErrorV("global reference requires an initializer");
+      if (_Type->kind() == TypeKind::Reference) {
+         if (!_init && _isGlobal)
+            return LogErrorV("global reference requires an initializer");
 
-            llvm::Value* initVal = _init->codegen();
+         llvm::Value* initVal = _init->codegen();
+         if (!initVal)
+            return nullptr;
+
+         if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*"sv) {
+            initVal = loadDereferenceAddressIfUnaryStar(_init.get(), initVal, "ref.bind");
             if (!initVal)
-               return nullptr;
-
-            if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*"sv)
-               initVal = Builder->CreateLoad(_Type->llvmType(), initVal, "ref.bind");
-
-            if (!initVal->getType()->isPointerTy())
-               return LogErrorV("reference initializer must be an lvalue/address expression");
-
-            auto* refType = static_cast<ReferenceTy*>(_Type.get());
-            NamedValues[_name] = initVal;
-            VariableTypes[_name] = refType->reference()->llvmType();
-            return initVal;
+               return LogErrorV("invalid dereference initializer");
          }
 
-         llvm::Type* type = _Type->llvmType();
-         llvm::Constant* initConstant = llvm::Constant::getNullValue(type);
-         if (_init) {
-            llvm::Value* initVal = _init->codegen();
-            if (!initVal)
-               return nullptr;
+         if (!initVal->getType()->isPointerTy())
+            return LogErrorV("reference initializer must be an lvalue/address expression");
 
-            if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*"sv)
+         auto* refType = static_cast<ReferenceTy*>(_Type.get());
+         NamedValues[_name] = initVal;
+         VariableTypes[_name] = refType->reference()->llvmType();
+         return initVal;
+      }
+
+      llvm::Type* type = _Type->llvmType();
+      llvm::Value* initVal = nullptr;
+      bool isNullPtrArray = false;
+
+      if (_init) {
+         initVal = _init->codegen();
+         if (!initVal)
+            return nullptr;
+
+         if (_init->astType() == ASTType::NullPtr && type->isArrayTy()) {
+            isNullPtrArray = true;
+         } else {
+            if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*"sv) {
+               initVal = loadDereferenceAddressIfUnaryStar(_init.get(), initVal, "init.deref.addr");
+               if (!initVal)
+                  return LogErrorV("invalid dereference initializer");
                initVal = Builder->CreateLoad(type, initVal, "derefl");
+            }
+
+            if (initVal->getType()->isPointerTy() && !type->isPointerTy()) {
+               llvm::Type* initValueType = expressionValueTypeForCodegen(_init.get());
+               if (!initValueType)
+                  initValueType = type;
+               initVal = Builder->CreateLoad(initValueType, initVal, "init.load");
+            }
 
             initVal = castValueToType(initVal, type);
             if (initVal->getType() != type)
-               return LogErrorV("global variable initializer type does not match global variable type");
+               return LogErrorV("variable initializer type does not match variable type");
+         }
+      }
 
+      if (_isGlobal) {
+         llvm::Constant* initConstant = llvm::Constant::getNullValue(type);
+
+         if (isNullPtrArray) {
+            initConstant = llvm::Constant::getNullValue(type);
+         } else if (initVal) {
             if (auto* constInit = llvm::dyn_cast<llvm::Constant>(initVal))
                initConstant = constInit;
             else
                return LogErrorV("global variable initializer must be a constant expression");
+         } else if (_Type->kind() == TypeKind::Pointer) {
+            initConstant = llvm::ConstantPointerNull::get(Builder->getPtrTy());
          }
 
          auto* globalVar = new llvm::GlobalVariable(
@@ -1708,44 +1794,15 @@ export namespace tungsten {
          return globalVar;
       }
 
-      if (_Type->kind() == TypeKind::Reference) {
-         llvm::Value* initVal = _init->codegen();
-         if (!initVal)
-            return nullptr;
-
-         if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*"sv)
-            initVal = Builder->CreateLoad(_Type->llvmType(), initVal, "ref.bind");
-
-         auto* refType = static_cast<ReferenceTy*>(_Type.get());
-         NamedValues[_name] = initVal;
-         VariableTypes[_name] = refType->reference()->llvmType();
-         return initVal;
-      }
-
-      llvm::Type* type = _Type->llvmType();
       llvm::Function* function = Builder->GetInsertBlock()->getParent();
       llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
       llvm::AllocaInst* allocInstance = tmpBuilder.CreateAlloca(type, nullptr, _name);
 
-      if (_init) {
-         llvm::Value* initVal = _init->codegen();
-         if (_init->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_init.get())->op() == "*"sv)
-            initVal = Builder->CreateLoad(type, initVal, "derefl");
-         if (!initVal)
-            return nullptr;
-
-         if (initVal->getType()->isPointerTy() && !type->isPointerTy()) {
-            llvm::Type* initValueType = expressionValueTypeForCodegen(_init.get());
-            if (!initValueType)
-               initValueType = type;
-            initVal = Builder->CreateLoad(initValueType, initVal, "init.load");
-         }
-
-         initVal = castValueToType(initVal, type);
-         if (initVal->getType() != type)
-            return LogErrorV("variable initializer type does not match variable type");
-
-         Builder->CreateStore(initVal, allocInstance);
+      if (isNullPtrArray || initVal) {
+         llvm::Value* storeVal = isNullPtrArray ? llvm::Constant::getNullValue(type) : initVal;
+         Builder->CreateStore(storeVal, allocInstance);
+      } else if (_Type->kind() == TypeKind::Pointer) {
+         Builder->CreateStore(llvm::ConstantPointerNull::get(Builder->getPtrTy()), allocInstance);
       }
 
       NamedValues[_name] = allocInstance;
@@ -1822,12 +1879,29 @@ export namespace tungsten {
          if (!argVal)
             return nullptr;
 
+         if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "*"sv) {
+            auto& derefOperand = static_cast<UnaryExpressionAST*>(arg.get())->operand();
+            if (!derefOperand)
+               return LogErrorV("invalid dereference argument");
+
+            llvm::Type* pointerValueType = derefOperand->type()->llvmType();
+            argVal = Builder->CreateLoad(pointerValueType, argVal, "arg.deref.addr");
+         }
+
          if (arg->astType() == ASTType::VariableExpression &&
              argVal->getType()->isPointerTy() &&
              arg->type()->kind() != TypeKind::Array) {
             llvm::Type* loadedType = expressionValueTypeForCodegen(arg.get());
             if (loadedType)
                argVal = Builder->CreateLoad(loadedType, argVal, "arg.varload");
+         }
+
+         if (arg->astType() == ASTType::IndexAccessExpression) {
+            llvm::Type* loadedType = expressionValueTypeForCodegen(arg.get());
+            if (!loadedType && arg->type())
+               loadedType = arg->type()->llvmType();
+            if (loadedType && argVal->getType()->isPointerTy())
+               argVal = Builder->CreateLoad(loadedType, argVal, "arg.idxload");
          }
 
          llvm::Type* expectedParamType = nullptr;
@@ -1989,8 +2063,12 @@ export namespace tungsten {
       if (!returnsReference && _value->astType() == ASTType::VariableExpression)
          returnValue = loadIfPointer(returnValue, expressionValueTypeForCodegen(_value.get()), "rval");
 
-      if (!returnsReference && _value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*"sv)
+      if (!returnsReference && _value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*"sv) {
+         returnValue = loadDereferenceAddressIfUnaryStar(_value.get(), returnValue, "ret.deref.addr");
+         if (!returnValue)
+            return LogErrorV("invalid dereference return value");
          returnValue = Builder->CreateLoad(valueTypeForCodegen(_value->type()), returnValue, "derefl");
+      }
 
       if (returnsReference) {
          if (!returnValue->getType()->isPointerTy())
@@ -2003,8 +2081,12 @@ export namespace tungsten {
    }
    llvm::Value* ExitStatement::codegen() {
       llvm::Value* exitValue = _value->codegen();
-      if (_value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*"sv)
+      if (_value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*"sv) {
+         exitValue = loadDereferenceAddressIfUnaryStar(_value.get(), exitValue, "exit.deref.addr");
+         if (!exitValue)
+            return LogErrorV("invalid dereference exit value");
          exitValue = Builder->CreateLoad(_value->type()->llvmType(), exitValue, "derefl");
+      }
 
       llvm::Function* exitFunc = TheModule->getFunction("exit");
       if (!exitFunc) {
@@ -2259,6 +2341,64 @@ export namespace tungsten {
    llvm::Value* ImportStatementAST::codegen() {
       return nullptr;
    }
+
+   llvm::Value* NewStatementAST::codegen() {
+      llvm::Function* mallocFun = TheModule->getFunction("malloc");
+      if (!mallocFun) {
+         llvm::FunctionType* mallocType = llvm::FunctionType::get(
+             Builder->getPtrTy(),
+             {Builder->getInt64Ty()},
+             false);
+         mallocFun = llvm::Function::Create(mallocType, llvm::Function::ExternalLinkage, "malloc", TheModule.get());
+      }
+
+      auto size = Builder->getInt64(static_cast<PointerTy*>(_Type.get())->pointee()->size());
+
+      return Builder->CreateCall(mallocFun, {size});
+   }
+   llvm::Value* FreeStatementAST::codegen() {
+      llvm::Function* freeFun = TheModule->getFunction("free");
+      if (!freeFun) {
+         llvm::FunctionType* freeType = llvm::FunctionType::get(
+             Builder->getVoidTy(),
+             {Builder->getPtrTy()},
+             false);
+         freeFun = llvm::Function::Create(freeType, llvm::Function::ExternalLinkage, "free", TheModule.get());
+      }
+
+      if (!_variable || !_variable->type())
+         return LogErrorV("free statement expects a valid expression");
+
+      auto ptr = _variable->codegen();
+      if (!ptr)
+         return nullptr;
+
+      llvm::Value* pointerToFree = ptr;
+      llvm::Value* nullStoreTarget = nullptr;
+
+      if (_variable->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_variable.get())->op() == "*"sv) {
+         nullStoreTarget = ptr;
+         pointerToFree = loadDereferenceAddressIfUnaryStar(_variable.get(), ptr, "free.deref.addr");
+         if (!pointerToFree)
+            return LogErrorV("invalid dereference free operand");
+      } else if (_variable->astType() == ASTType::VariableExpression || _variable->astType() == ASTType::IndexAccessExpression) {
+         nullStoreTarget = ptr;
+         llvm::Type* pointeeType = expressionValueTypeForCodegen(_variable.get());
+         if (!pointeeType)
+            pointeeType = _variable->type()->llvmType();
+         if (pointeeType && ptr->getType()->isPointerTy())
+            pointerToFree = Builder->CreateLoad(pointeeType, ptr, "free.ptr");
+      }
+
+      auto call = Builder->CreateCall(freeFun, {pointerToFree});
+
+      // Ensure later loads observe null in the same lvalue used by `free`.
+      if (nullStoreTarget && nullStoreTarget->getType()->isPointerTy())
+         Builder->CreateStore(llvm::ConstantPointerNull::get(Builder->getPtrTy()), nullStoreTarget);
+
+      return call;
+   }
+
    llvm::Value* ClassMethodAST::codegen() {
       return nullptr;
    }
@@ -2276,6 +2416,9 @@ export namespace tungsten {
    }
 
    llvm::Type* ArrayTy::llvmType() const {
+      if (!_arraySize || _arraySize->astType() != ASTType::NumberExpression)
+         return nullptr;
+
       auto* num = static_cast<NumberExpressionAST*>(_arraySize.get());
       const Number rawSize = num->value();
       uint64_t size = std::holds_alternative<double>(rawSize)

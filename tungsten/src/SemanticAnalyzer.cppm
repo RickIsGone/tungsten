@@ -75,7 +75,8 @@ namespace tungsten {
       void visit(ExitStatement&) override;
       void visit(ExternVariableStatementAST&) override {}
       void visit(ImportStatementAST&) override {}
-
+      void visit(NewStatementAST&) override;
+      void visit(FreeStatementAST&) override;
       void visit(FunctionPrototypeAST&) override;
       void visit(FunctionAST&) override;
 
@@ -181,6 +182,8 @@ namespace tungsten {
       if (_doesVariableExist(var.name()))
          return _logError(&var, "variable '{}' already exists", var.name());
 
+      _scopes.at(_currentScope)[var.name()] = var.type(); // pushing the variable, so even if there are errors, the variable is already declared to avoid cascade errors like "unknown variable 'x'" every fucking time is mentioned cause im tired of that bs
+
       switch (var.type()->kind()) {
          case TypeKind::Array: {
             auto array = static_cast<ArrayTy*>(var.type().get());
@@ -191,6 +194,8 @@ namespace tungsten {
             std::shared_ptr<Type> current = var.type();
             while (current && current->kind() == TypeKind::Array) {
                auto* dim = static_cast<ArrayTy*>(current.get());
+               if (!dim->sizeExpr())
+                  return _logError(&var, "array size must be specified in variable declaration '{} {}'", fullTypeString(var.type()), var.name());
                dim->sizeExpr()->accept(*this);
                if (!dim->sizeExpr()->type())
                   return _logError(&var, "array size must be an integer type in variable declaration '{} {}'", fullTypeString(var.type()), var.name());
@@ -259,15 +264,59 @@ namespace tungsten {
                return _logError(&var, "type mismatch: cannot bind '{}' with non-reference initializer of type '{}'", fullTypeString(var.type()), fullTypeString(var.initializer()->type()));
          } else if (!_isNumberType(var.type()->string()) || !_isNumberType(var.initializer()->type()->string())) {
             if (fullTypeString(var.type()) != fullTypeString(var.initializer()->type())) {
-               if (var.type()->kind() != TypeKind::Pointer && var.initializer()->astType() != ASTType::NullPtr)
+               if (var.initializer()->astType() == ASTType::NullPtr && var.type()->kind() == TypeKind::Pointer)
+                  return;
+
+               if (var.type()->kind() == TypeKind::Pointer) {
+                  if (var.initializer()->type()->kind() != TypeKind::Pointer)
+                     return _logError(&var, "type mismatch: cannot assign '{}' to variable of type '{}'", fullTypeString(var.initializer()->type()), fullTypeString(var.type()));
+
+                  auto* lhsPtr = static_cast<PointerTy*>(var.type().get());
+                  auto* rhsPtr = static_cast<PointerTy*>(var.initializer()->type().get());
+
+                  // array decay: int[3]* → int* is allowed
+                  if (rhsPtr->pointee()->kind() == TypeKind::Array) {
+                     auto* rhsArray = static_cast<ArrayTy*>(rhsPtr->pointee().get());
+                     if (fullTypeString(lhsPtr->pointee()) == fullTypeString(rhsArray->arrayType()))
+                        return;
+                  }
+
+                  // multidimensional array decay: int[3][6]* → int** is allowed
+                  if (rhsPtr->pointee()->kind() == TypeKind::Array) {
+                     std::shared_ptr<Type> rhsBase = rhsPtr->pointee();
+                     int arrayDepth = 0;
+                     while (rhsBase && rhsBase->kind() == TypeKind::Array) {
+                        auto* arrTy = static_cast<ArrayTy*>(rhsBase.get());
+                        rhsBase = arrTy->arrayType();
+                        arrayDepth++;
+                     }
+
+                     // count pointer levels on LHS
+                     std::shared_ptr<Type> lhsBase = lhsPtr->pointee();
+                     int ptrDepth = 1; // already one level from outer pointer
+                     while (lhsBase && lhsBase->kind() == TypeKind::Pointer) {
+                        auto* ptrTy = static_cast<PointerTy*>(lhsBase.get());
+                        lhsBase = ptrTy->pointee();
+                        ptrDepth++;
+                     }
+
+                     // if LHS has enough pointer levels and base types match, allow decay
+                     if (ptrDepth == arrayDepth && fullTypeString(lhsBase) == fullTypeString(rhsBase))
+                        return;
+                  }
+
+                  if (fullTypeString(lhsPtr->pointee()) != fullTypeString(rhsPtr->pointee()))
+                     return _logError(&var, "type mismatch: cannot assign '{}' to variable of type '{}'", fullTypeString(var.initializer()->type()), fullTypeString(var.type()));
+                  return;
+               }
+
+               if (var.initializer()->astType() != ASTType::NullPtr)
                   return _logError(&var, "type mismatch: cannot assign '{}' to variable of type '{}'", fullTypeString(var.initializer()->type()), fullTypeString(var.type()));
             }
          }
       } else if (var.type()->kind() == TypeKind::Reference && !_allowUninitializedReferenceDecl) {
          return _logError(&var, "reference variable '{}' must be initialized", var.name());
       }
-
-      _scopes.at(_currentScope)[var.name()] = var.type();
    }
 
    void SemanticAnalyzer::visit(NameOfStatementAST& var) {
@@ -387,8 +436,35 @@ namespace tungsten {
 
       // addition, multiplication, division, ecc.
       if (!_isNumberType(fullTypeString(binop.LHS()->type())) || !_isNumberType(fullTypeString(binop.RHS()->type()))) {
-         if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type()))
+         if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type())) {
+            if (binop.op() == "="sv) {
+               if (binop.LHS()->type()->kind() == TypeKind::Pointer &&
+                   binop.RHS()->type()->kind() == TypeKind::Pointer) {
+                  auto* lhsPtr = static_cast<PointerTy*>(binop.LHS()->type().get());
+                  auto* rhsPtr = static_cast<PointerTy*>(binop.RHS()->type().get());
+
+                  // Allow array-to-pointer decay for assignments like: char* p = new char[20];
+                  if (rhsPtr->pointee()->kind() == TypeKind::Array) {
+                     auto* rhsArr = static_cast<ArrayTy*>(rhsPtr->pointee().get());
+                     if (fullTypeString(lhsPtr->pointee()) == fullTypeString(rhsArr->arrayType())) {
+                        binop.setType(binop.LHS()->type());
+                        return;
+                     }
+                  }
+               } else if (binop.LHS()->type()->kind() == TypeKind::Array &&
+                          binop.RHS()->type()->kind() == TypeKind::Pointer) {
+                  auto* lhsArr = static_cast<ArrayTy*>(binop.LHS()->type().get());
+                  auto* rhsPtr = static_cast<PointerTy*>(binop.RHS()->type().get());
+                  if (fullTypeString(rhsPtr->pointee()) == fullTypeString(binop.LHS()->type()) ||
+                      fullTypeString(rhsPtr->pointee()) == fullTypeString(lhsArr->arrayType())) {
+                     binop.setType(binop.LHS()->type());
+                     return;
+                  }
+               }
+            }
+
             return _logError(&binop, "type mismatch: cannot operate '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
+         }
 
          if (fullTypeString(binop.LHS()->type()) == "char*"sv && binop.op() != "=")
             return _logError(&binop, "strings can only be assigned, not operated on with '{}'", binop.op());
@@ -956,6 +1032,23 @@ namespace tungsten {
          if (_checkNumericConversionLoss(baseType(ret.value()->type()), baseType(ret.type())))
             _logWarn("possible data loss converting from '{}' to '{}' in return statement", baseType(ret.value()->type()), baseType(ret.type()));
       }*/
+   }
+   void SemanticAnalyzer::visit(NewStatementAST& var) {
+      if (!var.type())
+         return _logError(&var, "new statement expects a valid type");
+      if (var.type()->kind() == TypeKind::Reference)
+         return _logError(&var, "cannot use 'new' with reference type '{}'", fullTypeString(var.type()));
+
+      // keep `new` on pointer types stable (avoid creating an extra pointer layer).
+      if (var.type()->kind() == TypeKind::Pointer)
+         return;
+
+      var.setType(makePointer(var.type()));
+   }
+   void SemanticAnalyzer::visit(FreeStatementAST& var) {
+      var.variable()->accept(*this);
+      if (var.variable()->type()->kind() != TypeKind::Pointer && var.variable()->type()->kind() != TypeKind::Array)
+         return _logError(&var, "free statement expects a pointer type");
    }
 
    bool SemanticAnalyzer::_isSignedType(const std::string& type) {

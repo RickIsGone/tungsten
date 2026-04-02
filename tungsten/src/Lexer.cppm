@@ -81,6 +81,29 @@ namespace tungsten {
 
          } else {
             switch (_peek().value()) {
+               case '\'':
+                  // CHAR LITERALS
+                  _consume();
+                  while (_peek().has_value() && _peek().value() != '\n') {
+                     if (_peek().value() == '\'') {
+                        size_t offset = 0;
+                        size_t backslashes = 0;
+                        while (_peekBack(offset).has_value() && _peekBack(offset).value() == '\\') {
+                           ++offset;
+                           ++backslashes;
+                        }
+                        if (backslashes % 2 == 0)
+                           break;
+                     }
+                     buffer.push_back(_peek().value());
+                     _consume();
+                  }
+                  if (_peek().has_value() && _peek().value() == '\'') {
+                     tokens.push_back({TokenType::CharLiteral, startingIndex, buffer.length() + 2});
+                     _consume();
+                     buffer.clear();
+                  }
+                  break;
                case '"':
                   // STRING LITERALS
                   _consume();

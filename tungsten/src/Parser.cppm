@@ -4,6 +4,7 @@ module;
 #include <iostream>
 #include <string>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <filesystem>
 #ifndef _NODISCARD
@@ -103,6 +104,7 @@ namespace tungsten {
       int _getPrecedence(TokenType type);
       template <typename Ty = ExpressionAST>
       std::unique_ptr<Ty> _logError(const std::string& str);
+      void _logWarn(const std::string& str);
       template <typename Ty>
       std::unique_ptr<Ty> _setSource(std::unique_ptr<Ty> node, const Token& token);
       std::shared_ptr<Type> _parseType();
@@ -111,6 +113,7 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parseIdentifierExpression();
       std::unique_ptr<ExpressionAST> _parseIndexAccessExpression(std::unique_ptr<ExpressionAST> lhs);
       std::unique_ptr<ExpressionAST> _parseStringExpression();
+      std::unique_ptr<ExpressionAST> _parseCharExpression();
       std::unique_ptr<ExpressionAST> _parseFunctionCall(const std::string& identifier, const Token& token);
       std::unique_ptr<FunctionPrototypeAST> _parseExternFunctionStatement();
       // std::unique_ptr<ExpressionAST> _parseExternVariableStatement();
@@ -139,6 +142,8 @@ namespace tungsten {
       std::unique_ptr<ExpressionAST> _parseDoWhileStatement();
       std::unique_ptr<ExpressionAST> _parseForStatement();
       std::unique_ptr<ExpressionAST> _parseImport();
+      std::unique_ptr<ExpressionAST> _parseNew();
+      std::unique_ptr<ExpressionAST> _parseFree();
       // std::unique_ptr<FunctionAST> _parseConstructorOrDestructor(const std::string& className);
       // std::unique_ptr<ClassAST> _parseClass();
       void _parseNamespace();
@@ -155,7 +160,7 @@ namespace tungsten {
       std::vector<std::unique_ptr<ExpressionAST>> _globalVariables;
       std::shared_ptr<Type> _currentFunctionReturnType;
       std::string _currentFunctionName;
-      std::string _namespacePrefix{""};
+      std::string _namespacePrefix{};
    };
    //  ========================================== implementation ==========================================
 
@@ -201,6 +206,30 @@ namespace tungsten {
       if (node)
          node->setSource(token.position, token.length);
       return node;
+   }
+
+   void Parser::_logWarn(const std::string& str) {
+      Token warningToken = _peekBack();
+      const size_t linePosition = warningToken.position;
+      const size_t start = _raw.rfind('\n', linePosition) == std::string::npos ? 0 : _raw.rfind('\n', linePosition) + 1;
+      const size_t end = _raw.find('\n', linePosition) == std::string::npos ? _raw.size() : _raw.find('\n', linePosition);
+
+      std::string line = _raw.substr(start, end - start);
+      size_t indentation = 0;
+      for (char c : line) {
+         if (c == ' ' || c == '\t')
+            ++indentation;
+         else
+            break;
+      }
+
+      size_t column = _column(warningToken) > indentation ? _column(warningToken) - indentation : 0;
+      size_t lineNum = _line(warningToken);
+      size_t lineLength = std::to_string(lineNum).length();
+
+      std::cerr << _location(warningToken) << Colors::Yellow << " warning: " << Colors::Reset << str << "\n";
+      std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
+      std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << "^" << Colors::Reset << "\n\n";
    }
 
    std::string Parser::_location(const Token& token) {
@@ -706,7 +735,127 @@ namespace tungsten {
 
       return _setSource(std::make_unique<StringExpression>(result), token);
    }
+   std::unique_ptr<ExpressionAST> Parser::_parseCharExpression() {
+      const Token token = _peek();
+      std::string raw = _lexeme(_peek());
+      _consume();
 
+      auto hexValue = [](char c) -> int {
+         if (c >= '0' && c <= '9') return c - '0';
+         if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+         if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+         return -1;
+      };
+
+      if (raw.size() < 3 || raw.front() != '\'' || raw.back() != '\'')
+         return _logError<ExpressionAST>("invalid char literal");
+
+      std::string body = raw.substr(1, raw.size() - 2);
+      if (body.empty())
+         return _logError<ExpressionAST>("empty char literal");
+
+      std::vector<unsigned char> bytes;
+      bytes.reserve(body.size());
+
+      for (size_t i = 0; i < body.size();) {
+         unsigned int current = 0;
+         if (body[i] != '\\') {
+            current = static_cast<unsigned char>(body[i]);
+            ++i;
+         } else {
+            if (i + 1 >= body.size())
+               return _logError<ExpressionAST>("unknown escape sequence in char literal");
+
+            const char esc = body[i + 1];
+            switch (esc) {
+               case 'n':
+                  current = '\n';
+                  i += 2;
+                  break;
+               case 't':
+                  current = '\t';
+                  i += 2;
+                  break;
+               case 'r':
+                  current = '\r';
+                  i += 2;
+                  break;
+               case '0':
+                  current = '\0';
+                  i += 2;
+                  break;
+               case '\\':
+                  current = '\\';
+                  i += 2;
+                  break;
+               case '\'':
+                  current = '\'';
+                  i += 2;
+                  break;
+               case '"':
+                  current = '"';
+                  i += 2;
+                  break;
+               case 'b':
+                  current = '\b';
+                  i += 2;
+                  break;
+               case 'f':
+                  current = '\f';
+                  i += 2;
+                  break;
+               case 'v':
+                  current = '\v';
+                  i += 2;
+                  break;
+               case 'x': {
+                  if (i + 3 >= body.size())
+                     return _logError<ExpressionAST>("invalid hex escape sequence in char literal");
+                  int hi = hexValue(body[i + 2]);
+                  int lo = hexValue(body[i + 3]);
+                  if (hi < 0 || lo < 0)
+                     return _logError<ExpressionAST>("invalid hex escape sequence in char literal");
+                  current = static_cast<unsigned int>((hi << 4) | lo);
+                  i += 4;
+                  break;
+               }
+               case 'u': {
+                  if (i + 5 >= body.size())
+                     return _logError<ExpressionAST>("invalid unicode escape sequence in char literal");
+                  unsigned int codepoint = 0;
+                  for (size_t j = i + 2; j < i + 6; ++j) {
+                     int v = hexValue(body[j]);
+                     if (v < 0)
+                        return _logError<ExpressionAST>("invalid unicode escape sequence in char literal");
+                     codepoint = (codepoint << 4) | static_cast<unsigned int>(v);
+                  }
+                  if (codepoint > 0xFF)
+                     return _logError<ExpressionAST>("unicode escape out of range for char literal");
+                  current = codepoint;
+                  i += 6;
+                  break;
+               }
+               default:
+                  return _logError<ExpressionAST>("unknown escape sequence in char literal");
+            }
+         }
+
+         bytes.push_back(static_cast<unsigned char>(current));
+      }
+
+      uint64_t packedValue = 0;
+      if (bytes.size() == 1) {
+         packedValue = bytes[0];
+         return _setSource(std::make_unique<NumberExpressionAST>(packedValue, makeChar()), token);
+      }
+
+      _logWarn("multi-character char literal is implementation-defined; packing bytes into an integer value");
+
+      for (unsigned char byte : bytes)
+         packedValue = (packedValue << 8) | static_cast<uint64_t>(byte);
+
+      return _setSource(std::make_unique<NumberExpressionAST>(packedValue, makeInt32()), token);
+   }
    std::unique_ptr<ExpressionAST> Parser::_parseFunctionCall(const std::string& identifier, const Token& token) {
       _consume(); // consume (
       std::vector<std::unique_ptr<ExpressionAST>> args;
@@ -817,7 +966,8 @@ namespace tungsten {
             return _parseNumberExpression();
          case TokenType::StringLiteral:
             return _parseStringExpression();
-
+         case TokenType::CharLiteral:
+            return _parseCharExpression();
          case TokenType::Ret:
             return _parseReturnStatement();
          case TokenType::Exit:
@@ -858,6 +1008,11 @@ namespace tungsten {
          case TokenType::String:
          case TokenType::Void:
             return _parseVariableDeclaration();
+
+         case TokenType::New:
+            return _parseNew();
+         case TokenType::Free:
+            return _parseFree();
 
          case TokenType::__BuiltinFunction:
             return _parseBuiltinFunction();
@@ -1156,37 +1311,45 @@ namespace tungsten {
 
          default:
             return nullptr;
-      };
+      }
       _consume(); // consume type
       if (type->kind() == TypeKind::ArgPack)
          return type;
 
-      std::vector<std::unique_ptr<ExpressionAST>> sizes;
-      while (_peek().type == TokenType::OpenBracket) {
-         _consume(); // consume '['
-         if (auto expr = _parseExpression()) {
-            if (_peek().type == TokenType::CloseBracket)
+      while (true) {
+         switch (_peek().type) {
+            case TokenType::OpenBracket: {
+               _consume(); // consume '['
+
+               std::unique_ptr<ExpressionAST> size = nullptr;
+               if (_peek().type != TokenType::CloseBracket) {
+                  size = _parseExpression();
+                  if (!size)
+                     return nullptr;
+               }
+
+               if (_peek().type != TokenType::CloseBracket)
+                  return nullptr;
+
                _consume(); // consume ']'
-            sizes.push_back(std::move(expr));
+               type = makeArray(type, std::move(size));
+               break;
+            }
+
+            case TokenType::Multiply:
+               type = makePointer(type);
+               _consume(); // consume '*'
+               break;
+
+            case TokenType::BitwiseAnd:
+               type = makeReference(type);
+               _consume(); // consume '&'
+               break;
+
+            default:
+               return type;
          }
-
-         while (!sizes.empty()) {
-            type = makeArray(type, std::move(sizes.back()));
-            sizes.pop_back();
-         }
       }
-
-      while (_peek().type == TokenType::Multiply) {
-         type = makePointer(type);
-         _consume(); // consume '*'
-      }
-
-      while (_peek().type == TokenType::BitwiseAnd) {
-         type = makeReference(type);
-         _consume(); // consume '&'
-      }
-
-      return type;
    }
 
    // std::unique_ptr<ExpressionAST> Parser::_parseAlias() {
@@ -1351,6 +1514,8 @@ namespace tungsten {
       _consume(); // consume '->'
 
       std::shared_ptr<Type> type = _parseType();
+      if (!type)
+         return _logError<FunctionPrototypeAST>("expected a type after '->' in function declaration but got: '" + _lexeme(_peek()) + "'");
       if (type->kind() == TypeKind::ArgPack)
          return _logError<FunctionPrototypeAST>("variadic arguments are not allowed as type");
 
@@ -1481,5 +1646,24 @@ namespace tungsten {
       // utils::debugLog("Importing module: {}", module);
 
       return _setSource(std::make_unique<ImportStatementAST>(module), token);
+   }
+
+   std::unique_ptr<ExpressionAST> Parser::_parseNew() {
+      const Token token = _peek();
+      _consume(); // consume new
+      auto type = _parseType();
+      if (!type)
+         return _logError("expected a type after 'new'");
+
+      return _setSource(std::make_unique<NewStatementAST>(type), token);
+   }
+   std::unique_ptr<ExpressionAST> Parser::_parseFree() {
+      const Token token = _peek();
+      _consume(); // consume free
+      auto expr = _parseExpression();
+      if (!expr)
+         return _logError("expected an expression after 'free'");
+
+      return _setSource(std::make_unique<FreeStatementAST>(std::move(expr)), token);
    }
 } // namespace tungsten
