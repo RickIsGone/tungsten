@@ -27,7 +27,7 @@ using namespace std::literals;
 namespace fs = std::filesystem;
 
 namespace tungsten {
-   using Scope = std::unordered_map<std::string, std::shared_ptr<Type>>;
+   using Scope = std::unordered_map<std::string, std::pair<bool, std::shared_ptr<Type>>>; // name, {isConst, type}
    struct Overload {
       std::shared_ptr<Type> type;
       std::vector<std::shared_ptr<Type>> args;
@@ -113,6 +113,8 @@ namespace tungsten {
       bool _isFunction(const std::string& fn);
       bool _checkNumericConversionLoss(const std::string& fromType, const std::string& toType);
       bool _doesVariableExist(const std::string& var);
+      bool _isConstVariable(const std::string& var) const;
+      std::optional<std::string> _constWriteTargetName(ExpressionAST* expr) const;
       bool _isConstexpr(const std::unique_ptr<ExpressionAST>& expr);
       bool _canCast(std::shared_ptr<Type> from, std::shared_ptr<Type> to);
       std::unique_ptr<ExpressionAST> _evaluateConstexpr(const std::unique_ptr<ExpressionAST>& expr);
@@ -182,7 +184,7 @@ namespace tungsten {
       if (_doesVariableExist(var.name()))
          return _logError(&var, "variable '{}' already exists", var.name());
 
-      _scopes.at(_currentScope)[var.name()] = var.type(); // pushing the variable, so even if there are errors, the variable is already declared to avoid cascade errors like "unknown variable 'x'" every fucking time is mentioned cause im tired of that bs
+      _scopes.at(_currentScope)[var.name()] = {var.isConst(), var.type()}; // pushing the variable, so even if there are errors, the variable is already declared to avoid cascade errors like "unknown variable 'x'" every fucking time is mentioned cause im tired of that bs
 
       switch (var.type()->kind()) {
          case TypeKind::Array: {
@@ -385,6 +387,8 @@ namespace tungsten {
              (op.operand()->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(op.operand().get())->op() == "*"sv);
          if (!validIncrementTarget)
             return _logError(&op, "cannot use operator '{}' on non-variable expression", op.op());
+         if (auto constName = _constWriteTargetName(op.operand().get()); constName.has_value())
+            return _logError(&op, "cannot modify const variable '{}'", *constName);
          op.setType(op.operand()->type());
       }
       if (op.op() == "-"sv) {
@@ -405,7 +409,6 @@ namespace tungsten {
             return _logError(&op, "cannot dereference non-pointer type '{}'", fullTypeString(op.operand()->type()));
          op.setType(static_cast<PointerTy*>(op.operand()->type().get())->pointee());
       }
-      // if (op.operand()->astType() !=)
    }
 
    void SemanticAnalyzer::visit(BinaryExpressionAST& binop) {
@@ -432,6 +435,8 @@ namespace tungsten {
       if (binop.op() == "="sv || binop.op() == "+="sv || binop.op() == "-="sv || binop.op() == "*="sv || binop.op() == "/="sv || binop.op() == "%="sv || binop.op() == "|="sv || binop.op() == "&="sv || binop.op() == "^="sv || binop.op() == "<<="sv || binop.op() == ">>="sv) {
          if (!binop.LHS()->isLValue())
             return _logError(&binop, "left side of assignment must be a variable");
+         if (auto constName = _constWriteTargetName(binop.LHS().get()); constName.has_value())
+            return _logError(&binop, "cannot modify const variable '{}'", *constName);
       }
 
       // addition, multiplication, division, ecc.
@@ -1147,10 +1152,37 @@ namespace tungsten {
       }
       return false;
    }
+   bool SemanticAnalyzer::_isConstVariable(const std::string& var) const {
+      for (auto it = _scopes.rbegin(); it != _scopes.rend(); ++it) {
+         auto found = it->find(var);
+         if (found != it->end())
+            return found->second.first;
+      }
+      return false;
+   }
+   std::optional<std::string> SemanticAnalyzer::_constWriteTargetName(ExpressionAST* expr) const {
+      if (!expr)
+         return std::nullopt;
+
+      switch (expr->astType()) {
+         case ASTType::VariableExpression: {
+            const auto* variable = static_cast<VariableExpressionAST*>(expr);
+            if (_isConstVariable(variable->name()))
+               return variable->name();
+            return std::nullopt;
+         }
+         case ASTType::IndexAccessExpression: {
+            auto* access = static_cast<IndexAccessAST*>(expr);
+            return _constWriteTargetName(access->array().get());
+         }
+         default:
+            return std::nullopt;
+      }
+   }
    std::shared_ptr<Type> SemanticAnalyzer::_variableType(const std::string& var) {
       for (auto& scope : _scopes) {
          if (scope.contains(var))
-            return scope.at(var);
+            return scope.at(var).second;
       }
       return nullptr;
    }

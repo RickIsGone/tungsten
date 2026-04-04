@@ -341,6 +341,7 @@ namespace tungsten {
                _functions.push_back(_parseFunctionDeclaration());
                break;
 
+            case TokenType::Const:
             case TokenType::Int:
             case TokenType::Int8:
             case TokenType::Int16:
@@ -428,6 +429,7 @@ namespace tungsten {
                _consume(); // consume ';'
                break;
 
+            case Const:
             case Int:
             case Int8:
             case Int16:
@@ -987,6 +989,7 @@ namespace tungsten {
          case TokenType::For:
             return _parseForStatement();
 
+         case TokenType::Const:
          case TokenType::Int:
          case TokenType::Int8:
          case TokenType::Int16:
@@ -1357,6 +1360,9 @@ namespace tungsten {
 
    std::unique_ptr<ExpressionAST> Parser::_parseVariableDeclaration(bool global) {
       const Token token = _peek();
+      bool isConst = token.type == TokenType::Const;
+      if (isConst)
+         _consume(); // consume const
       std::shared_ptr<Type> type = _parseType();
 
       std::string name = _parseIdentifierName(global);
@@ -1390,7 +1396,7 @@ namespace tungsten {
 
       // utils::debugLog("definition of variable '{}' with type '{}'", name, type);
 
-      return _setSource(std::make_unique<VariableDeclarationAST>(type, global ? _namespacePrefix + name : name, std::move(initExpr), global), token);
+      return _setSource(std::make_unique<VariableDeclarationAST>(type, global ? _namespacePrefix + name : name, std::move(initExpr), isConst, global), token);
    }
 
    std::unique_ptr<FunctionAST> Parser::_parseFunctionDeclaration() {
@@ -1406,11 +1412,15 @@ namespace tungsten {
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseArgument() {
+      const Token token = _peek();
+      bool isConst = token.type == TokenType::Const;
+      if (isConst)
+         _consume(); // consume const
       std::shared_ptr<Type> type = _parseType();
       if (!type)
          return nullptr;
       if (type->kind() == TypeKind::ArgPack)
-         return std::make_unique<VariableDeclarationAST>(type, "", nullptr);
+         return _setSource(std::make_unique<VariableDeclarationAST>(type, "", nullptr, isConst), token);
 
       if (_peek().type != TokenType::Identifier)
          return _logError("expected an identifier after type in function argument but got: '" + _lexeme(_peek()) + "'");
@@ -1434,7 +1444,7 @@ namespace tungsten {
       if (initExpr) // TODO: allow default values (still have to figure out how to make them initialize at the location where the function is called instead of where it's defined)
          return _logError<VariableDeclarationAST>("function arguments cannot have an initializer");
 
-      return std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr));
+      return _setSource(std::make_unique<VariableDeclarationAST>(type, name, std::move(initExpr), isConst), token);
    }
 
    std::unique_ptr<BlockStatementAST> Parser::_parseBlock() {

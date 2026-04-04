@@ -765,12 +765,14 @@ export namespace tungsten {
 
    class VariableDeclarationAST : public ExpressionAST {
    public:
-      VariableDeclarationAST(std::shared_ptr<Type> type, const std::string& name, std::unique_ptr<ExpressionAST> init, bool isGlobal = false)
-          : ExpressionAST{type}, _name{name}, _isGlobal{isGlobal}, _init{std::move(init)} {}
+      VariableDeclarationAST(std::shared_ptr<Type> type, const std::string& name, std::unique_ptr<ExpressionAST> init, bool isConst, bool isGlobal = false)
+          : ExpressionAST{type}, _name{name}, _init{std::move(init)}, _isConst{isConst}, _isGlobal{isGlobal} {}
       llvm::Value* codegen() override;
 
       _NODISCARD const std::string& name() const { return _name; }
       _NODISCARD std::unique_ptr<ExpressionAST>& initializer() { return _init; }
+      _NODISCARD bool isConst() const { return _isConst; }
+      _NODISCARD bool isGlobal() const { return _isGlobal; }
       void accept(ASTVisitor& v) override { v.visit(*this); }
 
       _NODISCARD ASTType astType() const noexcept override { return ASTType::VariableDeclaration; }
@@ -779,8 +781,9 @@ export namespace tungsten {
 
    private:
       std::string _name;
-      bool _isGlobal;
       std::unique_ptr<ExpressionAST> _init;
+      bool _isConst;
+      bool _isGlobal;
    };
 
    // expression for index access array[index]
@@ -1528,6 +1531,7 @@ export namespace tungsten {
             return false;
       }
    }
+
    llvm::Value* BinaryExpressionAST::codegen() {
       llvm::Value* LHS = _LHS->codegen();
       llvm::Value* RHS = _RHS->codegen();
@@ -1784,7 +1788,7 @@ export namespace tungsten {
          auto* globalVar = new llvm::GlobalVariable(
              *TheModule,
              type,
-             false,
+             _isConst,
              llvm::GlobalValue::ExternalLinkage,
              initConstant,
              _name);
