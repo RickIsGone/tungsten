@@ -84,7 +84,7 @@ namespace tungsten {
       Parser& operator=(const Parser&) = delete;
 
       void parse();
-      void writeIR() { dumpIR(_compileOptions.optimizationLevel); }
+      void writeIR() { dumpIR(_compileOptions); }
       _NODISCARD std::vector<std::unique_ptr<FunctionAST>>& functions() { return _functions; }
       _NODISCARD std::vector<std::unique_ptr<ClassAST>>& classes() { return _classes; }
       _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& globalVariables() { return _globalVariables; }

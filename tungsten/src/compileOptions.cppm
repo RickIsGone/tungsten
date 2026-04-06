@@ -21,10 +21,17 @@ namespace tungsten {
       LLVMIR
    };
 
+   export enum class OptimizationLevel {
+      O0,
+      O1,
+      O2,
+      O3
+   };
+
    const std::unordered_set validFlags{
        "--help"sv, "-h"sv,
        "-o"sv,
-       "-O1"sv, "-O2"sv, "-O3"sv,
+       "-O0"sv, "-O1"sv, "-O2"sv, "-O3"sv,
        "-C"sv,
        "-S"sv,
        "-emit-llvm"sv};
@@ -35,8 +42,8 @@ namespace tungsten {
       bool newProject{false};
       bool buildSystem{false};
       OutputKind outputKind{OutputKind::Executable};
-      uint8_t optimizationLevel{0};
-      std::string outputFile{"a.out"};
+      OptimizationLevel optimizationLevel{OptimizationLevel::O0};
+      std::string outputFile{"a.o"};
    };
 
    void checkBuildSystemOptions(const CompileOptions& options) {
@@ -65,9 +72,10 @@ namespace tungsten {
                    "  -h, --help             Show this help message\n"
                    "  new <project_name>     Create a new project\n"
                    "  build-tgs [options]    Build a build.tgs file\n\n"
+
                    "Available flags:\n"
                    "  -o <name>              Set the output file name\n"
-                   "  -O<1,2,3>              Enable optimizations\n"
+                   "  -O<0,1,2,3>            Enable optimizations\n"
                    "  -C                     Emit object files\n"
                    "  -S                     Emit assembly files\n"
                    "  -emit-llvm             Emit LLVM IR\n";
@@ -104,19 +112,21 @@ namespace tungsten {
 
    void checkOptimizationFlags(CompileOptions& options) {
       for (const auto& flag : options.flags) {
+         if (flag == "-O0"sv)
+            options.optimizationLevel = OptimizationLevel::O0;
          if (flag == "-O1"sv)
-            options.optimizationLevel = 1;
+            options.optimizationLevel = OptimizationLevel::O1;
          else if (flag == "-O2"sv)
-            options.optimizationLevel = 2;
+            options.optimizationLevel = OptimizationLevel::O2;
          else if (flag == "-O3"sv)
-            options.optimizationLevel = 3;
+            options.optimizationLevel = OptimizationLevel::O3;
       }
    }
 
    void checkFlags(const CompileOptions& options) {
       for (const auto& flag : options.flags) {
          if (flag != "--help"sv && flag != "-h"sv) {
-            if (validFlags.find(flag) == validFlags.end())
+            if (!validFlags.contains(flag))
                utils::pushError("unknown flag: '{}'", flag);
          }
       }

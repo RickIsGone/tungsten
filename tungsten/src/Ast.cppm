@@ -27,6 +27,7 @@ module;
 #endif
 
 export module Tungsten.ast;
+import Tungsten.compileOptions;
 import Tungsten.utils;
 
 using namespace std::literals;
@@ -189,7 +190,7 @@ export namespace tungsten {
       TheModule->setSourceFileName(fileName);
       addCoreLibFunctions();
    }
-   void dumpIR(uint8_t optimizationLevel) {
+   void dumpIR(const CompileOptions& CO) {
       llvm::verifyModule(*TheModule, &llvm::outs());
 
       // code optimization following llvm guide at https://llvm.org/docs/NewPassManager.html#status-of-the-new-and-legacy-pass-managers
@@ -207,17 +208,17 @@ export namespace tungsten {
       PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
       llvm::OptimizationLevel OL;
-      switch (optimizationLevel) {
-         case 0:
+      switch (CO.optimizationLevel) {
+         case OptimizationLevel::O0:
             OL = llvm::OptimizationLevel::O0;
             break;
-         case 1:
+         case OptimizationLevel::O1:
             OL = llvm::OptimizationLevel::O1;
             break;
-         case 2:
+         case OptimizationLevel::O2:
             OL = llvm::OptimizationLevel::O2;
             break;
-         case 3:
+         case OptimizationLevel::O3:
             OL = llvm::OptimizationLevel::O3;
             break;
          default:
@@ -1935,11 +1936,19 @@ export namespace tungsten {
                argVal = Builder->CreateLoad(loadedType, argVal, "arg.varload");
          }
 
+         bool indexAccessAlreadyValue = false;
          if (arg->astType() == ASTType::IndexAccessExpression) {
             llvm::Type* loadedType = expressionValueTypeForCodegen(arg.get());
             if (!loadedType && arg->type())
                loadedType = arg->type()->llvmType();
-            if (loadedType && argVal->getType()->isPointerTy())
+
+            if (loadedType && loadedType->isPointerTy())
+               indexAccessAlreadyValue = true;
+
+            if (loadedType && argVal->getType()->isPointerTy() &&
+                arg->type()->kind() != TypeKind::Pointer &&
+                arg->type()->kind() != TypeKind::Reference &&
+                !indexAccessAlreadyValue)
                argVal = Builder->CreateLoad(loadedType, argVal, "arg.idxload");
          }
 
@@ -1947,12 +1956,13 @@ export namespace tungsten {
          if (callee && i < callee->arg_size())
             expectedParamType = callee->getFunctionType()->getParamType(static_cast<unsigned>(i));
 
-         if (argVal->getType()->isPointerTy() && expectedParamType && !expectedParamType->isPointerTy()) {
+         if (argVal->getType()->isPointerTy() && expectedParamType && !expectedParamType->isPointerTy() && !indexAccessAlreadyValue) {
             argVal = Builder->CreateLoad(expressionValueTypeForCodegen(arg.get()), argVal, "arg.load");
          } else if (argVal->getType()->isPointerTy() && !expectedParamType &&
                     arg->type()->kind() != TypeKind::Pointer &&
                     arg->type()->kind() != TypeKind::Reference &&
-                    arg->type()->kind() != TypeKind::Array) {
+                    arg->type()->kind() != TypeKind::Array &&
+                    !indexAccessAlreadyValue) {
             argVal = Builder->CreateLoad(expressionValueTypeForCodegen(arg.get()), argVal, "arg.load");
          }
 
