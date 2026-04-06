@@ -60,7 +60,7 @@ namespace tungsten {
 
    void TranslationUnit::compile(const fs::path& path) {
       Lexer lexer{path, _raw};
-      Parser parser{path, lexer.tokenize(), _raw};
+      Parser parser{path, lexer.tokenize(), _raw, _compileOptions};
       parser.parse();
       SemanticAnalyzer analyzer{parser.functions(), parser.classes(), parser.globalVariables(), parser.externs(), path, _raw};
       if (analyzer.analyze()) {

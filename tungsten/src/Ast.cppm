@@ -19,6 +19,7 @@ module;
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Passes/PassBuilder.h>
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/FileSystem.h"
 #ifndef _NODISCARD
@@ -35,6 +36,7 @@ namespace tungsten {
    std::unique_ptr<llvm::LLVMContext> TheContext{};
    std::unique_ptr<llvm::IRBuilder<>> Builder{};
    std::unique_ptr<llvm::Module> TheModule{};
+
    std::unordered_map<std::string, llvm::Value*> NamedValues{};
    std::unordered_map<std::string, llvm::Type*> VariableTypes{};
    llvm::Value* LogErrorV(const std::string& Str) {
@@ -187,9 +189,42 @@ export namespace tungsten {
       TheModule->setSourceFileName(fileName);
       addCoreLibFunctions();
    }
-   void dumpIR() {
+   void dumpIR(uint8_t optimizationLevel) {
       llvm::verifyModule(*TheModule, &llvm::outs());
-      // #ifdef TUNGSTEN_DEBUG
+
+      // code optimization following llvm guide at https://llvm.org/docs/NewPassManager.html#status-of-the-new-and-legacy-pass-managers
+      llvm::LoopAnalysisManager LAM{};
+      llvm::FunctionAnalysisManager FAM{};
+      llvm::CGSCCAnalysisManager CGAM{};
+      llvm::ModuleAnalysisManager MAM{};
+
+      llvm::PassBuilder PB;
+
+      PB.registerModuleAnalyses(MAM);
+      PB.registerCGSCCAnalyses(CGAM);
+      PB.registerFunctionAnalyses(FAM);
+      PB.registerLoopAnalyses(LAM);
+      PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+      llvm::OptimizationLevel OL;
+      switch (optimizationLevel) {
+         case 0:
+            OL = llvm::OptimizationLevel::O0;
+            break;
+         case 1:
+            OL = llvm::OptimizationLevel::O1;
+            break;
+         case 2:
+            OL = llvm::OptimizationLevel::O2;
+            break;
+         case 3:
+            OL = llvm::OptimizationLevel::O3;
+            break;
+         default:
+            OL = llvm::OptimizationLevel::O0;
+      }
+      llvm::ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OL);
+      MPM.run(*TheModule, MAM);
 
       std::error_code EC;
       llvm::raw_fd_ostream outFile(TheModule->getModuleIdentifier() + ".ll", EC, llvm::sys::fs::OF_None);

@@ -14,6 +14,7 @@ module;
 export module Tungsten.parser;
 import Tungsten.token;
 import Tungsten.ast;
+import Tungsten.compileOptions;
 import Tungsten.utils;
 
 using namespace std::string_view_literals;
@@ -73,8 +74,8 @@ namespace tungsten {
 
    export class Parser {
    public:
-      Parser(const fs::path& file, const std::vector<Token>& tokens, const std::string& raw)
-          : _filePath{file}, _tokens{tokens}, _raw{raw} {
+      Parser(const fs::path& file, const std::vector<Token>& tokens, const std::string& raw, const CompileOptions& options)
+          : _filePath{file}, _tokens{tokens}, _raw{raw}, _compileOptions{options} {
          initLLVM(file.filename().stem().string(), file.filename().string());
          _externs = std::make_unique<Externs>();
       }
@@ -83,7 +84,7 @@ namespace tungsten {
       Parser& operator=(const Parser&) = delete;
 
       void parse();
-      void writeIR() { dumpIR(); }
+      void writeIR() { dumpIR(_compileOptions.optimizationLevel); }
       _NODISCARD std::vector<std::unique_ptr<FunctionAST>>& functions() { return _functions; }
       _NODISCARD std::vector<std::unique_ptr<ClassAST>>& classes() { return _classes; }
       _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& globalVariables() { return _globalVariables; }
@@ -161,6 +162,8 @@ namespace tungsten {
       std::shared_ptr<Type> _currentFunctionReturnType;
       std::string _currentFunctionName;
       std::string _namespacePrefix{};
+
+      const CompileOptions& _compileOptions;
    };
    //  ========================================== implementation ==========================================
 

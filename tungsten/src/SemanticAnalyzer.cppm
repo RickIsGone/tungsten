@@ -479,8 +479,11 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(VariableExpressionAST& var) {
-      if (!_doesVariableExist(var.name()))
+      if (!_doesVariableExist(var.name())) {
+         if (var.name().find("::"sv) != std::string::npos)
+            return _logError(&var, "no variable '{}' found in namespace '{}'", var.name().substr(var.name().find_last_of(":") + 1), var.name().substr(0, var.name().find_last_of("::") - 1));
          return _logError(&var, "unknown variable '{}'", var.name());
+      }
 
       var.setType(_variableType(var.name()));
    }
@@ -736,6 +739,8 @@ namespace tungsten {
 
       if (overloads.empty()) {
          call.setType(makeNullType()); // temporary fix (if I don't fucking forget to fix it *again*)
+         if (call.callee().find("::"sv) != std::string::npos)
+            return _logError(&call, "no function '{}' found in namespace '{}'", call.callee().substr(call.callee().find_last_of(":") + 1), call.callee().substr(0, call.callee().find_last_of("::") - 1));
          return _logError(&call, "unknown function '{}'", call.callee());
       }
 

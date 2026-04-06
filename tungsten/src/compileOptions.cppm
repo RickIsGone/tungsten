@@ -35,7 +35,7 @@ namespace tungsten {
       bool newProject{false};
       bool buildSystem{false};
       OutputKind outputKind{OutputKind::Executable};
-      int optimizationLevel{0};
+      uint8_t optimizationLevel{0};
       std::string outputFile{"a.out"};
    };
 
