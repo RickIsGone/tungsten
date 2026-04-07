@@ -45,6 +45,19 @@ jobs:
       - name: Install DEB packaging dependencies
         run: sudo apt-get install -y fakeroot dpkg-dev
 
+      - name: Uninstall LLVM 16
+        shell: bash
+        run: |
+          sudo apt-get update
+          
+          sudo apt-get purge -y \
+            "clang-16*" "llvm-16*" "lld-16*" "clang-tools-16*" \
+            "libclang-16*" "libllvm16" \
+            "libc++-16-dev" "libc++abi-16-dev" || true
+
+          sudo apt-get autoremove -y
+          sudo apt-get autoclean
+
       - name: Install LLVM (official apt.llvm.org) + tungsten deps
         shell: bash
         run: |
@@ -53,10 +66,11 @@ jobs:
           sudo apt-get install -y wget gnupg lsb-release ca-certificates software-properties-common
 
           wget -O - https://apt.llvm.org/llvm.sh | sudo bash -s -- 18
-
+          
           sudo apt-get update
           sudo apt-get install -y \
             clang-18 llvm-18 llvm-18-dev lld-18 clang-tools-18 \
+            libc++-18-dev libc++abi-18-dev \
             libarchive-dev libcurl4-gnutls-dev
 
           # sanity check: this must exist for module dependency discovery
