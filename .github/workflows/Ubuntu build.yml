@@ -51,12 +51,16 @@ jobs:
           set -euxo pipefail
           sudo apt-get update
           sudo apt-get install -y wget gnupg lsb-release ca-certificates software-properties-common
-          
-          # Add LLVM official repo for Ubuntu version on runner, then install LLVM 18 toolchain
+
           wget -O - https://apt.llvm.org/llvm.sh | sudo bash -s -- 18
-          
+
           sudo apt-get update
-          sudo apt-get install -y clang-18 llvm-18 llvm-18-dev lld-18 libarchive-dev libcurl4-gnutls-dev
+          sudo apt-get install -y \
+            clang-18 llvm-18 llvm-18-dev lld-18 clang-tools-18 \
+            libarchive-dev libcurl4-gnutls-dev
+
+          # sanity check: this must exist for module dependency discovery
+          clang-scan-deps-18 --version
 
       - name: Setting up CMake
         run: cmake -S . -B build -GNinja \
