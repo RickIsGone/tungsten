@@ -6,6 +6,7 @@ module;
 #include <vector>
 #include <unordered_map>
 #include <iostream>
+#include <filesystem>
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Function.h>
 #include <llvm/ADT/APFloat.h>
@@ -28,15 +29,19 @@ module;
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/TargetParser/Host.h>
+#include <llvm/IR/DIBuilder.h>
+#include <llvm/IR/DebugInfoMetadata.h>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
 #endif
 
 export module Tungsten.ast;
 import Tungsten.compileOptions;
+import Tungsten.debugInfo;
 import Tungsten.utils;
 
 using namespace std::literals;
+namespace fs = std::filesystem;
 
 namespace tungsten {
    // llvm stuff (separate namespace block to avoid exporting to other modules)
@@ -233,7 +238,6 @@ namespace tungsten {
       }
 
       pm.run(*TheModule);
-      TheModule->print(outFile, nullptr);
       return true;
    }
 
@@ -256,7 +260,6 @@ namespace tungsten {
       }
 
       pm.run(*TheModule);
-      TheModule->print(outFile, nullptr);
       return true;
    }
 
@@ -279,11 +282,33 @@ namespace tungsten {
 
 export namespace tungsten {
    void addCoreLibFunctions();
-   void initLLVM(const std::string& moduleName, const std::string& fileName) {
+   void initLLVM(const std::string& moduleName, const std::string& fileName, const CompileOptions& CO) {
       TheContext = std::make_unique<llvm::LLVMContext>();
       Builder = std::make_unique<llvm::IRBuilder<>>(*TheContext);
       TheModule = std::make_unique<llvm::Module>(moduleName, *TheContext);
       TheModule->setSourceFileName(fileName);
+
+      // debug info
+      DBuilder = std::make_unique<llvm::DIBuilder>(*TheModule);
+      const fs::path sourcePath{fileName};
+      const std::string sourceDir = sourcePath.has_parent_path() ? sourcePath.parent_path().string() : ".";
+      const std::string sourceFile = sourcePath.has_filename() ? sourcePath.filename().string() : fileName;
+      KSDbgInfo.TheFile = DBuilder->createFile(sourceFile, sourceDir);
+      bool isDebug = std::find_if(CO.flags.begin(), CO.flags.end(), [](const std::string& flag) { return flag == "--strip"sv; }) == CO.flags.end();
+      KSDbgInfo.TheCU = DBuilder->createCompileUnit(llvm::dwarf::DW_LANG_C_plus_plus,
+                                                    KSDbgInfo.TheFile,
+                                                    "Tungsten Compiler",
+                                                    CO.optimizationLevel != OptimizationLevel::O0,
+                                                    "", 0, "", isDebug ? llvm::DICompileUnit::FullDebug : llvm::DICompileUnit::NoDebug);
+      KSDbgInfo.CurrentSubprogram = nullptr;
+      KSDbgInfo.LexicalBlocks.clear();
+      KSDbgInfo.LocalVariableScopes.clear();
+
+      TheModule->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
+#ifdef _WIN32
+      TheModule->addModuleFlag(llvm::Module::Warning, "CodeView", 1);
+#endif
+
       addCoreLibFunctions();
    }
    void dumpIR(const CompileOptions& CO) {
@@ -322,6 +347,7 @@ export namespace tungsten {
       }
       llvm::ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OL);
       MPM.run(*TheModule, MAM);
+      DBuilder->finalize();
       switch (CO.outputKind) {
          case OutputKind::Object:
             if (!emitObject(CO))
@@ -485,14 +511,25 @@ export namespace tungsten {
          _sourceLength = length;
          _hasSource = true;
       }
+      void setSource(size_t position, size_t length, size_t line, size_t column) {
+         _sourcePosition = position;
+         _sourceLength = length;
+         _sourceLine = line;
+         _sourceColumn = column;
+         _hasSource = true;
+      }
       _NODISCARD bool hasSource() const noexcept { return _hasSource; }
       _NODISCARD size_t sourcePosition() const noexcept { return _sourcePosition; }
       _NODISCARD size_t sourceLength() const noexcept { return _sourceLength; }
+      _NODISCARD size_t sourceLine() const noexcept { return _sourceLine; }
+      _NODISCARD size_t sourceColumn() const noexcept { return _sourceColumn; }
 
    protected:
       std::shared_ptr<Type> _Type;
       size_t _sourcePosition{0};
       size_t _sourceLength{0};
+      size_t _sourceLine{1};
+      size_t _sourceColumn{1};
       bool _hasSource{false};
    };
 
@@ -1454,6 +1491,173 @@ namespace tungsten {
          llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, fun.name, TheModule.get());
       }
    }
+   static uint64_t debugTypeSizeBits(llvm::Type* ty) {
+      if (!ty || !TheModule || !ty->isSized())
+         return 0;
+      return TheModule->getDataLayout().getTypeAllocSizeInBits(ty);
+   }
+
+   static uint32_t debugTypeAlignBits(llvm::Type* ty) {
+      if (!ty || !TheModule || !ty->isSized())
+         return 0;
+      return static_cast<uint32_t>(TheModule->getDataLayout().getABITypeAlign(ty).value() * 8);
+   }
+
+   static llvm::DIType* debugTypeFor(const std::shared_ptr<Type>& ty) {
+      if (!ty)
+         return DBuilder->createUnspecifiedType("unknown");
+
+      switch (ty->kind()) {
+         case TypeKind::Bool:
+            return KSDbgInfo.boolTy();
+         case TypeKind::Char:
+            return KSDbgInfo.charTy();
+         case TypeKind::Int8:
+            return KSDbgInfo.int8Ty();
+         case TypeKind::Uint8:
+            return KSDbgInfo.uint8Ty();
+         case TypeKind::Int16:
+            return KSDbgInfo.int16Ty();
+         case TypeKind::Uint16:
+            return KSDbgInfo.uint16Ty();
+         case TypeKind::Int32:
+            return KSDbgInfo.int32Ty();
+         case TypeKind::Uint32:
+            return KSDbgInfo.uint32Ty();
+         case TypeKind::Int64:
+            return KSDbgInfo.int64Ty();
+         case TypeKind::Uint64:
+            return KSDbgInfo.uint64Ty();
+         case TypeKind::Int128:
+            return KSDbgInfo.int128Ty();
+         case TypeKind::Uint128:
+            return KSDbgInfo.uint128Ty();
+         case TypeKind::Float:
+            return KSDbgInfo.floatTy();
+         case TypeKind::Double:
+            return KSDbgInfo.doubleTy();
+         case TypeKind::Void:
+            return DBuilder->createUnspecifiedType("void");
+         case TypeKind::Pointer: {
+            auto* ptrTy = static_cast<PointerTy*>(ty.get());
+            const uint64_t ptrBits = TheModule ? TheModule->getDataLayout().getPointerSizeInBits(0) : 64;
+            return KSDbgInfo.pointerTy(debugTypeFor(ptrTy->pointee()), ptrBits, static_cast<uint32_t>(ptrBits));
+         }
+         case TypeKind::Reference: {
+            auto* refTy = static_cast<ReferenceTy*>(ty.get());
+            const uint64_t ptrBits = TheModule ? TheModule->getDataLayout().getPointerSizeInBits(0) : 64;
+            return KSDbgInfo.pointerTy(debugTypeFor(refTy->reference()), ptrBits, static_cast<uint32_t>(ptrBits));
+         }
+         case TypeKind::Array: {
+            auto* arrTy = static_cast<ArrayTy*>(ty.get());
+            uint64_t count = 0;
+            if (arrTy->sizeExpr() && arrTy->sizeExpr()->astType() == ASTType::NumberExpression) {
+               const Number rawSize = static_cast<NumberExpressionAST*>(arrTy->sizeExpr().get())->value();
+               count = std::holds_alternative<double>(rawSize)
+                   ? static_cast<uint64_t>(std::get<double>(rawSize))
+                   : std::get<uint64_t>(rawSize);
+            }
+            llvm::Type* arrLlvmTy = ty->llvmType();
+            return KSDbgInfo.arrayTy(debugTypeFor(arrTy->arrayType()), count, debugTypeSizeBits(arrLlvmTy), debugTypeAlignBits(arrLlvmTy));
+         }
+         default:
+            return DBuilder->createUnspecifiedType(ty->string());
+      }
+   }
+
+   static uint32_t debugLineFor(ExpressionAST* expr) {
+      if (!expr || !expr->hasSource())
+         return 1;
+      return static_cast<uint32_t>(expr->sourceLine());
+   }
+
+   static uint32_t debugColumnFor(ExpressionAST* expr) {
+      if (!expr || !expr->hasSource())
+         return 1;
+      return static_cast<uint32_t>(expr->sourceColumn());
+   }
+
+   static void setDebugLocationFor(ExpressionAST* expr) {
+      if (!Builder || !TheContext)
+         return;
+      llvm::DIScope* scope = KSDbgInfo.currentScope();
+      if (!scope)
+         return;
+      Builder->SetCurrentDebugLocation(llvm::DILocation::get(*TheContext, debugLineFor(expr), debugColumnFor(expr), scope));
+   }
+
+   static void emitDbgValueForVariableName(const std::string& variableName, llvm::Value* value, ExpressionAST* locationExpr) {
+      if (!DBuilder || !Builder || !TheContext || variableName.empty() || !value)
+         return;
+
+      llvm::DILocalVariable* localVar = KSDbgInfo.lookupLocalVariable(variableName);
+      if (!localVar)
+         return;
+
+      llvm::BasicBlock* insertBlock = Builder->GetInsertBlock();
+      llvm::DIScope* scope = KSDbgInfo.currentScope();
+      if (!insertBlock || !scope)
+         return;
+
+      llvm::DILocation* location = llvm::DILocation::get(*TheContext, debugLineFor(locationExpr), debugColumnFor(locationExpr), scope);
+      DBuilder->insertDbgValueIntrinsic(value,
+                                        localVar,
+                                        DBuilder->createExpression(),
+                                        location,
+                                        insertBlock);
+   }
+
+   static uint32_t functionDebugLine(FunctionPrototypeAST* prototype, ExpressionAST* body) {
+      if (body && body->hasSource())
+         return static_cast<uint32_t>(body->sourceLine());
+      if (prototype) {
+         for (const auto& arg : prototype->args()) {
+            if (arg && arg->hasSource())
+               return static_cast<uint32_t>(arg->sourceLine());
+         }
+      }
+      return 1;
+   }
+
+   static uint32_t functionDebugColumn(FunctionPrototypeAST* prototype, ExpressionAST* body) {
+      if (body && body->hasSource())
+         return static_cast<uint32_t>(body->sourceColumn());
+      if (prototype) {
+         for (const auto& arg : prototype->args()) {
+            if (arg && arg->hasSource())
+               return static_cast<uint32_t>(arg->sourceColumn());
+         }
+      }
+      return 1;
+   }
+
+   static llvm::DISubprogram* createFunctionDebugInfo(llvm::Function* function, FunctionPrototypeAST* prototype, ExpressionAST* body) {
+      if (!function || !prototype || !DBuilder || !KSDbgInfo.TheFile)
+         return nullptr;
+
+      std::vector<llvm::Metadata*> diTypes;
+      diTypes.push_back(debugTypeFor(prototype->type()));
+      for (const auto& arg : prototype->args())
+         diTypes.push_back(debugTypeFor(arg->type()));
+
+      auto* subroutineType = DBuilder->createSubroutineType(DBuilder->getOrCreateTypeArray(diTypes));
+      const uint32_t line = functionDebugLine(prototype, body);
+      auto* subprogram = DBuilder->createFunction(
+          KSDbgInfo.TheFile,
+          prototype->name(),
+          function->getName(),
+          KSDbgInfo.TheFile,
+          line,
+          subroutineType,
+          line,
+          llvm::DINode::FlagPrototyped,
+          llvm::DISubprogram::SPFlagDefinition);
+
+      function->setSubprogram(subprogram);
+      KSDbgInfo.CurrentSubprogram = subprogram;
+      return subprogram;
+   }
+
 } // namespace tungsten
 
 //  ========================================== implementation ==========================================
@@ -1480,10 +1684,12 @@ export namespace tungsten {
    }
 
    llvm::Value* StringExpression::codegen() {
+      setDebugLocationFor(this);
       return Builder->CreateGlobalStringPtr(_value, "strtmp");
    }
 
    llvm::Value* UnaryExpressionAST::codegen() {
+      setDebugLocationFor(this);
       llvm::Value* operandValue = _operand->codegen();
       if (!operandValue)
          return nullptr;
@@ -1515,6 +1721,8 @@ export namespace tungsten {
             else
                return LogErrorV("unsupported type for increment operation");
             Builder->CreateStore(result, targetAddr);
+            if (_operand->astType() == ASTType::VariableExpression)
+               emitDbgValueForVariableName(static_cast<VariableExpressionAST*>(_operand.get())->name(), result, this);
             return result;
          }
 
@@ -1524,7 +1732,10 @@ export namespace tungsten {
             result = Builder->CreateFSub(loadedOperand, llvm::ConstantFP::get(operandType, 1.0), "decrement");
          else
             return LogErrorV("unsupported type for decrement operation");
-         return Builder->CreateStore(result, targetAddr);
+         auto* stored = Builder->CreateStore(result, targetAddr);
+         if (_operand->astType() == ASTType::VariableExpression)
+            emitDbgValueForVariableName(static_cast<VariableExpressionAST*>(_operand.get())->name(), result, this);
+         return stored;
       }
 
       llvm::Type* operandType = operandValue->getType(); // TODO: make it work with both L and R values
@@ -1672,6 +1883,8 @@ export namespace tungsten {
    }
 
    llvm::Value* BinaryExpressionAST::codegen() {
+      setDebugLocationFor(this);
+
       llvm::Value* LHS = _LHS->codegen();
       llvm::Value* RHS = _RHS->codegen();
 
@@ -1700,6 +1913,8 @@ export namespace tungsten {
 
          if (_LHS->type()->kind() == TypeKind::Pointer && _LHS->astType() != ASTType::UnaryExpression) {
             Builder->CreateStore(RHS, LHS);
+            if (_LHS->astType() == ASTType::VariableExpression)
+               emitDbgValueForVariableName(static_cast<VariableExpressionAST*>(_LHS.get())->name(), RHS, this);
             return RHS;
          }
 
@@ -1787,6 +2002,8 @@ export namespace tungsten {
             return LogErrorV("unsupported types for compound assignment operator '" + _op + "'");
 
          Builder->CreateStore(result, targetAddr);
+         if (_LHS->astType() == ASTType::VariableExpression)
+            emitDbgValueForVariableName(static_cast<VariableExpressionAST*>(_LHS.get())->name(), result, this);
          return result;
       }
 
@@ -1855,6 +2072,8 @@ export namespace tungsten {
 
 
    llvm::Value* VariableDeclarationAST::codegen() {
+      setDebugLocationFor(this);
+
       if (_Type->kind() == TypeKind::Reference) {
          if (!_init && _isGlobal)
             return LogErrorV("global reference requires an initializer");
@@ -1951,10 +2170,24 @@ export namespace tungsten {
       NamedValues[_name] = allocInstance;
       VariableTypes[_name] = type;
 
+      llvm::DIScope* scope = KSDbgInfo.currentScope();
+      if (scope && DBuilder && KSDbgInfo.TheFile) {
+         const uint32_t line = debugLineFor(this);
+         const uint32_t column = debugColumnFor(this);
+         auto* localVar = DBuilder->createAutoVariable(scope, _name, KSDbgInfo.TheFile, line, debugTypeFor(_Type), true);
+         KSDbgInfo.registerLocalVariable(_name, localVar);
+         DBuilder->insertDeclare(allocInstance,
+                                 localVar,
+                                 DBuilder->createExpression(),
+                                 llvm::DILocation::get(*TheContext, line, column, scope),
+                                 Builder->GetInsertBlock());
+      }
+
       return allocInstance;
    }
 
    llvm::Value* IndexAccessAST::codegen() {
+      setDebugLocationFor(this);
       llvm::Value* arrayPtr = _array->codegen();
       llvm::Value* indexVal = _index->codegen();
 
@@ -1999,6 +2232,8 @@ export namespace tungsten {
    }
 
    llvm::Value* CallExpressionAST::codegen() {
+      setDebugLocationFor(this);
+
       std::string name = _callee + "$";
       for (auto& arg : _args) {
          if (arg != _args.front())
@@ -2074,13 +2309,16 @@ export namespace tungsten {
 
          args.push_back(argVal);
       }
+      setDebugLocationFor(this);
       return Builder->CreateCall(callee, args);
    }
 
    llvm::Value* TypeOfStatementAST::codegen() {
+      setDebugLocationFor(this);
       return Builder->CreateGlobalStringPtr(fullTypeString(_statement->type()));
    }
    llvm::Value* NameOfStatementAST::codegen() {
+      setDebugLocationFor(this);
       std::string name;
       if (!tryBuildNameOfExpression(_statement.get(), name))
          return LogErrorV("cannot use 'nameof' on expression without a stable name");
@@ -2093,6 +2331,7 @@ export namespace tungsten {
    }
 
    llvm::Value* __BuiltinFunctionAST::codegen() {
+      setDebugLocationFor(this);
       return Builder->CreateGlobalStringPtr(_function, "strtmp");
    }
    llvm::Value* __BuiltinLineAST::codegen() {
@@ -2102,10 +2341,13 @@ export namespace tungsten {
       return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*TheContext), _column); // Builder->getInt64(_column)
    }
    llvm::Value* __BuiltinFileAST::codegen() {
+      setDebugLocationFor(this);
       return Builder->CreateGlobalStringPtr(_file, "strtmp");
    }
 
    llvm::Value* StaticCastAST::codegen() {
+      setDebugLocationFor(this);
+
       llvm::Type* type = _Type->llvmType();
 
       if (!_value)
@@ -2191,13 +2433,22 @@ export namespace tungsten {
    }
 
    llvm::Value* BlockStatementAST::codegen() {
+      setDebugLocationFor(this);
+      KSDbgInfo.pushLexicalBlock(debugLineFor(this), debugColumnFor(this));
+      KSDbgInfo.pushVariableScope();
+
       llvm::Value* last = llvm::Constant::getNullValue(llvm::Type::getInt8Ty(*TheContext)); // to avoid empty functions from getting recognized as wrong
       for (const auto& statement : _statements) {
          last = statement->codegen();
          if (!last) {
+            KSDbgInfo.popVariableScope();
+            KSDbgInfo.popLexicalBlock();
             return nullptr;
          }
       }
+
+      KSDbgInfo.popVariableScope();
+      KSDbgInfo.popLexicalBlock();
       return last;
    }
 
@@ -2206,6 +2457,8 @@ export namespace tungsten {
    }
 
    llvm::Value* ReturnStatementAST::codegen() {
+      setDebugLocationFor(this);
+
       if (_value == nullptr)
          return Builder->CreateRetVoid();
 
@@ -2232,6 +2485,8 @@ export namespace tungsten {
       return Builder->CreateRet(returnValue);
    }
    llvm::Value* ExitStatement::codegen() {
+      setDebugLocationFor(this);
+
       llvm::Value* exitValue = _value->codegen();
       if (_value->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_value.get())->op() == "*"sv) {
          exitValue = loadDereferenceAddressIfUnaryStar(_value.get(), exitValue, "exit.deref.addr");
@@ -2258,6 +2513,7 @@ export namespace tungsten {
          exitValue = Builder->CreateIntCast(exitValue, Builder->getInt32Ty(), true);
       }
 
+      setDebugLocationFor(this);
       llvm::Value* call = Builder->CreateCall(exitFunc, exitValue);
 
       Builder->CreateUnreachable();
@@ -2266,6 +2522,8 @@ export namespace tungsten {
    }
 
    llvm::Value* IfStatementAST::codegen() {
+      setDebugLocationFor(this);
+
       llvm::Value* CondV = _condition->codegen();
       if (!CondV)
          return nullptr;
@@ -2278,6 +2536,7 @@ export namespace tungsten {
       llvm::BasicBlock* ElseBB = llvm::BasicBlock::Create(*TheContext, "if.else");
       llvm::BasicBlock* MergeBB = llvm::BasicBlock::Create(*TheContext, "if.end");
 
+      setDebugLocationFor(this);
       Builder->CreateCondBr(CondV, ThenBB, ElseBB);
 
       // then
@@ -2304,6 +2563,8 @@ export namespace tungsten {
 
 
    llvm::Value* WhileStatementAST::codegen() {
+      setDebugLocationFor(this);
+
       llvm::Function* function = Builder->GetInsertBlock()->getParent();
 
       llvm::BasicBlock* condBB = llvm::BasicBlock::Create(*TheContext, "while.cond", function);
@@ -2318,6 +2579,7 @@ export namespace tungsten {
       if (!CondV)
          return nullptr;
       CondV = Builder->CreateICmpNE(CondV, llvm::ConstantInt::get(CondV->getType(), 0), "whilecond");
+      setDebugLocationFor(this);
       Builder->CreateCondBr(CondV, bodyBB, endBB);
 
       // body
@@ -2335,6 +2597,8 @@ export namespace tungsten {
    }
 
    llvm::Value* DoWhileStatementAST::codegen() {
+      setDebugLocationFor(this);
+
       llvm::Function* function = Builder->GetInsertBlock()->getParent();
 
       llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*TheContext, "dowhile.body", function);
@@ -2359,6 +2623,7 @@ export namespace tungsten {
           CondV,
           llvm::ConstantInt::get(CondV->getType(), 0),
           "dowhilecond");
+      setDebugLocationFor(this);
       Builder->CreateCondBr(CondV, bodyBB, endBB);
 
       // end
@@ -2369,6 +2634,8 @@ export namespace tungsten {
    }
 
    llvm::Value* ForStatementAST::codegen() {
+      setDebugLocationFor(this);
+
       llvm::Function* function = Builder->GetInsertBlock()->getParent();
 
       llvm::BasicBlock* condBB = llvm::BasicBlock::Create(*TheContext, "for.cond");
@@ -2392,6 +2659,7 @@ export namespace tungsten {
              CondV,
              llvm::ConstantInt::get(CondV->getType(), 0),
              "forcond");
+         setDebugLocationFor(this);
          Builder->CreateCondBr(CondV, bodyBB, endBB);
       } else
          Builder->CreateBr(bodyBB);
@@ -2453,8 +2721,24 @@ export namespace tungsten {
       if (!function)
          function = _prototype->codegen();
 
+      if (!function)
+         return nullptr;
+
+      if (!function->getSubprogram())
+         createFunctionDebugInfo(function, _prototype.get(), _body.get());
+      else
+         KSDbgInfo.CurrentSubprogram = function->getSubprogram();
+
       llvm::BasicBlock* BB = llvm::BasicBlock::Create(*TheContext, "entry", function);
       Builder->SetInsertPoint(BB);
+      if (KSDbgInfo.CurrentSubprogram)
+         Builder->SetCurrentDebugLocation(llvm::DILocation::get(*TheContext,
+                                                                functionDebugLine(_prototype.get(), _body.get()),
+                                                                functionDebugColumn(_prototype.get(), _body.get()),
+                                                                KSDbgInfo.CurrentSubprogram));
+
+      KSDbgInfo.pushVariableScope();
+
       llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
 
       size_t idx = 0;
@@ -2468,11 +2752,31 @@ export namespace tungsten {
             tmpBuilder.CreateStore(&arg, paramAddr);
             NamedValues[varDecl->name()] = paramAddr;
             VariableTypes[varDecl->name()] = arg.getType();
+
+            if (DBuilder && KSDbgInfo.CurrentSubprogram && KSDbgInfo.TheFile) {
+               const uint32_t paramLine = debugLineFor(varDecl);
+               const uint32_t paramColumn = debugColumnFor(varDecl);
+               auto* paramVar = DBuilder->createParameterVariable(
+                   KSDbgInfo.CurrentSubprogram,
+                   varDecl->name(),
+                   static_cast<unsigned>(idx + 1),
+                   KSDbgInfo.TheFile,
+                   paramLine,
+                   debugTypeFor(varDecl->type()),
+                   true);
+               KSDbgInfo.registerLocalVariable(varDecl->name(), paramVar);
+               DBuilder->insertDeclare(paramAddr,
+                                       paramVar,
+                                       DBuilder->createExpression(),
+                                       llvm::DILocation::get(*TheContext, paramLine, paramColumn, KSDbgInfo.CurrentSubprogram),
+                                       BB);
+            }
          }
          ++idx;
       }
 
       if (!_body || !_body->codegen()) {
+         KSDbgInfo.popVariableScope();
          function->eraseFromParent();
          // return LogErrorF("error in function: '" + name() + "'");
          return nullptr;
@@ -2483,9 +2787,14 @@ export namespace tungsten {
             Builder->CreateRetVoid();
          else if (_prototype->name() == "main"sv)
             Builder->CreateRet(Builder->getInt32(0)); // returning 0 by default in main function
-         else
+         else {
+            KSDbgInfo.popVariableScope();
             return LogErrorF("missing return statement in function: '" + name() + "'");
+         }
       }
+
+      KSDbgInfo.CurrentSubprogram = nullptr;
+      KSDbgInfo.popVariableScope();
 
       return function;
    }
@@ -2506,9 +2815,12 @@ export namespace tungsten {
 
       auto size = Builder->getInt64(static_cast<PointerTy*>(_Type.get())->pointee()->size());
 
+      setDebugLocationFor(this);
       return Builder->CreateCall(mallocFun, {size});
    }
    llvm::Value* FreeStatementAST::codegen() {
+      setDebugLocationFor(this);
+
       llvm::Function* freeFun = TheModule->getFunction("free");
       if (!freeFun) {
          llvm::FunctionType* freeType = llvm::FunctionType::get(
@@ -2542,11 +2854,14 @@ export namespace tungsten {
             pointerToFree = Builder->CreateLoad(pointeeType, ptr, "free.ptr");
       }
 
+      setDebugLocationFor(this);
       auto call = Builder->CreateCall(freeFun, {pointerToFree});
 
       // Ensure later loads observe null in the same lvalue used by `free`.
-      if (nullStoreTarget && nullStoreTarget->getType()->isPointerTy())
+      if (nullStoreTarget && nullStoreTarget->getType()->isPointerTy()) {
+         setDebugLocationFor(this);
          Builder->CreateStore(llvm::ConstantPointerNull::get(Builder->getPtrTy()), nullStoreTarget);
+      }
 
       return call;
    }

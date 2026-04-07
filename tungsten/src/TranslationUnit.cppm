@@ -1,5 +1,6 @@
 module;
 
+#include <algorithm>
 #include <filesystem>
 
 #if defined(_WIN32)
@@ -88,14 +89,17 @@ namespace tungsten {
          fs::path parentDir = currentDir.parent_path();
          fs::path libDir = parentDir / "lib";
          if (_compileOptions.outputKind == OutputKind::Executable) {
-#ifdef WIN32
+            const bool isDebugBuild = std::find(_compileOptions.flags.begin(), _compileOptions.flags.end(), "--strip") == _compileOptions.flags.end();
+#ifdef _WIN32
             std::string libs = libDir.string() + "/core.lib" + " " + libDir.string() + "/stdlib.lib";
-            system(("clang++ " + path.stem().string() + ".ll " + libs + " -o " + path.stem().string() + ".exe").c_str());
+            std::string debugFlag = isDebugBuild ? " -gcodeview -Xlinker /DEBUG" : "";
+            system(("clang++ " + path.stem().string() + ".ll " + libs + debugFlag + " -o " + path.stem().string() + ".exe").c_str());
 #else
             std::string libs = libDir.string() + "/libcore.a" + " " + libDir.string() + "/libstdlib.a";
-            system(("clang++ " + path.stem().string() + ".ll " + libs + " -o " + path.stem().string() + " -O3").c_str());
+            std::string debugFlag = isDebugBuild ? " -g" : "";
+            system(("clang++ " + path.stem().string() + ".ll " + libs + debugFlag + " -o " + path.stem().string()).c_str());
 #endif
-            // fs::remove(path.stem().string() + ".ll");
+            fs::remove(path.stem().string() + ".ll");
          }
       } else
          exit(EXIT_FAILURE);

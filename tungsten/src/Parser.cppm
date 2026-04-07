@@ -76,7 +76,7 @@ namespace tungsten {
    public:
       Parser(const fs::path& file, const std::vector<Token>& tokens, const std::string& raw, const CompileOptions& options)
           : _filePath{file}, _tokens{tokens}, _raw{raw}, _compileOptions{options} {
-         initLLVM(file.filename().stem().string(), file.filename().string());
+         initLLVM(file.filename().stem().string(), file.filename().string(), _compileOptions);
          _externs = std::make_unique<Externs>();
       }
       Parser() = delete;
@@ -207,7 +207,7 @@ namespace tungsten {
    template <typename Ty>
    std::unique_ptr<Ty> Parser::_setSource(std::unique_ptr<Ty> node, const Token& token) {
       if (node)
-         node->setSource(token.position, token.length);
+         node->setSource(token.position, token.length, _line(token), _column(token));
       return node;
    }
 
@@ -608,7 +608,7 @@ namespace tungsten {
          }
 
          lhs = std::make_unique<BinaryExpressionAST>(_lexeme(opToken), std::move(lhs), std::move(rhs));
-         lhs->setSource(opToken.position, opToken.length);
+         lhs->setSource(opToken.position, opToken.length, _line(opToken), _column(opToken));
       }
    }
 
