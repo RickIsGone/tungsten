@@ -20,8 +20,14 @@ module;
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Passes/PassBuilder.h>
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/FileSystem.h"
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/MC/TargetRegistry.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Target/TargetOptions.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/TargetParser/Host.h>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
 #endif
@@ -179,6 +185,96 @@ namespace tungsten {
       return nullptr;
    }
 
+   std::unique_ptr<llvm::TargetMachine> createTargetMachine() {
+      llvm::InitializeAllTargetInfos();
+      llvm::InitializeAllTargets();
+      llvm::InitializeAllTargetMCs();
+      llvm::InitializeAllAsmParsers();
+      llvm::InitializeAllAsmPrinters();
+
+      auto triple = llvm::sys::getProcessTriple();
+      TheModule->setTargetTriple(triple);
+
+      std::string Error;
+      auto Target = llvm::TargetRegistry::lookupTarget(triple, Error);
+      if (!Target) {
+         llvm::errs() << "error: target triple not supported: " << triple << '\n';
+         return nullptr;
+      }
+
+      llvm::TargetOptions options{};
+      auto rm = std::optional<llvm::Reloc::Model>{};
+      auto CPU = llvm::sys::getHostCPUName();
+      auto tm = std::unique_ptr<llvm::TargetMachine>(Target->createTargetMachine(triple, CPU, "", options, rm));
+      if (!tm) {
+         llvm::errs() << "error: target machine not supported: " << triple << '\n';
+         return nullptr;
+      }
+      TheModule->setDataLayout(tm->createDataLayout());
+      return tm;
+   }
+
+   bool emitObject(const CompileOptions& CO) {
+      auto tm = createTargetMachine();
+      if (!tm) return false;
+
+      std::error_code ec;
+      auto fileName = CO.outputFile.empty() ? TheModule->getModuleIdentifier() + ".o" : CO.outputFile;
+      llvm::raw_fd_ostream outFile(fileName, ec, llvm::sys::fs::OF_None);
+      if (ec) {
+         std::cerr << "error opening output file '" << fileName << "': " << ec.message() << "\n";
+         return false;
+      }
+
+      llvm::legacy::PassManager pm;
+      if (tm->addPassesToEmitFile(pm, outFile, nullptr, llvm::CodeGenFileType::ObjectFile)) {
+         std::cerr << "error: target does not support this file type\n";
+         return false;
+      }
+
+      pm.run(*TheModule);
+      TheModule->print(outFile, nullptr);
+      return true;
+   }
+
+   bool emitAssembly(const CompileOptions& CO) {
+      auto tm = createTargetMachine();
+      if (!tm) return false;
+
+      std::error_code ec;
+      auto fileName = CO.outputFile.empty() ? TheModule->getModuleIdentifier() + ".asm" : CO.outputFile;
+      llvm::raw_fd_ostream outFile(fileName, ec, llvm::sys::fs::OF_None);
+      if (ec) {
+         std::cerr << "error opening output file '" << fileName << "': " << ec.message() << "\n";
+         return false;
+      }
+
+      llvm::legacy::PassManager pm;
+      if (tm->addPassesToEmitFile(pm, outFile, nullptr, llvm::CodeGenFileType::AssemblyFile)) {
+         std::cerr << "error: target does not support this file type\n";
+         return false;
+      }
+
+      pm.run(*TheModule);
+      TheModule->print(outFile, nullptr);
+      return true;
+   }
+
+   bool emitLLVMIR(const CompileOptions& CO) {
+      auto tm = createTargetMachine();
+      if (!tm) return false;
+
+      std::error_code EC;
+      auto fileName = CO.outputFile.empty() ? TheModule->getModuleIdentifier() + ".ll" : CO.outputFile;
+      llvm::raw_fd_ostream outFile(fileName, EC, llvm::sys::fs::OF_None);
+
+      if (EC) {
+         std::cerr << "error opening output file '" << fileName << "': " << EC.message() << "\n";
+         return false;
+      }
+      TheModule->print(outFile, nullptr);
+      return true;
+   }
 } // namespace tungsten
 
 export namespace tungsten {
@@ -226,15 +322,22 @@ export namespace tungsten {
       }
       llvm::ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OL);
       MPM.run(*TheModule, MAM);
-
-      std::error_code EC;
-      llvm::raw_fd_ostream outFile(TheModule->getModuleIdentifier() + ".ll", EC, llvm::sys::fs::OF_None);
-
-      if (EC) {
-         std::cerr << "error opening the file: " << EC.message() << std::endl;
-      } else {
-         TheModule->print(outFile, nullptr);
+      switch (CO.outputKind) {
+         case OutputKind::Object:
+            if (!emitObject(CO))
+               std::cerr << "error: failed to emit object file\n";
+            break;
+         case OutputKind::Assembly:
+            if (!emitAssembly(CO))
+               std::cerr << "error: failed to emit assembly file\n";
+            break;
+         case OutputKind::LLVMIR:
+         default:
+            if (!emitLLVMIR(CO))
+               std::cerr << "error: failed to emit LLVM IR\n";
+            break;
       }
+
       // #endif
    }
    struct ASTVisitor {

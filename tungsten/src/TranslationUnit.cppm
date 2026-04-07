@@ -22,9 +22,9 @@ namespace tungsten {
    std::string getExecutablePath() {
 #if defined(_WIN32)
       char path[MAX_PATH];
-      DWORD size = GetModuleFileNameA(NULL, path, MAX_PATH);
+      DWORD size = GetModuleFileNameA(nullptr, path, MAX_PATH);
       if (size == 0) return "";
-      return std::string(path);
+      return std::string{path};
 #elif defined(__linux__)
       char path[PATH_MAX];
       ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
@@ -87,14 +87,16 @@ namespace tungsten {
          fs::path currentDir = fs::path(getExecutablePath()).parent_path();
          fs::path parentDir = currentDir.parent_path();
          fs::path libDir = parentDir / "lib";
+         if (_compileOptions.outputKind == OutputKind::Executable) {
 #ifdef WIN32
-         std::string libs = libDir.string() + "/core.lib" + " " + libDir.string() + "/stdlib.lib";
-         system(("clang++ " + path.stem().string() + ".ll " + libs + " -o " + path.stem().string() + ".exe").c_str());
+            std::string libs = libDir.string() + "/core.lib" + " " + libDir.string() + "/stdlib.lib";
+            system(("clang++ " + path.stem().string() + ".ll " + libs + " -o " + path.stem().string() + ".exe").c_str());
 #else
-         std::string libs = libDir.string() + "/libcore.a" + " " + libDir.string() + "/libstdlib.a";
-         system(("clang++ " + path.stem().string() + ".ll " + libs + " -o " + path.stem().string() + " -O3").c_str());
+            std::string libs = libDir.string() + "/libcore.a" + " " + libDir.string() + "/libstdlib.a";
+            system(("clang++ " + path.stem().string() + ".ll " + libs + " -o " + path.stem().string() + " -O3").c_str());
 #endif
-         // fs::remove(path.stem().string() + ".ll");
+            // fs::remove(path.stem().string() + ".ll");
+         }
       } else
          exit(EXIT_FAILURE);
    }

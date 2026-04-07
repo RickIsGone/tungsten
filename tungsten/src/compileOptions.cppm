@@ -32,9 +32,8 @@ namespace tungsten {
        "--help"sv, "-h"sv,
        "-o"sv,
        "-O0"sv, "-O1"sv, "-O2"sv, "-O3"sv,
-       "-C"sv,
-       "-S"sv,
-       "-emit-llvm"sv};
+       "-C"sv, "-S"sv, "-emit-llvm"sv,
+       "--strip"sv};
 
    export struct CompileOptions {
       std::vector<fs::path> files;
@@ -43,7 +42,7 @@ namespace tungsten {
       bool buildSystem{false};
       OutputKind outputKind{OutputKind::Executable};
       OptimizationLevel optimizationLevel{OptimizationLevel::O0};
-      std::string outputFile{"a.o"};
+      std::string outputFile{};
    };
 
    void checkBuildSystemOptions(const CompileOptions& options) {
@@ -78,7 +77,8 @@ namespace tungsten {
                    "  -O<0,1,2,3>            Enable optimizations\n"
                    "  -C                     Emit object files\n"
                    "  -S                     Emit assembly files\n"
-                   "  -emit-llvm             Emit LLVM IR\n";
+                   "  -emit-llvm             Emit LLVM IR\n"
+                   "  --strip                Strip debug symbols\n";
       exit(EXIT_SUCCESS);
    }
 
