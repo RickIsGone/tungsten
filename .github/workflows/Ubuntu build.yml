@@ -65,31 +65,31 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y wget gnupg lsb-release ca-certificates software-properties-common
 
-          wget -O - https://apt.llvm.org/llvm.sh | sudo bash -s -- 18
+          wget -O - https://apt.llvm.org/llvm.sh | sudo bash -s -- 19
           
           sudo apt-get update
           sudo apt-get install -y \
-            clang-18 llvm-18 llvm-18-dev lld-18 clang-tools-18 \
-            libc++-18-dev libc++abi-18-dev \
+            clang-19 llvm-19 llvm-19-dev lld-19 clang-tools-19 \
+            libc++-19-dev libc++abi-19-dev \
             libarchive-dev libcurl4-gnutls-dev
 
           # sanity check: this must exist for module dependency discovery
-          clang-scan-deps-18 --version
+          clang-scan-deps-19 --version
 
       - name: Tool versions
         run: |
           which cmake && cmake --version
           which ninja && ninja --version
-          clang-18 --version
-          clang++-18 --version
-          which clang-scan-deps-18 && clang-scan-deps-18 --version
+          clang-19 --version
+          clang++-19 --version
+          which clang-scan-deps-19 && clang-scan-deps-19 --version
 
       - name: Setting up CMake
         run: cmake -S . -B build -GNinja \
-          -DCMAKE_CXX_COMPILER=/usr/bin/clang++-18 \
-          -DCMAKE_C_COMPILER=/usr/bin/clang-18 \
-          -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18 \
-          -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
+          -DCMAKE_CXX_COMPILER=/usr/bin/clang++-19 \
+          -DCMAKE_C_COMPILER=/usr/bin/clang-19 \
+          -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-19 \
+          -DLLVM_DIR=/usr/lib/llvm-19/lib/cmake/llvm
 
       - name: Build
         # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
