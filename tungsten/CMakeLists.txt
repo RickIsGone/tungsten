@@ -14,6 +14,9 @@ file(MAKE_DIRECTORY ${TUNGSTEN_OUTPUT_DIR}/include)
 
 # === Required Packages ===
 find_package(LLVM REQUIRED CONFIG)
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    find_package(ZLIB REQUIRED)
+endif ()
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 find_file(AddLLVM_CMAKE_FILE AddLLVM.cmake)
 include(HandleLLVMOptions)
@@ -49,7 +52,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     file(READ "/etc/os-release" OS_RELEASE_CONTENT)
 endif ()
 if (OS_RELEASE_CONTENT MATCHES "ID=arch") # pacman package only contains libLLVM.a
-    target_link_libraries(tungsten PRIVATE LLVM)
+    target_link_libraries(tungsten PRIVATE LLVM ZLIB::ZLIB)
 else ()
     llvm_map_components_to_libnames(LLVM_LIBS
             support
@@ -60,7 +63,7 @@ else ()
             orcjit
     )
     message(STATUS "found LLVM libs: ${LLVM_LIBS}")
-    target_link_libraries(tungsten PRIVATE ${LLVM_LIBS})
+    target_link_libraries(tungsten PRIVATE ${LLVM_LIBS} ZLIB::ZLIB)
 endif ()
 add_definitions(${LLVM_DEFINITIONS})
 
