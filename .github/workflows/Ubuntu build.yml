@@ -59,7 +59,10 @@ jobs:
           sudo apt-get install -y clang-18 llvm-18 llvm-18-dev lld-18 libarchive-dev libcurl4-gnutls-dev
 
       - name: Setting up CMake
-        run: cmake -S . -B build -GNinja -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+        run: cmake -S . -B build -GNinja \
+          -DCMAKE_CXX_COMPILER=clang++-18 \
+          -DCMAKE_C_COMPILER=clang-18 \
+          -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
 
       - name: Build
         # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
