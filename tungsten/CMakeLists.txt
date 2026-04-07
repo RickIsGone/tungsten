@@ -27,6 +27,9 @@ if (CMAKE_BUILD_TYPE MATCHES Debug OR CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
     endif ()
 endif ()
 
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(CMAKE_CXX_SCAN_FOR_MODULES ON) # idek anymore what to do
+endif ()
 # === Source Files ===
 add_llvm_executable(tungsten src/main.cpp)
 
