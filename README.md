@@ -102,7 +102,7 @@ after doing this follow the instruction for the targeted OS
 
 <details><summary><big>WINDOWS</big></summary><p>
 
-<ins> **2. Compiling the project:** </ins>  
+<ins> **2. Compiling the project:** </ins>
 
 Here I'm using vcpkg:
 
@@ -112,6 +112,7 @@ cmake --build build --config Release
 ```
 
 replace `VCPKG_DIR` with the vcpkg directory
+
 </details>
 
 <details><summary><big>LINUX</big></summary><p>
@@ -190,7 +191,7 @@ To free the pointer:
 free myPointer;
 ```
 
-> [!WARNING]  
+> [!WARNING]
 > Tungsten doesn't have a garbage collector so you have to manually free the pointers
 
 ## Arrays
@@ -213,7 +214,7 @@ To free the array:
 free myArray;
 ```
 
-this works for both normal and multidimensional arrays.  
+this works for both normal and multidimensional arrays.
 free also sets the address pointed by the pointer to `nullptr`
 
 ## References
@@ -230,7 +231,7 @@ unlike in C++ to pass them to functions you need to do it explicitly:
 
 ```rust
 i64 var;
-fun(&var);
+fun( & var);
 ```
 
 ## Control flow statements
@@ -292,7 +293,7 @@ Rather than a C++ aproach, functions are more similar to Rust's:
 
 ```rust
 fun myFunction() -> i64 {
-    ret 247;
+ret 247;
 }
 ```
 
@@ -359,18 +360,18 @@ fun main() -> int {
 
 Tungsten has a reduced number of integrated core functions
 
-| Type     | Name              | Arguments             | functionality                                |
-|----------|-------------------|-----------------------|----------------------------------------------|
-| `i32`    | shell             | (String cmd)          | same function as `system()` in C             |
-| `void`   | print             | (String fmt, ArgPack) | same function as `printf()` in C             |
-| `void`   | input             | (String fmt, ArgPack) | same function as `scanf()` in C              |  
-| `String` | __builtinFile     | no arguments          | returns the name of the file                 |
-| `String` | __builtinFunction | no arguments          | returns the name of the function             |
-| `u64`    | __builtinColumn   | no arguments          | returns the number of the column             |
-| `u64`    | __builtinLine     | no arguments          | returns the number of the line               |
-| `String` | nameof            | (any statement with a name)        | returns the name of the variable             |
-| `String` | typeof            | (any statement with a type)        | returns the type of the variable             |
-| `u64`    | sizeof            | (any statement with a type or a type itself)        | returns the size of the type of the variable |
+| Type     | Name              | Arguments                                    | functionality                                |
+|----------|-------------------|----------------------------------------------|----------------------------------------------|
+| `i32`    | shell             | (String cmd)                                 | same function as`system()` in C              |
+| `void`   | print             | (String fmt, ArgPack)                        | same function as`printf()` in C              |
+| `void`   | input             | (String fmt, ArgPack)                        | same function as`scanf()` in C               |
+| `String` | __builtinFile     | no arguments                                 | returns the name of the file                 |
+| `String` | __builtinFunction | no arguments                                 | returns the name of the function             |
+| `u64`    | __builtinColumn   | no arguments                                 | returns the number of the column             |
+| `u64`    | __builtinLine     | no arguments                                 | returns the number of the line               |
+| `String` | nameof            | (any statement with a name)                  | returns the name of the variable             |
+| `String` | typeof            | (any statement with a type)                  | returns the type of the variable             |
+| `u64`    | sizeof            | (any statement with a type or a type itself) | returns the size of the type of the variable |
 
 ## Namespaces
 
@@ -400,7 +401,7 @@ and use the integrated buildsystem
 
 > [!IMPORTANT]
 > Tungsten currently uses *clang++* to compile the generated llvm ir to an executable, so you need to have it installed
-> for the compiler to work (clang 15 or higher is needed)
+> for the compiler to work (clang 18 or higher is needed)
 
 ```shell
 cd projectDirectory
@@ -432,9 +433,9 @@ cd projectDirectory
 tungsten tgs-build [flags] 
 ```
 
-The compiler will then automatically compile the `build.tgs` file.  
+The compiler will then automatically compile the `build.tgs` file.
 After compiling the file, the compiler will automatically execute the `build` executable which will compile the project
-following the rules set by the `build.tgs` file.  
+following the rules set by the `build.tgs` file.
 The build output will then be put into the `projectDirectory/build` directory
 
 # TPKG
