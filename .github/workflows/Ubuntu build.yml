@@ -76,10 +76,19 @@ jobs:
           # sanity check: this must exist for module dependency discovery
           clang-scan-deps-18 --version
 
+      - name: Tool versions
+        run: |
+          which cmake && cmake --version
+          which ninja && ninja --version
+          clang-18 --version
+          clang++-18 --version
+          which clang-scan-deps-18 && clang-scan-deps-18 --version
+
       - name: Setting up CMake
         run: cmake -S . -B build -GNinja \
-          -DCMAKE_CXX_COMPILER=clang++-18 \
-          -DCMAKE_C_COMPILER=clang-18 \
+          -DCMAKE_CXX_COMPILER=/usr/bin/clang++-18 \
+          -DCMAKE_C_COMPILER=/usr/bin/clang-18 \
+          -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=/usr/bin/clang-scan-deps-18 \
           -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
 
       - name: Build
