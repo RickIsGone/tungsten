@@ -82,7 +82,8 @@ Global
 
 Compiler
 
-- LLVM 15 or newer
+- LLVM 18 or newer
+- ZLIB (windows only)
 
 Package Manager
 
@@ -231,7 +232,7 @@ unlike in C++ to pass them to functions you need to do it explicitly:
 
 ```rust
 i64 var;
-fun( & var);
+fun(&var);
 ```
 
 ## Control flow statements
@@ -293,7 +294,7 @@ Rather than a C++ aproach, functions are more similar to Rust's:
 
 ```rust
 fun myFunction() -> i64 {
-ret 247;
+   ret 247;
 }
 ```
 
@@ -401,7 +402,7 @@ and use the integrated buildsystem
 
 > [!IMPORTANT]
 > Tungsten currently uses *clang++* to compile the generated llvm ir to an executable, so you need to have it installed
-> for the compiler to work (clang 18 or higher is needed)
+> for the compiler to work (clang 15 or higher is needed)
 
 ```shell
 cd projectDirectory
