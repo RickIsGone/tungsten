@@ -86,8 +86,8 @@ jobs:
 
       - name: Setting up CMake
         run: cmake -S . -B build -GNinja \
-          -DCMAKE_CXX_COMPILER=clang++ \
-          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++-19 \
+          -DCMAKE_C_COMPILER=clang-19 \
           -DLLVM_DIR=/usr/lib/llvm-19/lib/cmake/llvm
 
       - name: Build
