@@ -85,6 +85,9 @@ jobs:
           which clang-scan-deps-19 && clang-scan-deps-19 --version
 
       - name: Setting up CMake
+        env:
+          CC: clang-19
+          CXX: clang++-19
         run: cmake -S . -B build -GNinja \
           -DCMAKE_CXX_COMPILER=clang++-19 \
           -DCMAKE_C_COMPILER=clang-19 \
