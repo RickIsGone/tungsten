@@ -11,6 +11,7 @@ module;
 #include <sstream>
 #include <cstdint>
 #include <cmath>
+#include <unordered_set>
 #include <variant>
 #ifndef _NODISCARD
 #define _NODISCARD [[nodiscard]]
@@ -84,7 +85,7 @@ namespace tungsten {
       void visit(ClassVariableAST&) override {}
       void visit(ClassConstructorAST&) override {}
       void visit(ClassDestructorAST&) override {}
-      void visit(ClassAST&) override {}
+      void visit(ClassAST&) override;
 
    private:
       template <typename... Ty>
@@ -1113,6 +1114,31 @@ namespace tungsten {
       var.variable()->accept(*this);
       if (var.variable()->type()->kind() != TypeKind::Pointer && var.variable()->type()->kind() != TypeKind::Array)
          return _logError(&var, "free statement expects a pointer type");
+   }
+
+   void SemanticAnalyzer::visit(ClassAST& cls) {
+      for (auto& var : cls.members()) {
+         if (var)
+            var->accept(*this);
+         else
+            _hasErrors = true;
+      }
+      for (auto& ctor : cls.constructors()) {
+         if (ctor)
+            ctor->accept(*this);
+         else
+            _hasErrors = true;
+      }
+      if (cls.destructor())
+         cls.destructor()->accept(*this);
+      else
+         _hasErrors = true;
+      for (auto& fun : cls.methods()) {
+         if (fun)
+            fun->accept(*this);
+         else
+            _hasErrors = true;
+      }
    }
 
    bool SemanticAnalyzer::_isSignedType(const std::string& type) {

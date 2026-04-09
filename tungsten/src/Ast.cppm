@@ -405,7 +405,6 @@ export namespace tungsten {
       virtual void visit(class ClassConstructorAST&) = 0;
       virtual void visit(class ClassDestructorAST&) = 0;
       virtual void visit(class ClassAST&) = 0;
-      virtual void visit(class StructAST&) = 0;
    };
 
    enum class TypeKind {
@@ -536,6 +535,7 @@ export namespace tungsten {
 
    // types declaration
    class Void : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Void;
       }
@@ -548,6 +548,7 @@ export namespace tungsten {
    };
 
    class Char : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Char;
       }
@@ -560,6 +561,7 @@ export namespace tungsten {
    };
 
    class Bool : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Bool;
       }
@@ -572,6 +574,7 @@ export namespace tungsten {
    };
 
    class Int8 : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Int8;
       }
@@ -584,6 +587,7 @@ export namespace tungsten {
    };
 
    class Int16 : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Int16;
       }
@@ -596,6 +600,7 @@ export namespace tungsten {
    };
 
    class Int32 : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Int32;
       }
@@ -608,6 +613,7 @@ export namespace tungsten {
    };
 
    class Int64 : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Int64;
       }
@@ -620,6 +626,7 @@ export namespace tungsten {
    };
 
    class Int128 : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Int128;
       }
@@ -632,6 +639,7 @@ export namespace tungsten {
    };
 
    class Uint8 : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Uint8;
       }
@@ -644,6 +652,7 @@ export namespace tungsten {
    };
 
    class Uint16 : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Uint16;
       }
@@ -656,6 +665,7 @@ export namespace tungsten {
    };
 
    class Uint32 : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Uint32;
       }
@@ -668,6 +678,7 @@ export namespace tungsten {
    };
 
    class Uint64 : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Uint64;
       }
@@ -680,6 +691,7 @@ export namespace tungsten {
    };
 
    class Uint128 : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Uint128;
       }
@@ -692,6 +704,7 @@ export namespace tungsten {
    };
 
    class Float : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Float;
       }
@@ -704,6 +717,7 @@ export namespace tungsten {
    };
 
    class Double : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Double;
       }
@@ -776,6 +790,7 @@ export namespace tungsten {
    };
 
    class ArgPackTy : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::ArgPack;
       }
@@ -788,18 +803,24 @@ export namespace tungsten {
    };
 
    class ClassTy : public Type {
+   public:
+      ClassTy(const std::string& name) : _name{name} {}
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Class;
       }
       _NODISCARD const std::string string() const override {
-         return "Class";
+         return _name;
       }
       _NODISCARD llvm::Type* llvmType() const override {
          return nullptr; // llvm::StructType::create(*TheContext, elements, "MyStruct");
       }
+
+   private:
+      std::string _name;
    };
 
    class NullTy : public Type {
+   public:
       _NODISCARD TypeKind kind() const noexcept override {
          return TypeKind::Null;
       }
@@ -827,7 +848,7 @@ export namespace tungsten {
    inline std::shared_ptr<Type> makeUint128() { return std::make_shared<Uint128>(); }
    inline std::shared_ptr<Type> makeFloat() { return std::make_shared<Float>(); }
    inline std::shared_ptr<Type> makeDouble() { return std::make_shared<Double>(); }
-   inline std::shared_ptr<Type> makeClass() { return std::make_shared<ClassTy>(); }
+   inline std::shared_ptr<Type> makeClass(const std::string& name) { return std::make_shared<ClassTy>(name); }
    inline std::shared_ptr<Type> makePointer(std::shared_ptr<Type> pt) { return std::make_shared<PointerTy>(std::move(pt)); }
    inline std::shared_ptr<Type> makeReference(std::shared_ptr<Type> ref) { return std::make_shared<ReferenceTy>(std::move(ref)); }
    inline std::shared_ptr<Type> makeArray(std::shared_ptr<Type> pt, std::unique_ptr<ExpressionAST> size) { return std::make_shared<ArrayTy>(std::move(pt), std::move(size)); }
@@ -1358,30 +1379,26 @@ export namespace tungsten {
 
    class ClassMethodAST {
    public:
-      ClassMethodAST(Visibility visibility, const std::string& name, std::unique_ptr<Type>& type, bool isStatic, std::unique_ptr<FunctionAST> method)
-          : _visibility{visibility}, _name{name}, _type{type}, _isStatic{isStatic}, _method{std::move(method)} {}
+      ClassMethodAST(Visibility visibility, bool isStatic, std::unique_ptr<FunctionAST> method)
+          : _visibility{visibility}, _isStatic{isStatic}, _method{std::move(method)} {}
       llvm::Value* codegen();
       void accept(ASTVisitor& v) { v.visit(*this); }
 
    private:
       Visibility _visibility;
-      std::string _name;
-      std::unique_ptr<Type>& _type;
       bool _isStatic;
       std::unique_ptr<FunctionAST> _method;
    };
 
    class ClassVariableAST {
    public:
-      ClassVariableAST(Visibility visibility, const std::string& name, std::unique_ptr<Type>& type, bool isStatic, std::unique_ptr<ExpressionAST> variable)
-          : _visibility{visibility}, _name{name}, _type{type}, _isStatic{isStatic}, _variable{std::move(variable)} {}
+      ClassVariableAST(Visibility visibility, bool isStatic, std::unique_ptr<ExpressionAST> variable)
+          : _visibility{visibility}, _isStatic{isStatic}, _variable{std::move(variable)} {}
       llvm::Value* codegen();
       void accept(ASTVisitor& v) { v.visit(*this); }
 
    private:
       Visibility _visibility;
-      std::string _name;
-      std::unique_ptr<Type>& _type;
       bool _isStatic;
       std::unique_ptr<ExpressionAST> _variable;
    };
@@ -1399,12 +1416,13 @@ export namespace tungsten {
    };
    class ClassDestructorAST {
    public:
-      ClassDestructorAST(std::unique_ptr<FunctionAST> destructor)
-          : _destructor{std::move(destructor)} {}
+      ClassDestructorAST(Visibility visibility, std::unique_ptr<FunctionAST> destructor)
+          : _visibility{visibility}, _destructor{std::move(destructor)} {}
       llvm::Value* codegen();
       void accept(ASTVisitor& v) { v.visit(*this); }
 
    private:
+      Visibility _visibility;
       std::unique_ptr<FunctionAST> _destructor;
    };
 
@@ -1412,32 +1430,39 @@ export namespace tungsten {
    public:
       ClassAST(const std::string& name, std::vector<std::unique_ptr<ClassVariableAST>> variables, std::vector<std::unique_ptr<ClassMethodAST>> methods,
                std::vector<std::unique_ptr<ClassConstructorAST>> constructors, std::unique_ptr<ClassDestructorAST> destructor)
-          : _name{name}, _variables{std::move(variables)}, _methods{std::move(methods)}, _constructors{std::move(constructors)}, _destructor{std::move(destructor)} {}
+          : _name{name}, _members{std::move(variables)}, _methods{std::move(methods)}, _constructors{std::move(constructors)}, _destructors{std::move(destructor)} {}
       llvm::Value* codegen();
 
       _NODISCARD const std::string& name() const { return _name; }
+      _NODISCARD const std::vector<std::unique_ptr<ClassVariableAST>>& members() const { return _members; }
+      _NODISCARD const std::vector<std::unique_ptr<ClassMethodAST>>& methods() const { return _methods; }
+      _NODISCARD const std::vector<std::unique_ptr<ClassConstructorAST>>& constructors() const { return _constructors; }
+      _NODISCARD const std::unique_ptr<ClassDestructorAST>& destructor() const { return _destructors; }
       void accept(ASTVisitor& v) { v.visit(*this); }
+      void setSource(size_t position, size_t length) {
+         _sourcePosition = position;
+         _sourceLength = length;
+         _hasSource = true;
+      }
+      void setSource(size_t position, size_t length, size_t line, size_t column) {
+         _sourcePosition = position;
+         _sourceLength = length;
+         _sourceLine = line;
+         _sourceColumn = column;
+         _hasSource = true;
+      }
 
    private:
       std::string _name;
-      std::vector<std::unique_ptr<ClassVariableAST>> _variables;
+      std::vector<std::unique_ptr<ClassVariableAST>> _members;
       std::vector<std::unique_ptr<ClassMethodAST>> _methods;
       std::vector<std::unique_ptr<ClassConstructorAST>> _constructors;
-      std::unique_ptr<ClassDestructorAST> _destructor;
-   };
-
-   class StructAST {
-   public:
-      StructAST(const std::string& name, std::vector<std::unique_ptr<ExpressionAST>> members) : _name{name}, _members{std::move(members)} {}
-      llvm::Value* codegen();
-
-      _NODISCARD const std::string& name() const { return _name; }
-      _NODISCARD const std::vector<std::unique_ptr<ExpressionAST>>& members() const { return _members; }
-      void accept(ASTVisitor& v) { v.visit(*this); }
-
-   private:
-      std::string _name;
-      std::vector<std::unique_ptr<ExpressionAST>> _members;
+      std::unique_ptr<ClassDestructorAST> _destructors;
+      size_t _sourcePosition{0};
+      size_t _sourceLength{0};
+      size_t _sourceLine{1};
+      size_t _sourceColumn{1};
+      bool _hasSource{false};
    };
 
    class ImportStatementAST : public ExpressionAST {
