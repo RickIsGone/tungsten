@@ -116,6 +116,7 @@ namespace tungsten {
       bool _isConstVariable(const std::string& var) const;
       std::optional<std::string> _constWriteTargetName(ExpressionAST* expr) const;
       bool _isConstexpr(const std::unique_ptr<ExpressionAST>& expr);
+      _NODISCARD bool _statementTerminates(ExpressionAST* expr) const;
       bool _canCast(std::shared_ptr<Type> from, std::shared_ptr<Type> to);
       std::unique_ptr<ExpressionAST> _evaluateConstexpr(const std::unique_ptr<ExpressionAST>& expr);
       std::shared_ptr<Type> _variableType(const std::string& var);
@@ -415,6 +416,16 @@ namespace tungsten {
       binop.LHS()->accept(*this);
       binop.RHS()->accept(*this);
       if (binop.op() == "=="sv || binop.op() == "!="sv || binop.op() == "<"sv || binop.op() == ">"sv || binop.op() == "<="sv || binop.op() == ">="sv) {
+         const bool lhsIsPointer = binop.LHS()->type()->kind() == TypeKind::Pointer;
+         const bool rhsIsPointer = binop.RHS()->type()->kind() == TypeKind::Pointer;
+         const bool lhsIsNullPtr = binop.LHS()->astType() == ASTType::NullPtr || binop.LHS()->type()->kind() == TypeKind::Null;
+         const bool rhsIsNullPtr = binop.RHS()->astType() == ASTType::NullPtr || binop.RHS()->type()->kind() == TypeKind::Null;
+
+         if ((lhsIsPointer && rhsIsNullPtr) || (rhsIsPointer && lhsIsNullPtr)) {
+            binop.setType(makeBool());
+            return;
+         }
+
          if (!_isNumberType(fullTypeString(binop.LHS()->type())) || !_isNumberType(fullTypeString(binop.RHS()->type()))) {
             if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type()))
                return _logError(&binop, "type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
@@ -570,16 +581,26 @@ namespace tungsten {
    void SemanticAnalyzer::visit(BlockStatementAST& block) {
       _scopes.push_back({});
       ++_currentScope;
+      bool reachedTerminator = false;
       for (auto& expr : block.statements()) {
          if (!expr) {
             _hasErrors = true;
             continue;
          }
+
+         if (reachedTerminator) {
+            _logWarn(expr.get(), "unreachable code");
+            break;
+         }
+
          expr->accept(*this);
          if (expr->astType() == ASTType::VariableExpression) {
             auto varExpr = static_cast<VariableExpressionAST*>(expr.get());
             _logWarn(expr.get(), "unused result of expression '{}'", varExpr->name());
          }
+
+         if (_statementTerminates(expr.get()))
+            reachedTerminator = true;
       }
       _scopes.pop_back();
       --_currentScope;
@@ -1043,6 +1064,39 @@ namespace tungsten {
             _logWarn("possible data loss converting from '{}' to '{}' in return statement", baseType(ret.value()->type()), baseType(ret.type()));
       }*/
    }
+
+   bool SemanticAnalyzer::_statementTerminates(ExpressionAST* expr) const {
+      if (!expr)
+         return false;
+
+      switch (expr->astType()) {
+         case ASTType::ReturnStatement:
+         case ASTType::ExitStatement:
+            return true;
+
+         case ASTType::IfStatement: {
+            auto* ifStmnt = static_cast<IfStatementAST*>(expr);
+            if (!ifStmnt->elseBranch())
+               return false;
+            return _statementTerminates(ifStmnt->thenBranch().get()) && _statementTerminates(ifStmnt->elseBranch().get());
+         }
+
+         case ASTType::BlockStatement: {
+            auto* block = static_cast<BlockStatementAST*>(expr);
+            for (const auto& statement : block->statements()) {
+               if (!statement)
+                  continue;
+               if (_statementTerminates(statement.get()))
+                  return true;
+            }
+            return false;
+         }
+
+         default:
+            return false;
+      }
+   }
+
    void SemanticAnalyzer::visit(NewStatementAST& var) {
       if (!var.type())
          return _logError(&var, "new statement expects a valid type");

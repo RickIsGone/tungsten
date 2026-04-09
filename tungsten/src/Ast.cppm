@@ -1746,6 +1746,9 @@ export namespace tungsten {
          if (operandType->isFloatingPointTy())
             return Builder->CreateFCmpOEQ(operandValue, llvm::ConstantFP::get(operandType, 0.0), "nottmp");
 
+         if (operandType->isPointerTy())
+            return Builder->CreateICmpEQ(operandValue, llvm::Constant::getNullValue(operandType), "nottmp");
+
          return LogErrorV("unsupported type for logical not operation");
       }
       if (_op == "&"sv || _op == "*"sv)
@@ -2021,6 +2024,11 @@ export namespace tungsten {
           _RHS->type()->kind() == TypeKind::Pointer)
          loadedR = RHS;
 
+      if (_LHS->astType() == ASTType::NullPtr)
+         loadedL = LHS;
+      if (_RHS->astType() == ASTType::NullPtr)
+         loadedR = RHS;
+
       loadedR = castToCommonType(loadedR, lhsValueType);
 
       if (_op == "&&"sv) {
@@ -2032,6 +2040,21 @@ export namespace tungsten {
          LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
          RHS = Builder->CreateICmpNE(loadedR, Builder->getInt1(0), "rcond");
          return Builder->CreateOr(LHS, RHS);
+      }
+
+      if ((_op == "=="sv || _op == "!="sv || _op == "<"sv || _op == "<="sv || _op == ">"sv || _op == ">="sv) &&
+          (loadedL->getType()->isPointerTy() || loadedR->getType()->isPointerTy())) {
+         if (_op == "=="sv)
+            return Builder->CreateICmpEQ(loadedL, loadedR, "ptrcmp");
+         if (_op == "!="sv)
+            return Builder->CreateICmpNE(loadedL, loadedR, "ptrcmp");
+         if (_op == "<"sv)
+            return Builder->CreateICmpULT(loadedL, loadedR, "ptrcmp");
+         if (_op == "<="sv)
+            return Builder->CreateICmpULE(loadedL, loadedR, "ptrcmp");
+         if (_op == ">"sv)
+            return Builder->CreateICmpUGT(loadedL, loadedR, "ptrcmp");
+         return Builder->CreateICmpUGE(loadedL, loadedR, "ptrcmp");
       }
 
       if (_op == "+"sv)
@@ -2439,12 +2462,18 @@ export namespace tungsten {
 
       llvm::Value* last = llvm::Constant::getNullValue(llvm::Type::getInt8Ty(*TheContext)); // to avoid empty functions from getting recognized as wrong
       for (const auto& statement : _statements) {
+         if (Builder->GetInsertBlock() && Builder->GetInsertBlock()->getTerminator())
+            break;
+
          last = statement->codegen();
          if (!last) {
             KSDbgInfo.popVariableScope();
             KSDbgInfo.popLexicalBlock();
             return nullptr;
          }
+
+         if (Builder->GetInsertBlock() && Builder->GetInsertBlock()->getTerminator())
+            break;
       }
 
       KSDbgInfo.popVariableScope();
@@ -2459,8 +2488,18 @@ export namespace tungsten {
    llvm::Value* ReturnStatementAST::codegen() {
       setDebugLocationFor(this);
 
-      if (_value == nullptr)
-         return Builder->CreateRetVoid();
+      auto moveToDeadUnreachableBlock = [&]() {
+         llvm::Function* function = Builder->GetInsertBlock()->getParent();
+         llvm::BasicBlock* deadBB = llvm::BasicBlock::Create(*TheContext, "return.unreachable", function);
+         Builder->SetInsertPoint(deadBB);
+         Builder->CreateUnreachable();
+      };
+
+      if (_value == nullptr) {
+         llvm::Value* ret = Builder->CreateRetVoid();
+         moveToDeadUnreachableBlock();
+         return ret;
+      }
 
       const bool returnsReference = _Type->kind() == TypeKind::Reference;
       llvm::Value* returnValue = _value->codegen();
@@ -2478,11 +2517,15 @@ export namespace tungsten {
       if (returnsReference) {
          if (!returnValue->getType()->isPointerTy())
             return LogErrorV("reference return requires an lvalue/address expression");
-         return Builder->CreateRet(returnValue);
+         llvm::Value* ret = Builder->CreateRet(returnValue);
+         moveToDeadUnreachableBlock();
+         return ret;
       }
 
       returnValue = castToCommonType(returnValue, valueTypeForCodegen(_Type));
-      return Builder->CreateRet(returnValue);
+      llvm::Value* ret = Builder->CreateRet(returnValue);
+      moveToDeadUnreachableBlock();
+      return ret;
    }
    llvm::Value* ExitStatement::codegen() {
       setDebugLocationFor(this);
@@ -2541,22 +2584,31 @@ export namespace tungsten {
 
       // then
       Builder->SetInsertPoint(ThenBB);
+      bool thenTerminated = false;
       if (_thenBranch)
          _thenBranch->codegen();
-      if (!Builder->GetInsertBlock()->getTerminator())
+      thenTerminated = Builder->GetInsertBlock() && Builder->GetInsertBlock()->getTerminator();
+      if (!thenTerminated)
          Builder->CreateBr(MergeBB);
 
       // else
       function->insert(function->end(), ElseBB);
       Builder->SetInsertPoint(ElseBB);
+      bool elseTerminated = false;
       if (_elseBranch)
          _elseBranch->codegen();
-      if (!Builder->GetInsertBlock()->getTerminator())
+      elseTerminated = Builder->GetInsertBlock() && Builder->GetInsertBlock()->getTerminator();
+      if (!elseTerminated)
          Builder->CreateBr(MergeBB);
 
       // end of if
       function->insert(function->end(), MergeBB);
       Builder->SetInsertPoint(MergeBB);
+
+      if (thenTerminated && elseTerminated) {
+         setDebugLocationFor(this);
+         Builder->CreateUnreachable();
+      }
 
       return llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*TheContext));
    }
@@ -2587,7 +2639,8 @@ export namespace tungsten {
       Builder->SetInsertPoint(bodyBB);
       if (_body)
          _body->codegen();
-      Builder->CreateBr(condBB);
+      if (!Builder->GetInsertBlock()->getTerminator())
+         Builder->CreateBr(condBB);
 
       // end of while
       function->insert(function->end(), endBB);
@@ -2611,7 +2664,8 @@ export namespace tungsten {
       Builder->SetInsertPoint(bodyBB);
       if (_body)
          _body->codegen();
-      Builder->CreateBr(condBB);
+      if (!Builder->GetInsertBlock()->getTerminator())
+         Builder->CreateBr(condBB);
 
       // condition
       function->insert(function->end(), condBB);
@@ -2670,14 +2724,16 @@ export namespace tungsten {
       Builder->SetInsertPoint(bodyBB);
       if (_body)
          _body->codegen();
-      Builder->CreateBr(incBB);
+      if (!Builder->GetInsertBlock()->getTerminator())
+         Builder->CreateBr(incBB);
 
       // increment
       function->insert(function->end(), incBB);
       Builder->SetInsertPoint(incBB);
       if (_increment)
          _increment->codegen();
-      Builder->CreateBr(condBB);
+      if (!Builder->GetInsertBlock()->getTerminator())
+         Builder->CreateBr(condBB);
 
       // end
       function->insert(function->end(), endBB);
