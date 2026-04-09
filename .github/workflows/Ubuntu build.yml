@@ -88,6 +88,7 @@ jobs:
         env:
           CC: clang-19
           CXX: clang++-19
+          LLVM_DIR: /usr/lib/llvm-19/lib/cmake/llvm
         run: cmake -S . -B build -GNinja \
           -DCMAKE_CXX_COMPILER=clang++-19 \
           -DCMAKE_C_COMPILER=clang-19 \
