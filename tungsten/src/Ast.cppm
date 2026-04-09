@@ -405,6 +405,7 @@ export namespace tungsten {
       virtual void visit(class ClassConstructorAST&) = 0;
       virtual void visit(class ClassDestructorAST&) = 0;
       virtual void visit(class ClassAST&) = 0;
+      virtual void visit(class StructAST&) = 0;
    };
 
    enum class TypeKind {
@@ -1423,6 +1424,20 @@ export namespace tungsten {
       std::vector<std::unique_ptr<ClassMethodAST>> _methods;
       std::vector<std::unique_ptr<ClassConstructorAST>> _constructors;
       std::unique_ptr<ClassDestructorAST> _destructor;
+   };
+
+   class StructAST {
+   public:
+      StructAST(const std::string& name, std::vector<std::unique_ptr<ExpressionAST>> members) : _name{name}, _members{std::move(members)} {}
+      llvm::Value* codegen();
+
+      _NODISCARD const std::string& name() const { return _name; }
+      _NODISCARD const std::vector<std::unique_ptr<ExpressionAST>>& members() const { return _members; }
+      void accept(ASTVisitor& v) { v.visit(*this); }
+
+   private:
+      std::string _name;
+      std::vector<std::unique_ptr<ExpressionAST>> _members;
    };
 
    class ImportStatementAST : public ExpressionAST {
