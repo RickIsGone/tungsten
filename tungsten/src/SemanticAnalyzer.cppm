@@ -112,6 +112,10 @@ namespace tungsten {
       bool _isBaseType(const std::string& type);
       bool _isClass(const std::string& cls);
       bool _isFunction(const std::string& fn);
+      bool _isNamespace(const std::string& ns);
+      bool _isQualifiedName(const std::string& name) const;
+      bool _hasValidQualifiedPrefix(const std::string& name, std::string& prefixKind, std::string& failingPrefix, bool& missingScope);
+      std::string _symbolKindForName(const std::string& name);
       bool _checkNumericConversionLoss(const std::string& fromType, const std::string& toType);
       bool _doesVariableExist(const std::string& var);
       bool _isConstVariable(const std::string& var) const;
@@ -120,7 +124,7 @@ namespace tungsten {
       _NODISCARD bool _statementTerminates(ExpressionAST* expr) const;
       bool _canCast(std::shared_ptr<Type> from, std::shared_ptr<Type> to);
       std::unique_ptr<ExpressionAST> _evaluateConstexpr(const std::unique_ptr<ExpressionAST>& expr);
-      std::shared_ptr<Type> _variableType(const std::string& var);
+      _NODISCARD std::shared_ptr<Type> _variableType(const std::string& var) const;
 
       std::vector<std::unique_ptr<FunctionAST>>& _functions;
       std::vector<std::unique_ptr<ClassAST>>& _classes;
@@ -131,6 +135,7 @@ namespace tungsten {
 
       std::vector<Scope> _scopes{};
       std::unordered_map<std::string, std::vector<Overload>> _declaredFunctions{};
+      std::unordered_set<std::string> _declaredClasses{};
       size_t _currentScope{GlobalScope};
       bool _hasErrors{false};
       bool _allowUninitializedReferenceDecl{false};
@@ -149,7 +154,7 @@ namespace tungsten {
             _hasErrors = true;
       }
       for (auto& fun : _externs->functions) {
-         _scopes.push_back({}); // creating a new scope for the arguments declaration
+         _scopes.push_back({}); // creating a new scope for the argument declarations
          ++_currentScope;
          if (fun)
             fun->accept(*this);
@@ -181,10 +186,20 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(VariableDeclarationAST& var) {
-      if (_isFunction(var.name()) || _isClass(var.name()))
-         return _logError(&var, "{} with name '{}' already exists", _isFunction(var.name()) ? "function" : "class", var.name());
-      if (_doesVariableExist(var.name()))
-         return _logError(&var, "variable '{}' already exists", var.name());
+      if (_isQualifiedName(var.name())) {
+         std::string prefixKind;
+         std::string failingPrefix;
+         bool missingScope = false;
+         if (!_hasValidQualifiedPrefix(var.name(), prefixKind, failingPrefix, missingScope)) {
+            if (missingScope)
+               return _logError(&var, "unknown scope '{}' in declaration of '{}'", failingPrefix, var.name());
+            return _logError(&var, "'{}' is a {}, not a namespace/class scope for declaration '{}'", failingPrefix, prefixKind, var.name());
+         }
+      }
+
+      const std::string existingKind = _symbolKindForName(var.name());
+      if (!existingKind.empty())
+         return _logError(&var, "{} with name '{}' already exists", existingKind, var.name());
 
       _scopes.at(_currentScope)[var.name()] = {var.isConst(), var.type()}; // pushing the variable, so even if there are errors, the variable is already declared to avoid cascade errors like "unknown variable 'x'" every fucking time is mentioned cause im tired of that bs
 
@@ -492,8 +507,34 @@ namespace tungsten {
 
    void SemanticAnalyzer::visit(VariableExpressionAST& var) {
       if (!_doesVariableExist(var.name())) {
-         if (var.name().find("::"sv) != std::string::npos)
-            return _logError(&var, "no variable '{}' found in namespace '{}'", var.name().substr(var.name().find_last_of(":") + 1), var.name().substr(0, var.name().find_last_of("::") - 1));
+         if (_isFunction(var.name()))
+            return _logError(&var, "'{}' is a function, not a variable", var.name());
+         if (_isClass(var.name()))
+            return _logError(&var, "'{}' is a class, not a variable", var.name());
+         if (_isNamespace(var.name()))
+            return _logError(&var, "'{}' is a namespace, not a variable", var.name());
+
+         if (var.name().find("::"sv) != std::string::npos) {
+            std::string prefixKind;
+            std::string failingPrefix;
+            bool missingScope = false;
+            const auto splitPos = var.name().find_last_of(':');
+            const std::string prefix = splitPos == std::string::npos ? "" : var.name().substr(0, splitPos - 1);
+            const std::string leaf = splitPos == std::string::npos ? var.name() : var.name().substr(splitPos + 1);
+
+            if (!_hasValidQualifiedPrefix(var.name(), prefixKind, failingPrefix, missingScope)) {
+               if (missingScope)
+                  return _logError(&var, "unknown scope '{}'", failingPrefix);
+               return _logError(&var, "'{}' is a {}, not a namespace/class scope", failingPrefix, prefixKind);
+            }
+
+            const std::string fullKind = _symbolKindForName(var.name());
+            if (!fullKind.empty() && fullKind != "variable")
+               return _logError(&var, "'{}' is a {}, not a variable", var.name(), fullKind);
+
+            return _logError(&var, "no variable '{}' found in {} '{}'", leaf, prefixKind.empty() ? "scope" : prefixKind, prefix);
+         }
+
          return _logError(&var, "unknown variable '{}'", var.name());
       }
 
@@ -611,8 +652,21 @@ namespace tungsten {
    // }
 
    void SemanticAnalyzer::visit(FunctionPrototypeAST& proto) {
-      if (_scopes.at(GlobalScope).contains(proto.name()) || _isClass(proto.name()))
-         return _logError("{} with name {}' already exists", _isClass(proto.name()) ? "class" : "variable", proto.name());
+      if (_isQualifiedName(proto.name())) {
+         std::string prefixKind;
+         std::string failingPrefix;
+         bool missingScope = false;
+         if (!_hasValidQualifiedPrefix(proto.name(), prefixKind, failingPrefix, missingScope)) {
+            if (missingScope)
+               return _logError("unknown scope '{}' in declaration of function '{}'", failingPrefix, proto.name());
+            return _logError("'{}' is a {}, not a namespace/class scope for function '{}'", failingPrefix, prefixKind, proto.name());
+         }
+      }
+
+      if (_scopes.at(GlobalScope).contains(proto.name()) || _isClass(proto.name()) || _isNamespace(proto.name())) {
+         const std::string kind = _symbolKindForName(proto.name());
+         return _logError("{} with name '{}' already exists", kind.empty() ? "symbol" : kind, proto.name());
+      }
 
       if (_declaredFunctions.contains("main") && proto.name() == "main"sv)
          return _logError("redefinition of main function");
@@ -1117,6 +1171,17 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(ClassAST& cls) {
+      const std::string existingKind = _symbolKindForName(cls.name());
+      if (!existingKind.empty() && existingKind != "class")
+         _logError("{} with name '{}' already exists", existingKind, cls.name());
+      if (_declaredClasses.contains(cls.name()))
+         _logError("class with name '{}' already exists", cls.name());
+      _declaredClasses.insert(cls.name());
+
+      if (cls.hasErrors())
+         _hasErrors = true;
+      _scopes.push_back({});
+      ++_currentScope;
       for (auto& var : cls.members()) {
          if (var)
             var->accept(*this);
@@ -1139,6 +1204,8 @@ namespace tungsten {
          else
             _hasErrors = true;
       }
+      _scopes.pop_back();
+      --_currentScope;
    }
 
    bool SemanticAnalyzer::_isSignedType(const std::string& type) {
@@ -1195,6 +1262,89 @@ namespace tungsten {
       }
       return false;
    }
+   bool SemanticAnalyzer::_isNamespace(const std::string& ns) {
+      const std::string prefix = ns + "::";
+
+      for (const auto& [name, _] : _declaredFunctions) {
+         if (name.rfind(prefix, 0) == 0)
+            return true;
+      }
+      for (const auto& scope : _scopes) {
+         for (const auto& [name, _] : scope) {
+            if (name.rfind(prefix, 0) == 0)
+               return true;
+         }
+      }
+      for (const auto& cls : _classes) {
+         if (!cls)
+            continue;
+         if (cls->name().rfind(prefix, 0) == 0)
+            return true;
+      }
+
+      return false;
+   }
+   bool SemanticAnalyzer::_isQualifiedName(const std::string& name) const {
+      return name.find("::"sv) != std::string::npos;
+   }
+   bool SemanticAnalyzer::_hasValidQualifiedPrefix(const std::string& name, std::string& prefixKind, std::string& failingPrefix, bool& missingScope) {
+      prefixKind.clear();
+      failingPrefix.clear();
+      missingScope = false;
+
+      if (!_isQualifiedName(name))
+         return true;
+
+      std::string prefix;
+      size_t partStart = 0;
+      while (true) {
+         const size_t sep = name.find("::", partStart);
+         if (sep == std::string::npos)
+            break;
+
+         if (!prefix.empty())
+            prefix += "::";
+         prefix += name.substr(partStart, sep - partStart);
+
+         if (_isClass(prefix)) {
+            prefixKind = "class";
+            partStart = sep + 2;
+            continue;
+         }
+         if (_isNamespace(prefix)) {
+            prefixKind = "namespace";
+            partStart = sep + 2;
+            continue;
+         }
+
+         const std::string kind = _symbolKindForName(prefix);
+         failingPrefix = prefix;
+         if (!kind.empty()) {
+            prefixKind = kind;
+            return false;
+         }
+
+         // Prefix not found: can be acceptable for inline namespace declarations.
+         missingScope = true;
+         prefixKind = "namespace";
+         return false;
+      }
+
+      return true;
+   }
+   std::string SemanticAnalyzer::_symbolKindForName(const std::string& name) {
+      // Must scan all currently active scopes: function scopes are popped on exit,
+      // so this reflects exactly what is visible at the analysis point.
+      if (_doesVariableExist(name))
+         return "variable";
+      if (_isClass(name))
+         return "class";
+      if (_isNamespace(name))
+         return "namespace";
+      if (_isFunction(name))
+         return "function";
+      return "";
+   }
    bool SemanticAnalyzer::_checkNumericConversionLoss(const std::string& fromType, const std::string& toType) {
       if (fromType == toType) return false;
 
@@ -1231,17 +1381,16 @@ namespace tungsten {
       return false;
    }
    bool SemanticAnalyzer::_doesVariableExist(const std::string& var) {
-      for (auto scope : _scopes) {
+      for (const auto& scope : _scopes) {
          if (scope.contains(var))
             return true;
       }
       return false;
    }
    bool SemanticAnalyzer::_isConstVariable(const std::string& var) const {
-      for (auto it = _scopes.rbegin(); it != _scopes.rend(); ++it) {
-         auto found = it->find(var);
-         if (found != it->end())
-            return found->second.first;
+      for (const auto& scope : _scopes) {
+         if (scope.contains(var) && scope.at(var).first)
+            return true;
       }
       return false;
    }
@@ -1264,8 +1413,8 @@ namespace tungsten {
             return std::nullopt;
       }
    }
-   std::shared_ptr<Type> SemanticAnalyzer::_variableType(const std::string& var) {
-      for (auto& scope : _scopes) {
+   std::shared_ptr<Type> SemanticAnalyzer::_variableType(const std::string& var) const {
+      for (const auto& scope : _scopes) {
          if (scope.contains(var))
             return scope.at(var).second;
       }

@@ -105,6 +105,8 @@ namespace tungsten {
       int _getPrecedence(TokenType type);
       template <typename Ty = ExpressionAST>
       std::unique_ptr<Ty> _logError(const std::string& str);
+      template <typename Ty = ExpressionAST>
+      std::unique_ptr<Ty> _logError(const Token& token, const std::string& str);
       void _logWarn(const std::string& str);
       template <typename Ty>
       std::unique_ptr<Ty> _setSource(std::unique_ptr<Ty> node, const Token& token);
@@ -200,6 +202,31 @@ namespace tungsten {
       if (isSemicolonError)
          std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << ";" << Colors::Reset << "\n";
       std::cerr << "\n";
+      return nullptr;
+   }
+
+   template <typename Ty>
+   std::unique_ptr<Ty> Parser::_logError(const Token& token, const std::string& str) {
+      const size_t linePosition = token.position;
+      const size_t start = _raw.rfind('\n', linePosition) == std::string::npos ? 0 : _raw.rfind('\n', linePosition) + 1;
+      const size_t end = _raw.find('\n', linePosition) == std::string::npos ? _raw.size() : _raw.find('\n', linePosition);
+
+      std::string line = _raw.substr(start, end - start);
+      size_t indentation = 0;
+      for (char c : line) {
+         if (c == ' ' || c == '\t')
+            ++indentation;
+         else
+            break;
+      }
+
+      size_t column = _column(token) > indentation ? _column(token) - indentation : 0;
+      size_t lineNum = _line(token);
+      size_t lineLength = std::to_string(lineNum).length();
+
+      std::cerr << _location(token) << Colors::Red << " error: " << Colors::Reset << str << "\n";
+      std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
+      std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << "^" << Colors::Reset << "\n\n";
       return nullptr;
    }
 
@@ -493,8 +520,8 @@ namespace tungsten {
       std::vector<std::unique_ptr<ClassMethodAST>> methods;
       std::vector<std::unique_ptr<ClassConstructorAST>> constructors;
       std::unique_ptr<ClassDestructorAST> destructor;
-
-      Visibility visibility = Visibility::Public;
+      bool hasError{false};
+      Visibility visibility = Visibility::Public; // public by default
       bool hasDestructor = false;
       while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile) {
          if (_peek().type == TokenType::Public || _peek().type == TokenType::Private /*|| _peek().type == TokenType::Protected*/) {
@@ -515,7 +542,9 @@ namespace tungsten {
                _consume(2); // consume 'modifier:'
                continue;
             }
-            return _logError<ClassAST>("expected ':' after '" + _lexeme(_peek()) + "'");
+            _logError<ClassAST>("expected ':' after '" + _lexeme(_peek()) + "'");
+            hasError = true;
+            _consume();
          }
 
          bool isStatic = false;
@@ -530,6 +559,7 @@ namespace tungsten {
                break;
             case Constructor:
             case Destructor: {
+               const Token tok = _peek();
                auto kind = _lexeme(_peek());
                _consume(); // consume 'constructor/destructor'
                if (_peek().type != OpenParen)
@@ -554,8 +584,10 @@ namespace tungsten {
                if (kind == "constructor") {
                   constructors.push_back(std::make_unique<ClassConstructorAST>(visibility, std::move(fun)));
                } else {
-                  if (hasDestructor)
-                     return _logError<ClassAST>("multiple destructors defined for class '" + name + "'");
+                  if (hasDestructor) {
+                     _logError<ClassAST>(tok, "multiple destructors defined for class '" + name + "'");
+                     hasError = true;
+                  }
                   destructor = std::make_unique<ClassDestructorAST>(visibility, std::move(fun));
                   hasDestructor = true;
                }
@@ -589,14 +621,17 @@ namespace tungsten {
                break;
             default:
                _logError("Invalid token: '" + _lexeme(_peek()) + "'");
+               hasError = true;
                _consume();
                break;
          }
       }
-      if (_peek().type != TokenType::CloseBrace)
-         return _logError<ClassAST>("expected '}' after '" + _lexeme(_peekBack()) + "'");
-      _consume();
-      return _setSource(std::make_unique<ClassAST>(name, std::move(members), std::move(methods), std::move(constructors), std::move(destructor)), token);
+      if (_peek().type != TokenType::CloseBrace) {
+         _logError<ClassAST>("expected '}' after '" + _lexeme(_peekBack()) + "'");
+         hasError = true;
+      } else
+         _consume();
+      return _setSource(std::make_unique<ClassAST>(name, std::move(members), std::move(methods), std::move(constructors), std::move(destructor), hasError), token);
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseExpression() {

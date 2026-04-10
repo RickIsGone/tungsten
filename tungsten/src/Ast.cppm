@@ -812,7 +812,7 @@ export namespace tungsten {
          return _name;
       }
       _NODISCARD llvm::Type* llvmType() const override {
-         return nullptr; // llvm::StructType::create(*TheContext, elements, "MyStruct");
+         return llvm::StructType::getTypeByName(*TheContext, _name);
       }
 
    private:
@@ -1383,6 +1383,9 @@ export namespace tungsten {
           : _visibility{visibility}, _isStatic{isStatic}, _method{std::move(method)} {}
       llvm::Value* codegen();
       void accept(ASTVisitor& v) { v.visit(*this); }
+      _NODISCARD Visibility visibility() const { return _visibility; }
+      _NODISCARD bool isStatic() const { return _isStatic; }
+      _NODISCARD std::unique_ptr<FunctionAST>& method() { return _method; }
 
    private:
       Visibility _visibility;
@@ -1396,6 +1399,9 @@ export namespace tungsten {
           : _visibility{visibility}, _isStatic{isStatic}, _variable{std::move(variable)} {}
       llvm::Value* codegen();
       void accept(ASTVisitor& v) { v.visit(*this); }
+      _NODISCARD Visibility visibility() const { return _visibility; }
+      _NODISCARD bool isStatic() const { return _isStatic; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& variable() { return _variable; }
 
    private:
       Visibility _visibility;
@@ -1409,6 +1415,8 @@ export namespace tungsten {
           : _visibility{visibility}, _constructor{std::move(constructor)} {}
       llvm::Value* codegen();
       void accept(ASTVisitor& v) { v.visit(*this); }
+      _NODISCARD Visibility visibility() const { return _visibility; }
+      _NODISCARD std::unique_ptr<FunctionAST>& constructor() { return _constructor; }
 
    private:
       Visibility _visibility;
@@ -1420,6 +1428,8 @@ export namespace tungsten {
           : _visibility{visibility}, _destructor{std::move(destructor)} {}
       llvm::Value* codegen();
       void accept(ASTVisitor& v) { v.visit(*this); }
+      _NODISCARD Visibility visibility() const { return _visibility; }
+      _NODISCARD std::unique_ptr<FunctionAST>& destructor() { return _destructor; }
 
    private:
       Visibility _visibility;
@@ -1429,8 +1439,8 @@ export namespace tungsten {
    class ClassAST {
    public:
       ClassAST(const std::string& name, std::vector<std::unique_ptr<ClassVariableAST>> variables, std::vector<std::unique_ptr<ClassMethodAST>> methods,
-               std::vector<std::unique_ptr<ClassConstructorAST>> constructors, std::unique_ptr<ClassDestructorAST> destructor)
-          : _name{name}, _members{std::move(variables)}, _methods{std::move(methods)}, _constructors{std::move(constructors)}, _destructors{std::move(destructor)} {}
+               std::vector<std::unique_ptr<ClassConstructorAST>> constructors, std::unique_ptr<ClassDestructorAST> destructor, bool hasErrors)
+          : _name{name}, _members{std::move(variables)}, _methods{std::move(methods)}, _constructors{std::move(constructors)}, _destructors{std::move(destructor)}, _hasErrors{hasErrors} {}
       llvm::Value* codegen();
 
       _NODISCARD const std::string& name() const { return _name; }
@@ -1438,6 +1448,8 @@ export namespace tungsten {
       _NODISCARD const std::vector<std::unique_ptr<ClassMethodAST>>& methods() const { return _methods; }
       _NODISCARD const std::vector<std::unique_ptr<ClassConstructorAST>>& constructors() const { return _constructors; }
       _NODISCARD const std::unique_ptr<ClassDestructorAST>& destructor() const { return _destructors; }
+      bool hasErrors() const { return _hasErrors; }
+
       void accept(ASTVisitor& v) { v.visit(*this); }
       void setSource(size_t position, size_t length) {
          _sourcePosition = position;
@@ -1463,6 +1475,7 @@ export namespace tungsten {
       size_t _sourceLine{1};
       size_t _sourceColumn{1};
       bool _hasSource{false};
+      bool _hasErrors{false};
    };
 
    class ImportStatementAST : public ExpressionAST {
@@ -2975,9 +2988,68 @@ export namespace tungsten {
       return nullptr;
    }
    llvm::Value* ClassAST::codegen() {
+      std::vector<llvm::Type*> paramTypes;
+      std::vector<llvm::Metadata*> debugMembers;
+      for (const auto& var : _members) {
+         if (!var || !var->variable() || var->variable()->astType() != ASTType::VariableDeclaration)
+            continue;
+
+         auto* varDecl = static_cast<VariableDeclarationAST*>(var->variable().get());
+         paramTypes.push_back(varDecl->type()->llvmType());
+      }
+      llvm::StructType* str = llvm::StructType::getTypeByName(*TheContext, _name);
+      str->setBody(paramTypes);
+
+      const llvm::StructLayout* layout = TheModule->getDataLayout().getStructLayout(str);
+      size_t fieldIndex = 0;
+      for (const auto& var : _members) {
+         if (!var || !var->variable() || var->variable()->astType() != ASTType::VariableDeclaration)
+            continue;
+
+         auto flags = llvm::DINode::FlagZero;
+         switch (var->visibility()) {
+            case Visibility::Private:
+               flags = llvm::DINode::FlagPrivate;
+               break;
+            case Visibility::Public:
+               flags = llvm::DINode::FlagPublic;
+               break;
+            case Visibility::Protected:
+               flags = llvm::DINode::FlagProtected;
+               break;
+         }
+
+         auto* varDecl = static_cast<VariableDeclarationAST*>(var->variable().get());
+         llvm::Type* fieldType = varDecl->type()->llvmType();
+         const uint64_t fieldOffsetBits = layout->getElementOffsetInBits(static_cast<unsigned>(fieldIndex));
+         debugMembers.push_back(DBuilder->createMemberType(KSDbgInfo.currentScope(),
+                                                           varDecl->name(),
+                                                           KSDbgInfo.TheFile,
+                                                           static_cast<unsigned>(varDecl->sourceLine()),
+                                                           debugTypeSizeBits(fieldType),
+                                                           debugTypeAlignBits(fieldType),
+                                                           fieldOffsetBits,
+                                                           flags,
+                                                           debugTypeFor(varDecl->type())));
+         ++fieldIndex;
+      }
+
+      auto* classType = DBuilder->createClassType(KSDbgInfo.currentScope(),
+                                                  _name,
+                                                  KSDbgInfo.TheFile,
+                                                  _sourceLine,
+                                                  debugTypeSizeBits(str),
+                                                  debugTypeAlignBits(str),
+                                                  0,
+                                                  llvm::DINode::FlagZero,
+                                                  nullptr,
+                                                  DBuilder->getOrCreateArray(debugMembers));
+      DBuilder->retainType(classType);
       return nullptr;
    }
-
+   llvm::StructType* forwardDeclareClass(std::unique_ptr<ClassAST>& cls) {
+      return llvm::StructType::create(*TheContext, cls->name());
+   }
    llvm::Type* ArrayTy::llvmType() const {
       if (!_arraySize || _arraySize->astType() != ASTType::NumberExpression)
          return nullptr;

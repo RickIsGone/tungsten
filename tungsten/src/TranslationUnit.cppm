@@ -15,6 +15,7 @@ module;
 export module Tungsten.translationUnit;
 import Tungsten.lexer;
 import Tungsten.parser;
+import Tungsten.ast;
 import Tungsten.semanticAnalyzer;
 import Tungsten.compileOptions;
 namespace fs = std::filesystem;
@@ -65,6 +66,9 @@ namespace tungsten {
       parser.parse();
       SemanticAnalyzer analyzer{parser.functions(), parser.classes(), parser.globalVariables(), parser.externs(), path, _raw};
       if (analyzer.analyze()) {
+         for (auto& cls : parser.classes()) {
+            forwardDeclareClass(cls);
+         }
          for (auto& var : parser.externs()->variables) {
             var->codegen();
          }
