@@ -390,6 +390,17 @@ namespace tungsten {
          return _logError(&cast, "cannot cast from type '{}' to '{}'", fullTypeString(cast.value()->type()), fullTypeString(cast.type()));
    }
    void SemanticAnalyzer::visit(TypeOfStatementAST& var) {
+      if (!var.statement())
+         return _logError(&var, "cannot use 'typeof' without a valid argument");
+
+      if (var.statement()->astType() == ASTType::VariableExpression) {
+         auto* variable = static_cast<VariableExpressionAST*>(var.statement().get());
+         if (_isClass(variable->name())) {
+            variable->setType(makeClass(variable->name()));
+            return;
+         }
+      }
+
       var.statement()->accept(*this);
       if (!var.statement()->type())
          return _logError(&var, "cannot use 'typeof' on expression without a type");
