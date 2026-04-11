@@ -78,11 +78,26 @@ namespace tungsten {
          for (auto& fun : parser.functions()) {
             fun->prototype()->codegen(); // forward declaration
          }
-         for (auto& cls : parser.classes()) {
-            cls->codegen();
+         for (auto& cls : parser.classes()) { // forward declaration of methods, constructors and destructor
+            for (auto& method : cls->methods()) {
+               auto* proto = static_cast<FunctionPrototypeAST*>(method->method()->prototype().get());
+               proto->setName(cls->name() + "-" + proto->name());
+               proto->codegen();
+            }
+            for (auto& ctor : cls->constructors()) {
+               auto* proto = static_cast<FunctionPrototypeAST*>(ctor->constructor()->prototype().get());
+               proto->setName(cls->name() + "-constructor");
+               proto->codegen();
+            }
+            auto proto = static_cast<FunctionPrototypeAST*>(cls->destructor()->destructor()->prototype().get());
+            proto->setName(cls->name() + "-destructor");
+            proto->codegen();
          }
          for (auto& var : parser.globalVariables()) {
             var->codegen();
+         }
+         for (auto& cls : parser.classes()) {
+            cls->codegen();
          }
          for (auto& fun : parser.functions()) {
             fun->codegen();

@@ -51,6 +51,11 @@ namespace tungsten {
 
    std::unordered_map<std::string, llvm::Value*> NamedValues{};
    std::unordered_map<std::string, llvm::Type*> VariableTypes{};
+   struct ClassScopeCleanupEntry {
+      std::string className;
+      llvm::Value* storage;
+   };
+   std::vector<std::vector<ClassScopeCleanupEntry>> ClassScopeCleanups{};
    llvm::Value* LogErrorV(const std::string& Str) {
       std::cerr << "error: " << Str << "\n";
       return nullptr;
@@ -1322,6 +1327,7 @@ export namespace tungsten {
          return result;
       }
       void setExternC(bool c) { _isExternC = c; }
+      void setName(const std::string& name) { _name = name; }
 
    private:
       std::shared_ptr<Type> _type;
@@ -1440,14 +1446,14 @@ export namespace tungsten {
    public:
       ClassAST(const std::string& name, std::vector<std::unique_ptr<ClassVariableAST>> variables, std::vector<std::unique_ptr<ClassMethodAST>> methods,
                std::vector<std::unique_ptr<ClassConstructorAST>> constructors, std::unique_ptr<ClassDestructorAST> destructor, bool hasErrors)
-          : _name{name}, _members{std::move(variables)}, _methods{std::move(methods)}, _constructors{std::move(constructors)}, _destructors{std::move(destructor)}, _hasErrors{hasErrors} {}
+          : _name{name}, _members{std::move(variables)}, _methods{std::move(methods)}, _constructors{std::move(constructors)}, _destructor{std::move(destructor)}, _hasErrors{hasErrors} {}
       llvm::Value* codegen();
 
       _NODISCARD const std::string& name() const { return _name; }
       _NODISCARD const std::vector<std::unique_ptr<ClassVariableAST>>& members() const { return _members; }
       _NODISCARD const std::vector<std::unique_ptr<ClassMethodAST>>& methods() const { return _methods; }
       _NODISCARD const std::vector<std::unique_ptr<ClassConstructorAST>>& constructors() const { return _constructors; }
-      _NODISCARD const std::unique_ptr<ClassDestructorAST>& destructor() const { return _destructors; }
+      _NODISCARD const std::unique_ptr<ClassDestructorAST>& destructor() const { return _destructor; }
       bool hasErrors() const { return _hasErrors; }
 
       void accept(ASTVisitor& v) { v.visit(*this); }
@@ -1469,7 +1475,7 @@ export namespace tungsten {
       std::vector<std::unique_ptr<ClassVariableAST>> _members;
       std::vector<std::unique_ptr<ClassMethodAST>> _methods;
       std::vector<std::unique_ptr<ClassConstructorAST>> _constructors;
-      std::unique_ptr<ClassDestructorAST> _destructors;
+      std::unique_ptr<ClassDestructorAST> _destructor;
       size_t _sourcePosition{0};
       size_t _sourceLength{0};
       size_t _sourceLine{1};
@@ -1732,8 +1738,10 @@ export namespace tungsten {
    }
 
    llvm::Value* VariableExpressionAST::codegen() {
-      llvm::Value* V = NamedValues[_name];
-      return V;
+      if (!NamedValues.contains(_name) || !NamedValues[_name])
+         return LogErrorV("unknown variable: '" + _name + "'");
+
+      return NamedValues[_name];
    }
 
    llvm::Value* StringExpression::codegen() {
@@ -1825,6 +1833,31 @@ export namespace tungsten {
       if (val->getType()->isPointerTy())
          return Builder->CreateLoad(ty, val);
       return val;
+   }
+   void emitClassScopeDestructors(bool allScopes) {
+      if (ClassScopeCleanups.empty())
+         return;
+
+      auto emitForScope = [](std::vector<ClassScopeCleanupEntry>& entries) {
+         for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
+            if (!it->storage)
+               continue;
+
+            const std::string dtorName = it->className + "-destructor$";
+            llvm::Function* dtor = TheModule->getFunction(dtorName);
+            if (!dtor)
+               continue;
+
+            Builder->CreateCall(dtor, {});
+         }
+      };
+
+      if (allScopes) {
+         for (auto it = ClassScopeCleanups.rbegin(); it != ClassScopeCleanups.rend(); ++it)
+            emitForScope(*it);
+      } else {
+         emitForScope(ClassScopeCleanups.back());
+      }
    }
    llvm::Value* loadDereferenceAddressIfUnaryStar(ExpressionAST* expr, llvm::Value* exprValue, const std::string& name) {
       if (!expr || expr->astType() != ASTType::UnaryExpression)
@@ -1943,6 +1976,9 @@ export namespace tungsten {
 
       llvm::Value* LHS = _LHS->codegen();
       llvm::Value* RHS = _RHS->codegen();
+
+      if (!LHS || !RHS)
+         return LogErrorV("invalid operands in binary expression '" + _op + "'");
 
       llvm::Type* lhsValueType = expressionValueTypeForCodegen(_LHS.get());
       llvm::Type* rhsValueType = expressionValueTypeForCodegen(_RHS.get());
@@ -2241,6 +2277,19 @@ export namespace tungsten {
          Builder->CreateStore(storeVal, allocInstance);
       } else if (_Type->kind() == TypeKind::Pointer) {
          Builder->CreateStore(llvm::ConstantPointerNull::get(Builder->getPtrTy()), allocInstance);
+      } else if (_Type->kind() == TypeKind::Class) {
+         const std::string className = _Type->string();
+         const std::string ctorName = className + "-constructor$";
+         llvm::Function* ctor = TheModule->getFunction(ctorName);
+         if (ctor) {
+            llvm::Value* instance = Builder->CreateCall(ctor, {});
+            if (!instance)
+               return LogErrorV("failed to call constructor '" + ctorName + "'");
+            Builder->CreateStore(instance, allocInstance);
+         }
+
+         if (!ClassScopeCleanups.empty())
+            ClassScopeCleanups.back().push_back({className, allocInstance});
       }
 
       NamedValues[_name] = allocInstance;
@@ -2521,6 +2570,7 @@ export namespace tungsten {
       setDebugLocationFor(this);
       KSDbgInfo.pushLexicalBlock(debugLineFor(this), debugColumnFor(this));
       KSDbgInfo.pushVariableScope();
+      ClassScopeCleanups.push_back({});
 
       llvm::Value* last = llvm::Constant::getNullValue(llvm::Type::getInt8Ty(*TheContext)); // to avoid empty functions from getting recognized as wrong
       for (const auto& statement : _statements) {
@@ -2529,6 +2579,7 @@ export namespace tungsten {
 
          last = statement->codegen();
          if (!last) {
+            ClassScopeCleanups.pop_back();
             KSDbgInfo.popVariableScope();
             KSDbgInfo.popLexicalBlock();
             return nullptr;
@@ -2538,6 +2589,10 @@ export namespace tungsten {
             break;
       }
 
+      if (Builder->GetInsertBlock() && !Builder->GetInsertBlock()->getTerminator())
+         emitClassScopeDestructors(false);
+
+      ClassScopeCleanups.pop_back();
       KSDbgInfo.popVariableScope();
       KSDbgInfo.popLexicalBlock();
       return last;
@@ -2558,6 +2613,7 @@ export namespace tungsten {
       };
 
       if (_value == nullptr) {
+         emitClassScopeDestructors(true);
          llvm::Value* ret = Builder->CreateRetVoid();
          moveToDeadUnreachableBlock();
          return ret;
@@ -2579,12 +2635,14 @@ export namespace tungsten {
       if (returnsReference) {
          if (!returnValue->getType()->isPointerTy())
             return LogErrorV("reference return requires an lvalue/address expression");
+         emitClassScopeDestructors(true);
          llvm::Value* ret = Builder->CreateRet(returnValue);
          moveToDeadUnreachableBlock();
          return ret;
       }
 
       returnValue = castToCommonType(returnValue, valueTypeForCodegen(_Type));
+      emitClassScopeDestructors(true);
       llvm::Value* ret = Builder->CreateRet(returnValue);
       moveToDeadUnreachableBlock();
       return ret;
@@ -2906,8 +2964,16 @@ export namespace tungsten {
          else if (_prototype->name() == "main"sv)
             Builder->CreateRet(Builder->getInt32(0)); // returning 0 by default in main function
          else {
-            KSDbgInfo.popVariableScope();
-            return LogErrorF("missing return statement in function: '" + name() + "'");
+            const std::string funcName = name();
+            const bool isConstructor = funcName.find("-constructor") != std::string::npos;
+            const bool isDestructor = funcName.find("-destructor") != std::string::npos;
+
+            if (isConstructor || isDestructor) {
+               Builder->CreateRet(llvm::Constant::getNullValue(function->getReturnType()));
+            } else {
+               KSDbgInfo.popVariableScope();
+               return LogErrorF("missing return statement in function: '" + name() + "'");
+            }
          }
       }
 
@@ -2985,16 +3051,16 @@ export namespace tungsten {
    }
 
    llvm::Value* ClassMethodAST::codegen() {
-      return nullptr;
+      return _method->codegen();
    }
    llvm::Value* ClassVariableAST::codegen() {
-      return nullptr;
+      return _variable->codegen();
    }
    llvm::Value* ClassConstructorAST::codegen() {
-      return nullptr;
+      return _constructor->codegen();
    }
    llvm::Value* ClassDestructorAST::codegen() {
-      return nullptr;
+      return _destructor->codegen();
    }
    llvm::Value* ClassAST::codegen() {
       std::vector<llvm::Type*> paramTypes;
@@ -3054,6 +3120,22 @@ export namespace tungsten {
                                                   nullptr,
                                                   DBuilder->getOrCreateArray(debugMembers));
       DBuilder->retainType(classType);
+
+      for (auto& method : _methods) {
+         if (!method)
+            return LogErrorV("invalid method in class '" + _name + "'");
+         method->codegen();
+      }
+
+      for (auto& ctor : _constructors) {
+         if (!ctor)
+            return LogErrorV("invalid constructor in class '" + _name + "'");
+         ctor->codegen();
+      }
+      if (!_destructor)
+         return LogErrorV("missing destructor in class '" + _name + "'");
+      _destructor->codegen();
+
       return nullptr;
    }
    llvm::StructType* forwardDeclareClass(std::unique_ptr<ClassAST>& cls) {

@@ -81,10 +81,10 @@ namespace tungsten {
       void visit(FunctionPrototypeAST&) override;
       void visit(FunctionAST&) override;
 
-      void visit(ClassMethodAST&) override {}
-      void visit(ClassVariableAST&) override {}
-      void visit(ClassConstructorAST&) override {}
-      void visit(ClassDestructorAST&) override {}
+      void visit(ClassMethodAST&) override;
+      void visit(ClassVariableAST&) override;
+      void visit(ClassConstructorAST&) override;
+      void visit(ClassDestructorAST&) override;
       void visit(ClassAST&) override;
 
    private:
@@ -1190,11 +1190,98 @@ namespace tungsten {
          return _logError(&var, "free statement expects a pointer type");
    }
 
+   void SemanticAnalyzer::visit(ClassMethodAST& method) {
+      if (!method.method()) {
+         _hasErrors = true;
+         return;
+      }
+
+      _scopes.push_back({});
+      ++_currentScope;
+
+      _allowUninitializedReferenceDecl = true;
+      for (auto& arg : method.method()->args()) {
+         if (!arg) {
+            _hasErrors = true;
+            continue;
+         }
+         auto* cast = static_cast<VariableDeclarationAST*>(arg.get());
+         cast->accept(*this);
+      }
+      _allowUninitializedReferenceDecl = false;
+
+      if (method.method()->body())
+         method.method()->body()->accept(*this);
+      else
+         _hasErrors = true;
+
+      _scopes.pop_back();
+      --_currentScope;
+   }
+   void SemanticAnalyzer::visit(ClassVariableAST& var) {
+      if (!var.variable()) {
+         _hasErrors = true;
+         return;
+      }
+
+      if (var.variable()->astType() != ASTType::VariableDeclaration)
+         return _logError("class member must be a variable declaration");
+
+      var.variable()->accept(*this);
+   }
+   void SemanticAnalyzer::visit(ClassConstructorAST& ctor) {
+      if (!ctor.constructor()) {
+         _hasErrors = true;
+         return;
+      }
+
+      _scopes.push_back({});
+      ++_currentScope;
+
+      _allowUninitializedReferenceDecl = true;
+      for (auto& arg : ctor.constructor()->args()) {
+         if (!arg) {
+            _hasErrors = true;
+            continue;
+         }
+         auto* cast = static_cast<VariableDeclarationAST*>(arg.get());
+         cast->accept(*this);
+      }
+      _allowUninitializedReferenceDecl = false;
+
+      if (ctor.constructor()->body())
+         ctor.constructor()->body()->accept(*this);
+      else
+         _hasErrors = true;
+
+      _scopes.pop_back();
+      --_currentScope;
+   }
+   void SemanticAnalyzer::visit(ClassDestructorAST& dtor) {
+      if (!dtor.destructor()) {
+         _hasErrors = true;
+         return;
+      }
+
+      if (!dtor.destructor()->args().empty())
+         _logError(dtor.destructor()->args().at(0).get(), "destructors cannot have arguments");
+
+      _scopes.push_back({});
+      ++_currentScope;
+
+      if (dtor.destructor()->body())
+         dtor.destructor()->body()->accept(*this);
+      else
+         _hasErrors = true;
+
+      _scopes.pop_back();
+      --_currentScope;
+   }
    void SemanticAnalyzer::visit(ClassAST& cls) {
       const std::string existingKind = _symbolKindForName(cls.name());
       if (!existingKind.empty() && existingKind != "class")
          _logError("{} with name '{}' already exists", existingKind, cls.name());
-      if (_declaredClasses.contains(cls.name()))
+      else if (_declaredClasses.contains(cls.name()))
          _logError("class with name '{}' already exists", cls.name());
       _declaredClasses.insert(cls.name());
 
@@ -1202,6 +1289,9 @@ namespace tungsten {
          _hasErrors = true;
       _scopes.push_back({});
       ++_currentScope;
+
+      std::unordered_set<std::string> constructorSignatures{};
+      std::unordered_map<std::string, std::vector<Overload>> methodOverloads{};
       for (auto& var : cls.members()) {
          if (var)
             var->accept(*this);
@@ -1209,20 +1299,114 @@ namespace tungsten {
             _hasErrors = true;
       }
       for (auto& ctor : cls.constructors()) {
+         if (!ctor) {
+            _hasErrors = true;
+            continue;
+         }
+
+         std::string signature;
+         signature += "(";
+         const auto& args = ctor->constructor()->args();
+         for (size_t i = 0; i < args.size(); ++i) {
+            if (!args[i] || !args[i]->type()) {
+               signature += "<invalid>";
+            } else {
+               signature += fullTypeString(args[i]->type());
+            }
+            if (i + 1 < args.size())
+               signature += ",";
+         }
+         signature += ")";
+
+         if (!constructorSignatures.insert(signature).second) {
+            _logError("constructor with signature '{}' already exists in class '{}'", signature, cls.name());
+            _hasErrors = true;
+            continue;
+         }
+
          if (ctor)
             ctor->accept(*this);
-         else
-            _hasErrors = true;
       }
       if (cls.destructor())
          cls.destructor()->accept(*this);
       else
          _hasErrors = true;
       for (auto& fun : cls.methods()) {
-         if (fun)
-            fun->accept(*this);
-         else
+         if (!fun) {
             _hasErrors = true;
+            continue;
+         }
+
+         if (!fun->method() || !fun->method()->prototype()) {
+            _hasErrors = true;
+            continue;
+         }
+
+         Overload over;
+         over.type = fun->method()->prototype()->type();
+
+         _allowUninitializedReferenceDecl = true;
+         for (auto& arg : fun->method()->prototype()->args()) {
+            if (!arg) {
+               _hasErrors = true;
+               continue;
+            }
+            auto* cast = static_cast<VariableDeclarationAST*>(arg.get());
+            cast->accept(*this);
+            over.args.push_back(cast->type());
+         }
+         _allowUninitializedReferenceDecl = false;
+
+         auto sameSignature = [&](const Overload& o) {
+            bool oVariadic = !o.args.empty() && o.args.back()->kind() == TypeKind::ArgPack;
+            bool overVariadic = !over.args.empty() && over.args.back()->kind() == TypeKind::ArgPack;
+
+            if (!oVariadic && !overVariadic && o.args.size() != over.args.size()) return false;
+            if (oVariadic && overVariadic) {
+               if (o.args.size() != over.args.size()) return false;
+            }
+            if ((oVariadic && !overVariadic) || (!oVariadic && overVariadic)) {
+               if (o.args.size() - 1 > over.args.size() - 1) return false;
+            }
+
+            size_t minArgs = std::min(o.args.size(), over.args.size());
+            for (size_t i = 0; i < minArgs; i++) {
+               if (fullTypeString(o.args[i]) != fullTypeString(over.args[i])) return false;
+            }
+
+            return true;
+         };
+         auto sameParams = [&](const Overload& o) {
+            if (o.args.size() != over.args.size()) return false;
+            for (size_t i = 0; i < o.args.size(); i++) {
+               if (fullTypeString(o.args[i]) != fullTypeString(over.args[i]))
+                  return false;
+            }
+            return true;
+         };
+
+         auto& overloads = methodOverloads[fun->method()->prototype()->name()];
+         bool methodDuplicate = false;
+         for (auto& existing : overloads) {
+            if (sameSignature(existing)) {
+               _logError("function '{}' with the same signature already exists", fun->method()->prototype()->name());
+               _hasErrors = true;
+               methodDuplicate = true;
+               break;
+            }
+            if (sameParams(existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
+               _logError("function '{}' with same parameters but different return type already exists", fun->method()->prototype()->name());
+               _hasErrors = true;
+               methodDuplicate = true;
+               break;
+            }
+         }
+
+         if (methodDuplicate)
+            continue;
+
+         overloads.push_back(over);
+         fun->accept(*this);
       }
       _scopes.pop_back();
       --_currentScope;
