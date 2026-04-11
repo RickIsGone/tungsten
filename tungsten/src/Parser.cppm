@@ -102,6 +102,8 @@ namespace tungsten {
       std::string _function();
       std::string _parseQualifiedName();
       std::string _parseIdentifierName(bool allowQualified = false);
+      bool _isTypeStartToken(TokenType type) const;
+      bool _looksLikeVariableDeclarationStart(size_t offset = 0) const;
       int _getPrecedence(TokenType type);
       template <typename Ty = ExpressionAST>
       std::unique_ptr<Ty> _logError(const std::string& str);
@@ -315,6 +317,91 @@ namespace tungsten {
       std::string name = _lexeme(_peek());
       _consume(); // consume identifier
       return name;
+   }
+
+   bool Parser::_isTypeStartToken(TokenType type) const {
+      switch (type) {
+         case TokenType::Void:
+         case TokenType::Char:
+         case TokenType::Bool:
+         case TokenType::String:
+         case TokenType::Int:
+         case TokenType::Int8:
+         case TokenType::Int16:
+         case TokenType::Int32:
+         case TokenType::Int64:
+         case TokenType::Int128:
+         case TokenType::Uint:
+         case TokenType::Uint8:
+         case TokenType::Uint16:
+         case TokenType::Uint32:
+         case TokenType::Uint64:
+         case TokenType::Uint128:
+         case TokenType::Float:
+         case TokenType::Float32:
+         case TokenType::Float64:
+         case TokenType::Double:
+         case TokenType::Identifier:
+            return true;
+         default:
+            return false;
+      }
+   }
+
+   bool Parser::_looksLikeVariableDeclarationStart(size_t offset) const {
+      if (_peek(offset).type == TokenType::Const)
+         ++offset;
+
+      if (!_isTypeStartToken(_peek(offset).type))
+         return false;
+
+      if (_peek(offset).type == TokenType::Identifier) {
+         ++offset;
+         while (_peek(offset).type == TokenType::DoubleColon && _peek(offset + 1).type == TokenType::Identifier)
+            offset += 2;
+      } else {
+         ++offset;
+      }
+
+      while (true) {
+         if (_peek(offset).type == TokenType::Multiply || _peek(offset).type == TokenType::BitwiseAnd) {
+            ++offset;
+            continue;
+         }
+
+         if (_peek(offset).type == TokenType::OpenBracket) {
+            ++offset;
+            int depth = 1;
+            while (depth > 0) {
+               const auto type = _peek(offset).type;
+               if (type == TokenType::EndOFFile)
+                  return false;
+               if (type == TokenType::OpenBracket)
+                  ++depth;
+               else if (type == TokenType::CloseBracket)
+                  --depth;
+               ++offset;
+            }
+            continue;
+         }
+
+         break;
+      }
+
+      if (_peek(offset).type != TokenType::Identifier)
+         return false;
+      ++offset;
+
+      switch (_peek(offset).type) {
+         case TokenType::Equal:
+         case TokenType::OpenBrace:
+         case TokenType::Semicolon:
+         case TokenType::Comma:
+         case TokenType::CloseParen:
+            return true;
+         default:
+            return false;
+      }
    }
 
    int Parser::_getPrecedence(TokenType type) {
@@ -1045,7 +1132,7 @@ namespace tungsten {
          }
 
          case TokenType::Identifier:
-            if (_symbolTable.contains(_lexeme(_peek())) && _symbolTable.at(_lexeme(_peek())) == SymbolType::Class)
+            if (_looksLikeVariableDeclarationStart())
                return _parseVariableDeclaration();
             return _parseIdentifierExpression();
 
@@ -1261,9 +1348,12 @@ namespace tungsten {
          case TokenType::Double:
             canStartType = true;
             break;
+
          case TokenType::Identifier:
-            canStartType = _symbolTable.contains(_lexeme(_peek())) && _symbolTable.at(_lexeme(_peek())) == SymbolType::Class;
+            canStartType = _peek(1).type == TokenType::DoubleColon || _peek(1).type == TokenType::Multiply ||
+                           _peek(1).type == TokenType::BitwiseAnd || _peek(1).type == TokenType::OpenBracket;
             break;
+
          default:
             break;
       }
@@ -1336,6 +1426,7 @@ namespace tungsten {
    std::shared_ptr<Type> Parser::_parseType() {
       Token baseType = _peek();
       std::shared_ptr<Type> type;
+      bool consumedBase = false;
       switch (baseType.type) {
          using enum TokenType;
          case ArgPack:
@@ -1394,14 +1485,20 @@ namespace tungsten {
             type = makeDouble();
             break;
 
-         case Identifier:
-            type = makeClass(_parseIdentifierName());
+         case Identifier: {
+            std::string classType = _parseQualifiedName();
+            if (classType.empty())
+               return nullptr;
+            type = makeClass(classType);
+            consumedBase = true;
             break;
+         }
 
          default:
             return nullptr;
       }
-      _consume(); // consume type
+      if (!consumedBase)
+         _consume(); // consume type
       if (type->kind() == TypeKind::ArgPack)
          return type;
 
@@ -1513,10 +1610,6 @@ namespace tungsten {
       std::string name = _lexeme(_peek());
 
       _consume(); // consume identifier
-
-      // if (_symbolTable.contains(name))
-      //    return _logError("redefinition of '" + name + "'");
-      // _symbolTable.insert({name, SymbolType::Variable});
 
       std::unique_ptr<ExpressionAST> initExpr = nullptr;
       if (_peek().type == TokenType::Equal) {

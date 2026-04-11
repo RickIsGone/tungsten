@@ -368,6 +368,15 @@ namespace tungsten {
       if (!var.statement())
          return _logError(&var, "cannot use 'sizeof' without a valid argument");
 
+      if (var.statement()->astType() == ASTType::VariableExpression) {
+         auto* variable = static_cast<VariableExpressionAST*>(var.statement());
+         if (_isClass(variable->name())) {
+            variable->setType(makeClass(variable->name()));
+            var.setType(makeUint64());
+            return;
+         }
+      }
+
       var.statement()->accept(*this);
       if (!var.statement()->type())
          return _logError(&var, "cannot use 'sizeof' on expression without a type");

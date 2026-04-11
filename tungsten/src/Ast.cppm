@@ -2401,9 +2401,18 @@ export namespace tungsten {
       return Builder->CreateGlobalStringPtr(name);
    }
    llvm::Value* SizeOfStatementAST::codegen() {
-      if (hasExplicitType())
-         return Builder->getInt64(explicitType()->size());
-      return Builder->getInt64(statement()->type()->size());
+      if (hasExplicitType()) {
+         auto type = explicitType();
+         if (!type)
+            return LogErrorV("cannot use 'sizeof' on invalid type");
+         return Builder->getInt64(type->size());
+      }
+
+      auto* expr = statement();
+      if (!expr || !expr->type())
+         return LogErrorV("cannot use 'sizeof' on expression without a type");
+
+      return Builder->getInt64(expr->type()->size());
    }
 
    llvm::Value* __BuiltinFunctionAST::codegen() {
