@@ -1226,6 +1226,12 @@ namespace tungsten {
       }
       _scopes.pop_back();
       --_currentScope;
+
+      std::string types{};
+      for (const auto& ty : cls.members()) {
+         types += fullTypeString(ty->variable()->type()) + (ty == cls.members().back() ? "" : ", ");
+      }
+      utils::debugLog("declared class: class {}, with members of type: {{{}}}", cls.name(), types);
    }
 
    bool SemanticAnalyzer::_isSignedType(const std::string& type) {
