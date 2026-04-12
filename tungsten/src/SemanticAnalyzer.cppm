@@ -91,12 +91,14 @@ namespace tungsten {
       template <typename... Ty>
       void _logError(const ExpressionAST* node, const std::string& err, Ty&&... args);
       template <typename... Ty>
+      void _logError(const FunctionPrototypeAST* node, const std::string& err, Ty&&... args);
+      template <typename... Ty>
       void _logError(const std::string& err, Ty&&... args) {
-         _logError(nullptr, err, std::forward<Ty>(args)...);
+         _logError(static_cast<const ExpressionAST*>(nullptr), err, std::forward<Ty>(args)...);
       }
       template <typename... Ty>
       void _logWarn(const std::string& warn, Ty&&... args) {
-         _logWarn(nullptr, warn, std::forward<Ty>(args)...);
+         _logWarn(static_cast<const ExpressionAST*>(nullptr), warn, std::forward<Ty>(args)...);
       }
       template <typename... Ty>
       void _logWarn(const ExpressionAST* node, const std::string& warn, Ty&&... args);
@@ -678,18 +680,18 @@ namespace tungsten {
          bool missingScope = false;
          if (!_hasValidQualifiedPrefix(proto.name(), prefixKind, failingPrefix, missingScope)) {
             if (missingScope)
-               return _logError("unknown scope '{}' in declaration of function '{}'", failingPrefix, proto.name());
-            return _logError("'{}' is a {}, not a namespace/class scope for function '{}'", failingPrefix, prefixKind, proto.name());
+               return _logError(&proto, "unknown scope '{}' in declaration of function '{}'", failingPrefix, proto.name());
+            return _logError(&proto, "'{}' is a {}, not a namespace/class scope for function '{}'", failingPrefix, prefixKind, proto.name());
          }
       }
 
       if (_scopes.at(GlobalScope).contains(proto.name()) || _isClass(proto.name()) || _isNamespace(proto.name())) {
          const std::string kind = _symbolKindForName(proto.name());
-         return _logError("{} with name '{}' already exists", kind.empty() ? "symbol" : kind, proto.name());
+         return _logError(&proto, "{} with name '{}' already exists", kind.empty() ? "symbol" : kind, proto.name());
       }
 
       if (_declaredFunctions.contains("main") && proto.name() == "main"sv)
-         return _logError("redefinition of main function");
+         return _logError(&proto, "redefinition of main function");
 
       Overload over;
       over.type = proto.type();
@@ -701,6 +703,15 @@ namespace tungsten {
       }
       _allowUninitializedReferenceDecl = false;
       auto& overloads = _declaredFunctions[proto.name()];
+
+      std::string signature = proto.name();
+      signature += "(";
+      for (size_t i = 0; i < over.args.size(); ++i) {
+         signature += fullTypeString(over.args[i]);
+         if (i + 1 < over.args.size())
+            signature += ", ";
+      }
+      signature += ")";
 
       auto sameSignature = [&](const Overload& o) {
          bool oVariadic = !o.args.empty() && o.args.back()->kind() == TypeKind::ArgPack;
@@ -732,16 +743,16 @@ namespace tungsten {
 
       for (auto& existing : overloads) {
          if (sameSignature(existing)) {
-            return _logError("function '{}' with the same signature already exists", proto.name());
+            return _logError(&proto, "function '{}' with the same signature already exists", proto.name());
          }
          if (sameParams(existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
-            return _logError("function '{}' with same parameters but different return type already exists", proto.name());
+            return _logError(&proto, "function '{}' with same parameters but different return type already exists", proto.name());
          }
       }
 
       if (proto.name() == "main"sv) {
          if (proto.type()->kind() != TypeKind::Int32)
-            return _logError("main function must have return type 'int' or 'i32'");
+            return _logError(&proto, "main function must have return type 'int' or 'i32'");
       }
       std::string args;
       for (const auto& arg : proto.args()) {
@@ -1319,7 +1330,7 @@ namespace tungsten {
          signature += ")";
 
          if (!constructorSignatures.insert(signature).second) {
-            _logError("constructor with signature '{}' already exists in class '{}'", signature, cls.name());
+            _logError(ctor->constructor()->prototype().get(), "constructor with signature already exists in class '{}'", cls.name());
             _hasErrors = true;
             continue;
          }
@@ -1357,6 +1368,15 @@ namespace tungsten {
          }
          _allowUninitializedReferenceDecl = false;
 
+         std::string signature = fun->method()->prototype()->name();
+         signature += "(";
+         for (size_t i = 0; i < over.args.size(); ++i) {
+            signature += fullTypeString(over.args[i]);
+            if (i + 1 < over.args.size())
+               signature += ", ";
+         }
+         signature += ")";
+
          auto sameSignature = [&](const Overload& o) {
             bool oVariadic = !o.args.empty() && o.args.back()->kind() == TypeKind::ArgPack;
             bool overVariadic = !over.args.empty() && over.args.back()->kind() == TypeKind::ArgPack;
@@ -1389,13 +1409,13 @@ namespace tungsten {
          bool methodDuplicate = false;
          for (auto& existing : overloads) {
             if (sameSignature(existing)) {
-               _logError("function '{}' with the same signature already exists", fun->method()->prototype()->name());
+               _logError(fun->method()->prototype().get(), "function '{}' with the same signature already exists", fun->method()->prototype()->name());
                _hasErrors = true;
                methodDuplicate = true;
                break;
             }
             if (sameParams(existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
-               _logError("function '{}' with same parameters but different return type already exists", fun->method()->prototype()->name());
+               _logError(fun->method()->prototype().get(), "function '{}' with same parameters but different return type already exists", fun->method()->prototype()->name());
                _hasErrors = true;
                methodDuplicate = true;
                break;
@@ -1857,6 +1877,45 @@ namespace tungsten {
 
    template <typename... Ty>
    void SemanticAnalyzer::_logError(const ExpressionAST* node, const std::string& err, Ty&&... args) {
+      const std::string message = std::vformat(err, std::make_format_args(args...));
+      if (node && node->hasSource() && !_raw.empty()) {
+         const bool isSemicolonError = message.find("expected ';'") != std::string::npos;
+
+         const size_t linePosition = node->sourcePosition();
+         const size_t errorPosition = isSemicolonError && node->sourceLength() > 0
+             ? node->sourcePosition() + node->sourceLength()
+             : node->sourcePosition();
+
+         const size_t start = _raw.rfind('\n', linePosition) == std::string::npos ? 0 : _raw.rfind('\n', linePosition) + 1;
+         const size_t end = _raw.find('\n', linePosition) == std::string::npos ? _raw.size() : _raw.find('\n', linePosition);
+
+         std::string line = _raw.substr(start, end - start);
+         size_t indentation = 0;
+         for (char c : line) {
+            if (c == ' ' || c == '\t')
+               ++indentation;
+            else
+               break;
+         }
+
+         size_t column = _column(errorPosition) > indentation ? _column(errorPosition) - indentation : 0;
+         size_t lineNum = _line(errorPosition);
+         size_t lineLength = std::to_string(lineNum).length();
+
+         std::cerr << _filePath.string() << ":" << lineNum << ":" << _column(errorPosition) << Colors::Red << " error: " << Colors::White << message << "\n";
+         std::cerr << lineNum << " | " << line.substr(indentation) << "\n";
+         std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << "^" << Colors::Reset << "\n";
+         if (isSemicolonError)
+            std::cerr << " "sv * lineLength << " | " << " "sv * (column > 1 ? column - 1 : 0) << Colors::Green << ";" << Colors::Reset << "\n";
+         std::cerr << "\n";
+      } else {
+         std::cerr << "error: " << message << "\n";
+      }
+      _hasErrors = true;
+   }
+
+   template <typename... Ty>
+   void SemanticAnalyzer::_logError(const FunctionPrototypeAST* node, const std::string& err, Ty&&... args) {
       const std::string message = std::vformat(err, std::make_format_args(args...));
       if (node && node->hasSource() && !_raw.empty()) {
          const bool isSemicolonError = message.find("expected ';'") != std::string::npos;

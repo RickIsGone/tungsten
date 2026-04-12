@@ -667,7 +667,8 @@ namespace tungsten {
                   return _logError<ClassAST>("expected '{' after '" + _lexeme(_peekBack()) + "'");
 
                auto body = _parseBlock();
-               auto fun = std::make_unique<FunctionAST>(std::make_unique<FunctionPrototypeAST>(makeClass(name), name, std::move(args)), std::move(body));
+               auto proto = _setSource(std::make_unique<FunctionPrototypeAST>(makeClass(name), name, std::move(args)), tok);
+               auto fun = std::make_unique<FunctionAST>(std::move(proto), std::move(body));
                if (kind == "constructor") {
                   constructors.push_back(std::make_unique<ClassConstructorAST>(visibility, std::move(fun)));
                } else {
@@ -1664,6 +1665,7 @@ namespace tungsten {
    }
 
    std::unique_ptr<FunctionPrototypeAST> Parser::_parseFunctionPrototype() {
+      const Token token = _peek();
       _consume(); // consume 'fun'
 
       std::string name = _parseQualifiedName();
@@ -1708,7 +1710,7 @@ namespace tungsten {
       if (type->kind() == TypeKind::ArgPack)
          return _logError<FunctionPrototypeAST>("variadic arguments are not allowed as type");
 
-      return std::make_unique<FunctionPrototypeAST>(type, _namespacePrefix + name, std::move(args));
+      return _setSource(std::make_unique<FunctionPrototypeAST>(type, _namespacePrefix + name, std::move(args)), token);
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseIfStatement() {

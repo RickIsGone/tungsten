@@ -1311,6 +1311,23 @@ export namespace tungsten {
       _NODISCARD const std::vector<std::unique_ptr<ExpressionAST>>& args() const { return _args; }
       void accept(ASTVisitor& v) { v.visit(*this); }
       _NODISCARD ASTType astType() const noexcept { return ASTType::FunctionPrototype; }
+      void setSource(size_t position, size_t length) {
+         _sourcePosition = position;
+         _sourceLength = length;
+         _hasSource = true;
+      }
+      void setSource(size_t position, size_t length, size_t line, size_t column) {
+         _sourcePosition = position;
+         _sourceLength = length;
+         _sourceLine = line;
+         _sourceColumn = column;
+         _hasSource = true;
+      }
+      _NODISCARD bool hasSource() const noexcept { return _hasSource; }
+      _NODISCARD size_t sourcePosition() const noexcept { return _sourcePosition; }
+      _NODISCARD size_t sourceLength() const noexcept { return _sourceLength; }
+      _NODISCARD size_t sourceLine() const noexcept { return _sourceLine; }
+      _NODISCARD size_t sourceColumn() const noexcept { return _sourceColumn; }
       _NODISCARD std::string mangledName() const {
          if (_args.empty())
             return _name + "$";
@@ -1334,6 +1351,11 @@ export namespace tungsten {
       std::string _name;
       bool _isExternC{false};
       std::vector<std::unique_ptr<ExpressionAST>> _args;
+      size_t _sourcePosition{0};
+      size_t _sourceLength{0};
+      size_t _sourceLine{1};
+      size_t _sourceColumn{1};
+      bool _hasSource{false};
    };
 
 
