@@ -74,6 +74,8 @@ namespace tungsten {
       void visit(BlockStatementAST&) override;
       void visit(ReturnStatementAST&) override;
       void visit(ExitStatement&) override;
+      void visit(BreakStatementAST&) override;
+      void visit(ContinueStatementAST&) override;
       void visit(ExternVariableStatementAST&) override {}
       void visit(ImportStatementAST&) override {}
       void visit(NewStatementAST&) override;
@@ -139,6 +141,7 @@ namespace tungsten {
       std::unordered_map<std::string, std::vector<Overload>> _declaredFunctions{};
       std::unordered_set<std::string> _declaredClasses{};
       size_t _currentScope{GlobalScope};
+      size_t _loopDepth{0};
       bool _hasErrors{false};
       bool _allowUninitializedReferenceDecl{false};
    };
@@ -1059,7 +1062,9 @@ namespace tungsten {
             return _logError(&whileStmnt, "while statement condition must be a numeric or boolean expression");
       }
 
+      ++_loopDepth;
       whileStmnt.body()->accept(*this);
+      --_loopDepth;
    }
    void SemanticAnalyzer::visit(DoWhileStatementAST& doWhile) {
       doWhile.condition()->accept(*this);
@@ -1076,7 +1081,9 @@ namespace tungsten {
             return _logError(&doWhile, "while statement condition must be a numeric or boolean expression");
       }
 
+      ++_loopDepth;
       doWhile.body()->accept(*this);
+      --_loopDepth;
    }
    void SemanticAnalyzer::visit(ForStatementAST& forStmnt) {
       _scopes.push_back({});
@@ -1111,9 +1118,21 @@ namespace tungsten {
          default:
             return _logError(&forStmnt, "for statement increment must be a binary expression");
       }
+      ++_loopDepth;
       forStmnt.body()->accept(*this);
+      --_loopDepth;
       _scopes.pop_back();
       --_currentScope;
+   }
+
+   void SemanticAnalyzer::visit(BreakStatementAST& brk) {
+      if (_loopDepth == 0)
+         return _logError(&brk, "'break' can only be used inside a loop");
+   }
+
+   void SemanticAnalyzer::visit(ContinueStatementAST& cont) {
+      if (_loopDepth == 0)
+         return _logError(&cont, "'continue' can only be used inside a loop");
    }
 
    void SemanticAnalyzer::visit(ExitStatement& ext) {
@@ -1158,6 +1177,8 @@ namespace tungsten {
       switch (expr->astType()) {
          case ASTType::ReturnStatement:
          case ASTType::ExitStatement:
+         case ASTType::BreakStatement:
+         case ASTType::ContinueStatement:
             return true;
 
          case ASTType::IfStatement: {
@@ -1284,6 +1305,9 @@ namespace tungsten {
          dtor.destructor()->body()->accept(*this);
       else
          _hasErrors = true;
+
+      if (dtor.visibility() != Visibility::Public)
+         _logError(dtor.destructor()->prototype().get(), "destructor must be public");
 
       _scopes.pop_back();
       --_currentScope;

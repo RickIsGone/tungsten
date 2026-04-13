@@ -80,16 +80,16 @@ namespace tungsten {
          }
          for (auto& cls : parser.classes()) { // forward declaration of methods, constructors and destructor
             for (auto& method : cls->methods()) {
-               auto* proto = static_cast<FunctionPrototypeAST*>(method->method()->prototype().get());
+               auto* proto = method->method()->prototype().get();
                proto->setName(cls->name() + "-" + proto->name());
                proto->codegen();
             }
             for (auto& ctor : cls->constructors()) {
-               auto* proto = static_cast<FunctionPrototypeAST*>(ctor->constructor()->prototype().get());
+               auto* proto = ctor->constructor()->prototype().get();
                proto->setName(cls->name() + "-constructor");
                proto->codegen();
             }
-            auto proto = static_cast<FunctionPrototypeAST*>(cls->destructor()->destructor()->prototype().get());
+            auto proto = cls->destructor()->destructor()->prototype().get();
             proto->setName(cls->name() + "-destructor");
             proto->codegen();
          }

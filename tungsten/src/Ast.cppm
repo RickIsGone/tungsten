@@ -56,6 +56,13 @@ namespace tungsten {
       llvm::Value* storage;
    };
    std::vector<std::vector<ClassScopeCleanupEntry>> ClassScopeCleanups{};
+   struct LoopTargetEntry {
+      llvm::BasicBlock* breakBB{};
+      llvm::BasicBlock* continueBB{};
+      size_t breakCleanupDepth{};
+      size_t continueCleanupDepth{};
+   };
+   std::vector<LoopTargetEntry> LoopTargets{};
    llvm::Value* LogErrorV(const std::string& Str) {
       std::cerr << "error: " << Str << "\n";
       return nullptr;
@@ -73,6 +80,9 @@ namespace tungsten {
    }
    bool isFloatingPointType(const std::string& type) {
       return type == "float"sv || type == "double"sv;
+   }
+   bool isNumberType(const std::string& type) {
+      return isSignedType(type) || isUnsignedType(type) || isFloatingPointType(type);
    }
    llvm::Value* castToCommonType(llvm::Value* val, llvm::Type* targetType) {
       llvm::Type* srcType = val->getType();
@@ -398,6 +408,8 @@ export namespace tungsten {
       virtual void visit(class BlockStatementAST&) = 0;
       virtual void visit(class ReturnStatementAST&) = 0;
       virtual void visit(class ExitStatement&) = 0;
+      virtual void visit(class BreakStatementAST&) = 0;
+      virtual void visit(class ContinueStatementAST&) = 0;
       virtual void visit(class ExternVariableStatementAST&) = 0;
       virtual void visit(class ImportStatementAST&) = 0;
       virtual void visit(class NewStatementAST&) = 0;
@@ -465,6 +477,8 @@ export namespace tungsten {
       BlockStatement,
       ReturnStatement,
       ExitStatement,
+      BreakStatement,
+      ContinueStatement,
       ExternVariableStatement,
       Namespace,
       ImportStatement,
@@ -1297,6 +1311,26 @@ export namespace tungsten {
       std::unique_ptr<ExpressionAST> _value;
    };
 
+   class BreakStatementAST : public ExpressionAST {
+   public:
+      BreakStatementAST() { _Type = makeNullType(); }
+      llvm::Value* codegen() override;
+
+      void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::BreakStatement; }
+   };
+
+   class ContinueStatementAST : public ExpressionAST {
+   public:
+      ContinueStatementAST() { _Type = makeNullType(); }
+      llvm::Value* codegen() override;
+
+      void accept(ASTVisitor& v) override { v.visit(*this); }
+      _NODISCARD std::shared_ptr<Type>& type() override { return _Type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::ContinueStatement; }
+   };
+
    //  prototype for function declarations
    class FunctionPrototypeAST {
    public:
@@ -1490,6 +1524,11 @@ export namespace tungsten {
          _sourceLine = line;
          _sourceColumn = column;
          _hasSource = true;
+      }
+      static std::unique_ptr<ClassDestructorAST> makeDefaultDestructor() {
+         auto proto = std::make_unique<FunctionPrototypeAST>(makeVoid(), "destructor", std::vector<std::unique_ptr<ExpressionAST>>{});
+         auto dtor = std::make_unique<FunctionAST>(std::move(proto), std::make_unique<BlockStatementAST>(std::vector<std::unique_ptr<ExpressionAST>>{}));
+         return std::make_unique<ClassDestructorAST>(Visibility::Public, std::move(dtor));
       }
 
    private:
@@ -1870,7 +1909,7 @@ export namespace tungsten {
             if (!dtor)
                continue;
 
-            Builder->CreateCall(dtor, {});
+            Builder->CreateCall(dtor, {it->storage});
          }
       };
 
@@ -1880,6 +1919,35 @@ export namespace tungsten {
       } else {
          emitForScope(ClassScopeCleanups.back());
       }
+   }
+   void emitClassScopeDestructorsToDepth(size_t targetDepth) {
+      if (ClassScopeCleanups.size() <= targetDepth)
+         return;
+
+      auto emitForScope = [](std::vector<ClassScopeCleanupEntry>& entries) {
+         for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
+            if (!it->storage)
+               continue;
+
+            const std::string dtorName = it->className + "-destructor$";
+            llvm::Function* dtor = TheModule->getFunction(dtorName);
+            if (!dtor)
+               continue;
+
+            Builder->CreateCall(dtor, {it->storage});
+         }
+      };
+
+      for (size_t depth = ClassScopeCleanups.size(); depth > targetDepth; --depth)
+         emitForScope(ClassScopeCleanups[depth - 1]);
+   }
+   llvm::Value* branchToLoopTarget(llvm::BasicBlock* target, size_t cleanupDepth) {
+      if (!target)
+         return LogErrorV("invalid loop target");
+
+      emitClassScopeDestructorsToDepth(cleanupDepth);
+      Builder->CreateBr(target);
+      return llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*TheContext));
    }
    llvm::Value* loadDereferenceAddressIfUnaryStar(ExpressionAST* expr, llvm::Value* exprValue, const std::string& name) {
       if (!expr || expr->astType() != ASTType::UnaryExpression)
@@ -2706,6 +2774,24 @@ export namespace tungsten {
       return call;
    }
 
+   llvm::Value* BreakStatementAST::codegen() {
+      setDebugLocationFor(this);
+      if (LoopTargets.empty())
+         return LogErrorV("'break' used outside of a loop");
+
+      const auto& target = LoopTargets.back();
+      return branchToLoopTarget(target.breakBB, target.breakCleanupDepth);
+   }
+
+   llvm::Value* ContinueStatementAST::codegen() {
+      setDebugLocationFor(this);
+      if (LoopTargets.empty())
+         return LogErrorV("'continue' used outside of a loop");
+
+      const auto& target = LoopTargets.back();
+      return branchToLoopTarget(target.continueBB, target.continueCleanupDepth);
+   }
+
    llvm::Value* IfStatementAST::codegen() {
       setDebugLocationFor(this);
 
@@ -2765,13 +2851,19 @@ export namespace tungsten {
       llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*TheContext, "while.body");
       llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*TheContext, "while.end");
 
+      ClassScopeCleanups.push_back({});
+      LoopTargets.push_back({endBB, condBB, ClassScopeCleanups.size() - 1, ClassScopeCleanups.size()});
+
       Builder->CreateBr(condBB);
 
       // condition
       Builder->SetInsertPoint(condBB);
       llvm::Value* CondV = _condition->codegen();
-      if (!CondV)
+      if (!CondV) {
+         LoopTargets.pop_back();
+         ClassScopeCleanups.pop_back();
          return nullptr;
+      }
       CondV = Builder->CreateICmpNE(CondV, llvm::ConstantInt::get(CondV->getType(), 0), "whilecond");
       setDebugLocationFor(this);
       Builder->CreateCondBr(CondV, bodyBB, endBB);
@@ -2779,14 +2871,20 @@ export namespace tungsten {
       // body
       function->insert(function->end(), bodyBB);
       Builder->SetInsertPoint(bodyBB);
-      if (_body)
-         _body->codegen();
+      if (_body && !_body->codegen()) {
+         LoopTargets.pop_back();
+         ClassScopeCleanups.pop_back();
+         return nullptr;
+      }
       if (!Builder->GetInsertBlock()->getTerminator())
          Builder->CreateBr(condBB);
 
       // end of while
       function->insert(function->end(), endBB);
       Builder->SetInsertPoint(endBB);
+
+      LoopTargets.pop_back();
+      ClassScopeCleanups.pop_back();
 
       return llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*TheContext));
    }
@@ -2800,12 +2898,18 @@ export namespace tungsten {
       llvm::BasicBlock* condBB = llvm::BasicBlock::Create(*TheContext, "dowhile.cond");
       llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*TheContext, "dowhile.end");
 
+      ClassScopeCleanups.push_back({});
+      LoopTargets.push_back({endBB, condBB, ClassScopeCleanups.size() - 1, ClassScopeCleanups.size()});
+
       Builder->CreateBr(bodyBB);
 
       // body
       Builder->SetInsertPoint(bodyBB);
-      if (_body)
-         _body->codegen();
+      if (_body && !_body->codegen()) {
+         LoopTargets.pop_back();
+         ClassScopeCleanups.pop_back();
+         return nullptr;
+      }
       if (!Builder->GetInsertBlock()->getTerminator())
          Builder->CreateBr(condBB);
 
@@ -2826,6 +2930,9 @@ export namespace tungsten {
       function->insert(function->end(), endBB);
       Builder->SetInsertPoint(endBB);
 
+      LoopTargets.pop_back();
+      ClassScopeCleanups.pop_back();
+
       return llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*TheContext));
    }
 
@@ -2839,9 +2946,15 @@ export namespace tungsten {
       llvm::BasicBlock* incBB = llvm::BasicBlock::Create(*TheContext, "for.inc");
       llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*TheContext, "for.end");
 
+      ClassScopeCleanups.push_back({});
+      LoopTargets.push_back({endBB, incBB, ClassScopeCleanups.size() - 1, ClassScopeCleanups.size()});
+
       // init
-      if (_init)
-         _init->codegen();
+      if (_init && !_init->codegen()) {
+         LoopTargets.pop_back();
+         ClassScopeCleanups.pop_back();
+         return nullptr;
+      }
 
       Builder->CreateBr(condBB);
 
@@ -2850,7 +2963,11 @@ export namespace tungsten {
       Builder->SetInsertPoint(condBB);
       llvm::Value* CondV = _condition ? _condition->codegen() : nullptr;
       if (_condition) {
-         if (!CondV) return nullptr;
+         if (!CondV) {
+            LoopTargets.pop_back();
+            ClassScopeCleanups.pop_back();
+            return nullptr;
+         }
          CondV = Builder->CreateICmpNE(
              CondV,
              llvm::ConstantInt::get(CondV->getType(), 0),
@@ -2864,22 +2981,31 @@ export namespace tungsten {
       // body
       function->insert(function->end(), bodyBB);
       Builder->SetInsertPoint(bodyBB);
-      if (_body)
-         _body->codegen();
+      if (_body && !_body->codegen()) {
+         LoopTargets.pop_back();
+         ClassScopeCleanups.pop_back();
+         return nullptr;
+      }
       if (!Builder->GetInsertBlock()->getTerminator())
          Builder->CreateBr(incBB);
 
       // increment
       function->insert(function->end(), incBB);
       Builder->SetInsertPoint(incBB);
-      if (_increment)
-         _increment->codegen();
+      if (_increment && !_increment->codegen()) {
+         LoopTargets.pop_back();
+         ClassScopeCleanups.pop_back();
+         return nullptr;
+      }
       if (!Builder->GetInsertBlock()->getTerminator())
          Builder->CreateBr(condBB);
 
       // end
       function->insert(function->end(), endBB);
       Builder->SetInsertPoint(endBB);
+
+      LoopTargets.pop_back();
+      ClassScopeCleanups.pop_back();
 
       return llvm::Constant::getNullValue(llvm::Type::getInt32Ty(*TheContext));
    }
@@ -2895,6 +3021,9 @@ export namespace tungsten {
          return existing;
 
       std::vector<llvm::Type*> paramTypes;
+      if (name.find("-") != std::string::npos && name.find("constructor") == std::string::npos) // if class method and not a constructor
+         paramTypes.push_back(Builder->getPtrTy());
+
       bool isVarArgs = false;
       for (const auto& arg : _args) {
          if (arg->type()->kind() == TypeKind::ArgPack)
@@ -2941,6 +3070,13 @@ export namespace tungsten {
 
       size_t idx = 0;
       for (auto& arg : function->args()) {
+         if (idx == 0 && function->getName().find("-") != std::string::npos && function->getName().find("constructor") == std::string::npos) { // if class method and not a constructor
+            NamedValues["this"] = &function->args().begin()[0];
+            VariableTypes["this"] = Builder->getPtrTy();
+
+            ++idx;
+            continue;
+         }
          auto* varDecl = static_cast<VariableDeclarationAST*>(_prototype->args()[idx].get());
          if (varDecl->type()->kind() == TypeKind::Reference) {
             NamedValues[varDecl->name()] = &arg;

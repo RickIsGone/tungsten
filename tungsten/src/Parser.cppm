@@ -124,6 +124,8 @@ namespace tungsten {
       // std::unique_ptr<ExpressionAST> _parseExternVariableStatement();
       std::unique_ptr<ExpressionAST> _parseReturnStatement();
       std::unique_ptr<ExpressionAST> _parseExitStatement();
+      std::unique_ptr<ExpressionAST> _parseBreakStatement();
+      std::unique_ptr<ExpressionAST> _parseContinueStatement();
       std::unique_ptr<ExpressionAST> _parseExpression();
       std::unique_ptr<ExpressionAST> _parseBinaryOperationRHS(std::unique_ptr<ExpressionAST> lhs);
       std::unique_ptr<ExpressionAST> _parsePrimaryExpression();
@@ -719,7 +721,7 @@ namespace tungsten {
          hasError = true;
       } else
          _consume();
-      return _setSource(std::make_unique<ClassAST>(name, std::move(members), std::move(methods), std::move(constructors), std::move(destructor), hasError), token);
+      return _setSource(std::make_unique<ClassAST>(name, std::move(members), std::move(methods), std::move(constructors), hasDestructor ? std::move(destructor) : ClassAST::makeDefaultDestructor(), hasError), token);
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseExpression() {
@@ -1095,6 +1097,18 @@ namespace tungsten {
       return _setSource(std::make_unique<ExitStatement>(_parseExpression()), token);
    }
 
+   std::unique_ptr<ExpressionAST> Parser::_parseBreakStatement() {
+      const Token token = _peek();
+      _consume(); // consume break
+      return _setSource(std::make_unique<BreakStatementAST>(), token);
+   }
+
+   std::unique_ptr<ExpressionAST> Parser::_parseContinueStatement() {
+      const Token token = _peek();
+      _consume(); // consume continue
+      return _setSource(std::make_unique<ContinueStatementAST>(), token);
+   }
+
    std::unique_ptr<ExpressionAST> Parser::_parsePrimaryExpression() {
       switch (_peek().type) {
          case TokenType::Semicolon:
@@ -1115,7 +1129,7 @@ namespace tungsten {
 
          case TokenType::Null:
             _consume();
-            return std::make_unique<NumberExpressionAST>(double(0), makeDouble()); // makeInt32()
+            return std::make_unique<NumberExpressionAST>((uint64_t)0, makeDouble()); // makeInt32()
          case TokenType::Nullptr:
             _consume();
             return std::make_unique<NullPtrAST>();
@@ -1148,6 +1162,10 @@ namespace tungsten {
             return _parseReturnStatement();
          case TokenType::Exit:
             return _parseExitStatement();
+         case TokenType::Break:
+            return _parseBreakStatement();
+         case TokenType::Continue:
+            return _parseContinueStatement();
 
          case TokenType::StaticCast:
             return _parseStaticCast();
@@ -1352,7 +1370,7 @@ namespace tungsten {
 
          case TokenType::Identifier:
             canStartType = _peek(1).type == TokenType::DoubleColon || _peek(1).type == TokenType::Multiply ||
-                           _peek(1).type == TokenType::BitwiseAnd || _peek(1).type == TokenType::OpenBracket;
+                _peek(1).type == TokenType::BitwiseAnd || _peek(1).type == TokenType::OpenBracket;
             break;
 
          default:
