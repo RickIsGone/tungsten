@@ -10,6 +10,9 @@ env:
 jobs:
   build:
     runs-on: macos-latest
+    permissions:
+      contents: write
+      actions: write
 
     strategy:
       fail-fast: false

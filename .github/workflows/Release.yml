@@ -18,6 +18,9 @@ jobs:
   check-builds:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_run' }}
+    permissions:
+      contents: read
+      actions: read
     outputs:
       both_successful: ${{ steps.check.outputs.both_successful }}
       version: ${{ steps.version.outputs.version }}
