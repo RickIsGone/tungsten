@@ -895,6 +895,24 @@ export namespace tungsten {
             return ty->string();
       }
    }
+   TypeKind baseTypeKind(const std::shared_ptr<Type>& ty) {
+      switch (ty->kind()) {
+         case TypeKind::Pointer: {
+            auto ptrTy = std::static_pointer_cast<PointerTy>(ty);
+            return baseTypeKind(ptrTy->pointee());
+         }
+         case TypeKind::Array: {
+            auto arrTy = std::static_pointer_cast<ArrayTy>(ty);
+            return baseTypeKind(arrTy->arrayType());
+         }
+         case TypeKind::Reference: {
+            auto refTy = std::static_pointer_cast<ReferenceTy>(ty);
+            return baseTypeKind(refTy->reference());
+         }
+         default:
+            return ty->kind();
+      }
+   }
    // expression for numbers
    using Number = std::variant<double, uint64_t>;
    class NumberExpressionAST : public ExpressionAST {
@@ -1374,7 +1392,7 @@ export namespace tungsten {
             if (arg != _args.back())
                args += ", ";
          }
-         utils::debugLog("Mangled name for function fun {}({}) -> {}: {}", _name, args, fullTypeString(_type), result);
+         utils::debugLog("Mangled name for function fun {}({}) -> {}: {}\n", _name, args, fullTypeString(_type), result);
          return result;
       }
       void setExternC(bool c) { _isExternC = c; }
@@ -2363,23 +2381,50 @@ export namespace tungsten {
       llvm::AllocaInst* allocInstance = tmpBuilder.CreateAlloca(type, nullptr, _name);
 
       if (isNullPtrArray || initVal) {
-         llvm::Value* storeVal = isNullPtrArray ? llvm::Constant::getNullValue(type) : initVal;
-         Builder->CreateStore(storeVal, allocInstance);
+         auto isPrimitiveArray = [](const std::shared_ptr<Type>& t) {
+            std::shared_ptr<Type> current = t;
+            while (current && current->kind() == TypeKind::Array) {
+               current = static_cast<ArrayTy*>(current.get())->arrayType();
+            }
+            return current && current->kind() != TypeKind::Class;
+         };
+         bool primitiveArray = false;
+         if (_Type->kind() == TypeKind::Array) {
+            primitiveArray = isPrimitiveArray(std::static_pointer_cast<ArrayTy>(_Type)->arrayType());
+         }
+         if (isNullPtrArray || (initVal && (_Type->kind() != TypeKind::Array || primitiveArray))) {
+            llvm::Value* storeVal = isNullPtrArray ? llvm::Constant::getNullValue(type) : initVal;
+            Builder->CreateStore(storeVal, allocInstance);
+         }
       } else if (_Type->kind() == TypeKind::Pointer) {
          Builder->CreateStore(llvm::ConstantPointerNull::get(Builder->getPtrTy()), allocInstance);
       } else if (_Type->kind() == TypeKind::Class) {
          const std::string className = _Type->string();
-         const std::string ctorName = className + "-constructor$";
-         llvm::Function* ctor = TheModule->getFunction(ctorName);
-         if (ctor) {
-            llvm::Value* instance = Builder->CreateCall(ctor, {});
-            if (!instance)
-               return LogErrorV("failed to call constructor '" + ctorName + "'");
-            Builder->CreateStore(instance, allocInstance);
-         }
-
          if (!ClassScopeCleanups.empty())
             ClassScopeCleanups.back().push_back({className, allocInstance});
+      } else if (_Type->kind() == TypeKind::Array) {
+         auto arrTy = static_cast<ArrayTy*>(_Type.get());
+         auto elemType = arrTy->arrayType();
+         if (elemType->kind() == TypeKind::Class) {
+            const std::string className = elemType->string();
+            const std::string ctorName = className + "-constructor$";
+            llvm::Function* ctor = TheModule->getFunction(ctorName);
+            if (ctor && arrTy->sizeExpr() && arrTy->sizeExpr()->astType() == ASTType::NumberExpression) {
+               auto* num = static_cast<NumberExpressionAST*>(arrTy->sizeExpr().get());
+               const Number rawSize = num->value();
+               uint64_t count = std::holds_alternative<double>(rawSize)
+                   ? static_cast<uint64_t>(std::get<double>(rawSize))
+                   : std::get<uint64_t>(rawSize);
+               // Call constructor for each element
+               for (uint64_t i = 0; i < count; ++i) {
+                  Builder->CreateCall(ctor, {allocInstance});
+               }
+               // Register for destructor call at scope exit
+               if (!ClassScopeCleanups.empty())
+                  for (uint64_t i = 0; i < count; ++i)
+                     ClassScopeCleanups.back().push_back({className, Builder->CreateGEP(elemType->llvmType(), allocInstance, Builder->getInt64(i))});
+            }
+         }
       }
 
       NamedValues[_name] = allocInstance;
@@ -2453,24 +2498,37 @@ export namespace tungsten {
       for (auto& arg : _args) {
          if (arg != _args.front())
             name += "$";
-         if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "&"sv)
-            name += fullTypeString(static_cast<UnaryExpressionAST*>(arg.get())->operand()->type()) + "&";
-         else
+         if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "&"sv) {
+            if (arg->type()->kind() == TypeKind::Reference)
+               name += fullTypeString(static_cast<UnaryExpressionAST*>(arg.get())->operand()->type()) + "&";
+            else
+               name += fullTypeString(static_cast<UnaryExpressionAST*>(arg.get())->operand()->type()) + "*";
+         } else
             name += fullTypeString(arg->type());
       }
       utils::debugLog("looking for function with mangled name: {}", name);
       llvm::Function* callee = TheModule->getFunction(name);
 
-      if (!callee)
+      if (!callee) {
+         utils::debugLog("{} not found: looking for {}", name, _callee);
          callee = TheModule->getFunction(_callee); // for extern functions ex. shell$String doesn't exist -> shell exists
+         if (!callee)
+            return LogErrorV("function '" + _callee + "' not found");
+         utils::debugLog("found function: {}", _callee);
+      }
+      utils::debugLog("llvm function arguments size: {}", callee->arg_size());
 
       std::vector<llvm::Value*> args;
       std::string argsTypes;
+      utils::debugLog("arguments size: {}", _args.size());
       for (size_t i = 0; i < _args.size(); ++i) {
          auto& arg = _args[i];
+         argsTypes += fullTypeString(arg->type());
          llvm::Value* argVal = arg->codegen();
-         if (!argVal)
+         if (!argVal) {
+            utils::debugLog("arg[{}] codegen returned nullptr", i);
             return nullptr;
+         }
 
          if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "*"sv) {
             auto& derefOperand = static_cast<UnaryExpressionAST*>(arg.get())->operand();
@@ -2525,6 +2583,7 @@ export namespace tungsten {
          args.push_back(argVal);
       }
       setDebugLocationFor(this);
+      utils::debugLog("calling function with arguments: {}\n", argsTypes);
       return Builder->CreateCall(callee, args);
    }
 
@@ -3021,9 +3080,6 @@ export namespace tungsten {
          return existing;
 
       std::vector<llvm::Type*> paramTypes;
-      if (name.find("-") != std::string::npos && name.find("constructor") == std::string::npos) // if class method and not a constructor
-         paramTypes.push_back(Builder->getPtrTy());
-
       bool isVarArgs = false;
       for (const auto& arg : _args) {
          if (arg->type()->kind() == TypeKind::ArgPack)
@@ -3069,12 +3125,12 @@ export namespace tungsten {
       llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
 
       size_t idx = 0;
+      bool addedThis{false};
       for (auto& arg : function->args()) {
-         if (idx == 0 && function->getName().find("-") != std::string::npos && function->getName().find("constructor") == std::string::npos) { // if class method and not a constructor
+         if (!addedThis && function->getName().find("-") != std::string::npos) { // if class method/constructor/destructor
             NamedValues["this"] = &function->args().begin()[0];
             VariableTypes["this"] = Builder->getPtrTy();
-
-            ++idx;
+            addedThis = true;
             continue;
          }
          auto* varDecl = static_cast<VariableDeclarationAST*>(_prototype->args()[idx].get());
@@ -3155,10 +3211,30 @@ export namespace tungsten {
          mallocFun = llvm::Function::Create(mallocType, llvm::Function::ExternalLinkage, "malloc", TheModule.get());
       }
 
-      auto size = Builder->getInt64(static_cast<PointerTy*>(_Type.get())->pointee()->size());
-
-      setDebugLocationFor(this);
-      return Builder->CreateCall(mallocFun, {size});
+      // determine if it's an array or a single class instance
+      auto allocType = static_cast<PointerTy*>(_Type.get())->pointee();
+      bool isArray = allocType->kind() == TypeKind::Array;
+      llvm::Value* ptr = nullptr;
+      uint64_t count = 1;
+      if (isArray) {
+         auto arrTy = static_cast<ArrayTy*>(allocType.get());
+         if (arrTy->sizeExpr() && arrTy->sizeExpr()->astType() == ASTType::NumberExpression) {
+            auto* num = static_cast<NumberExpressionAST*>(arrTy->sizeExpr().get());
+            const Number rawSize = num->value();
+            count = std::holds_alternative<double>(rawSize)
+                ? static_cast<uint64_t>(std::get<double>(rawSize))
+                : std::get<uint64_t>(rawSize);
+         }
+         auto elemSize = arrTy->arrayType()->size();
+         auto size = Builder->getInt64(elemSize * count);
+         setDebugLocationFor(this);
+         ptr = Builder->CreateCall(mallocFun, {size});
+      } else {
+         auto size = Builder->getInt64(allocType->size());
+         setDebugLocationFor(this);
+         ptr = Builder->CreateCall(mallocFun, {size});
+      }
+      return ptr;
    }
    llvm::Value* FreeStatementAST::codegen() {
       setDebugLocationFor(this);
@@ -3194,6 +3270,49 @@ export namespace tungsten {
             pointeeType = _variable->type()->llvmType();
          if (pointeeType && ptr->getType()->isPointerTy())
             pointerToFree = Builder->CreateLoad(pointeeType, ptr, "free.ptr");
+      }
+
+      // determine type
+      auto type = _variable->type();
+      bool isArray = false;
+      std::shared_ptr<Type> elemType;
+      uint64_t count = 1;
+      if (type->kind() == TypeKind::Pointer) {
+         auto pt = static_cast<PointerTy*>(type.get())->pointee();
+         if (pt->kind() == TypeKind::Array) {
+            isArray = true;
+            auto arrTy = static_cast<ArrayTy*>(pt.get());
+            elemType = arrTy->arrayType();
+            if (arrTy->sizeExpr() && arrTy->sizeExpr()->astType() == ASTType::NumberExpression) {
+               auto* num = static_cast<NumberExpressionAST*>(arrTy->sizeExpr().get());
+               const Number rawSize = num->value();
+               count = std::holds_alternative<double>(rawSize)
+                   ? static_cast<uint64_t>(std::get<double>(rawSize))
+                   : std::get<uint64_t>(rawSize);
+            }
+         } else {
+            elemType = pt;
+         }
+      } else {
+         elemType = type;
+      }
+
+      // call destructor
+      if (elemType && elemType->kind() == TypeKind::Class) {
+         const std::string dtorName = static_cast<ClassTy*>(elemType.get())->string() + "-destructor$";
+         llvm::Function* dtor = TheModule->getFunction(dtorName);
+         if (dtor) {
+            if (isArray) {
+               // destructors in reverse order
+               for (int64_t i = static_cast<int64_t>(count) - 1; i >= 0; --i) {
+                  llvm::Value* gep = Builder->CreateGEP(
+                      elemType->llvmType(), pointerToFree, Builder->getInt64(i));
+                  Builder->CreateCall(dtor, {gep});
+               }
+            } else {
+               Builder->CreateCall(dtor, {pointerToFree});
+            }
+         }
       }
 
       setDebugLocationFor(this);

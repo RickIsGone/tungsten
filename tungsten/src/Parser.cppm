@@ -167,7 +167,7 @@ namespace tungsten {
       std::shared_ptr<Type> _currentFunctionReturnType;
       std::string _currentFunctionName;
       std::string _namespacePrefix{};
-
+      std::vector<std::unique_ptr<ExpressionAST>>* _currentBlock;
       const CompileOptions& _compileOptions;
    };
    //  ========================================== implementation ==========================================
@@ -655,6 +655,7 @@ namespace tungsten {
                   return _logError<ClassAST>("expected '(' after 'constructor'");
                _consume(); // consume '('
                std::vector<std::unique_ptr<ExpressionAST>> args;
+               args.push_back(_setSource(std::make_unique<VariableDeclarationAST>(makePointer(makeClass(name)), "this", nullptr, false), token));
                while (_peek().type != CloseParen && _peek().type != EndOFFile) {
                   args.push_back(_parseArgument());
                   if (_peek().type == Comma)
@@ -781,18 +782,6 @@ namespace tungsten {
       }
 
       while (true) {
-         if (_peek().type == TokenType::Dot || _peek().type == TokenType::Arrow) {
-            const bool isArrow = _peek().type == TokenType::Arrow;
-            _consume();
-            if (_peek().type != TokenType::Identifier)
-               return _logError("expected an identifier after '" + std::string(isArrow ? "->" : ".") + "'");
-
-            identifier += isArrow ? "->" : ".";
-            identifier += _lexeme(_peek());
-            _consume();
-            continue;
-         }
-
          if (_peek().type == TokenType::DoubleColon) {
             _consume();
             if (_peek().type != TokenType::Identifier)
@@ -1579,26 +1568,46 @@ namespace tungsten {
       if (!global && name.find("::") != std::string::npos)
          return _logError("namespace-qualified variable declarations are only allowed outside functions");
 
-      std::unique_ptr<ExpressionAST> initExpr = nullptr;
-
+      std::vector<std::unique_ptr<ExpressionAST>> initExprs{};
+      auto tok = token;
       if (_peek().type == TokenType::Equal || _peek().type == TokenType::OpenBrace) {
+         tok = _peek();
          _consume(); // consume '=' / '{'
-         initExpr = _parseExpression();
+         initExprs.push_back(_parseExpression());
          if (_peek().type == TokenType::CloseBrace)
             _consume(); // consume '}'
-
-         // if (initExpr) {
-         //    if (auto* expr = dynamic_cast<NumberExpressionAST*>(initExpr.get())) {
-         //       expr->setType(type);
-         //    } else if (auto* expr = dynamic_cast<BinaryExpressionAST*>(initExpr.get())) {
-         //       expr->setType(type);
-         //    }
-         // }
+         else if (tok.type == TokenType::OpenBrace) {
+            while (_peek().type == TokenType::Comma) {
+               _consume(); // consume ','
+               initExprs.push_back(_parseExpression());
+            }
+            if (_peek().type != TokenType::CloseBrace)
+               return _logError("expected '}' after '" + _lexeme(_peekBack()) + "' in variable declaration");
+            _consume(); // consume '}'
+         }
       }
-
+      if (baseTypeKind(type) == TypeKind::Class) {
+         if (initExprs.size() == 1 && initExprs.at(0)->astType() == ASTType::NewStatement) {
+            _currentBlock->push_back(_setSource(std::make_unique<VariableDeclarationAST>(type, global ? _namespacePrefix + name : name, std::move(initExprs[0]), isConst, global), token));
+            initExprs.clear();
+         } else
+            _currentBlock->push_back(_setSource(std::make_unique<VariableDeclarationAST>(type, global ? _namespacePrefix + name : name, nullptr, isConst, global), token));
+         std::vector<std::unique_ptr<ExpressionAST>> params{};
+         if (type->kind() == TypeKind::Pointer) {
+            params.push_back(std::make_unique<VariableExpressionAST>(name));
+         } else {
+            params.push_back(std::make_unique<UnaryExpressionAST>("&", std::make_unique<VariableExpressionAST>(name)));
+         }
+         for (auto& init : initExprs) {
+            params.push_back(std::move(init));
+         }
+         return _setSource(std::make_unique<CallExpressionAST>(baseType(type) + "-constructor", std::move(params)), tok);
+      }
       // utils::debugLog("definition of variable '{}' with type '{}'", name, type);
+      if (initExprs.size() > 1)
+         return _logError("multiple initializer expressions are only allowed for classes");
 
-      return _setSource(std::make_unique<VariableDeclarationAST>(type, global ? _namespacePrefix + name : name, std::move(initExpr), isConst, global), token);
+      return _setSource(std::make_unique<VariableDeclarationAST>(type, global ? _namespacePrefix + name : name, initExprs.empty() ? nullptr : std::move(initExprs[0]), isConst, global), token);
    }
 
    std::unique_ptr<FunctionAST> Parser::_parseFunctionDeclaration() {
@@ -1648,6 +1657,8 @@ namespace tungsten {
    std::unique_ptr<BlockStatementAST> Parser::_parseBlock() {
       _consume(); // consume {
       std::vector<std::unique_ptr<ExpressionAST>> statements{};
+      auto oldBlock = _currentBlock;
+      _currentBlock = &statements;
       while (_peek().type != TokenType::CloseBrace && _peek().type != TokenType::EndOFFile) {
          statements.push_back(_parseExpression());
 
@@ -1676,6 +1687,7 @@ namespace tungsten {
             }
          }
       }
+      _currentBlock = oldBlock;
       if (_peek().type != TokenType::CloseBrace)
          return _logError<BlockStatementAST>("expected '}' after '" + _lexeme(_peekBack()) + "'");
       _consume(); // consume }
