@@ -2618,10 +2618,10 @@ export namespace tungsten {
       return Builder->CreateGlobalStringPtr(_function, "strtmp");
    }
    llvm::Value* __BuiltinLineAST::codegen() {
-      return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*TheContext), _line); // return Builder->getInt64(_line);
+      return Builder->getInt64(_line);
    }
    llvm::Value* __BuiltinColumnAST::codegen() {
-      return llvm::ConstantFP::get(llvm::Type::getDoubleTy(*TheContext), _column); // Builder->getInt64(_column)
+      return Builder->getInt64(_column);
    }
    llvm::Value* __BuiltinFileAST::codegen() {
       setDebugLocationFor(this);
