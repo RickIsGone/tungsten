@@ -129,6 +129,8 @@ namespace tungsten {
       bool _canCast(std::shared_ptr<Type> from, std::shared_ptr<Type> to);
       std::unique_ptr<ExpressionAST> _evaluateConstexpr(const std::unique_ptr<ExpressionAST>& expr);
       _NODISCARD std::shared_ptr<Type> _variableType(const std::string& var) const;
+      std::string _lexeme(const ExpressionAST* node) const;
+      std::string _fullExprLexeme(const ExpressionAST* node) const;
 
       std::vector<std::unique_ptr<FunctionAST>>& _functions;
       std::vector<std::unique_ptr<ClassAST>>& _classes;
@@ -285,7 +287,7 @@ namespace tungsten {
             }
 
             if (!compatible)
-               return _logError(&var, "type mismatch: cannot bind '{}' with non-reference initializer of type '{}'", fullTypeString(var.type()), fullTypeString(var.initializer()->type()));
+               return _logError(var.initializer().get(), "reference initializer must be an address");
          } else if (!_isNumberType(var.type()->string()) || !_isNumberType(var.initializer()->type()->string())) {
             if (fullTypeString(var.type()) != fullTypeString(var.initializer()->type())) {
                if (var.initializer()->astType() == ASTType::NullPtr && var.type()->kind() == TypeKind::Pointer)
@@ -456,21 +458,23 @@ namespace tungsten {
    void SemanticAnalyzer::visit(BinaryExpressionAST& binop) {
       binop.LHS()->accept(*this);
       binop.RHS()->accept(*this);
+      std::shared_ptr<Type> lhsType = binop.LHS()->type()->kind() == TypeKind::Reference ? static_cast<ReferenceTy*>(binop.LHS()->type().get())->reference() : binop.LHS()->type();
+      std::shared_ptr<Type> rhsType = binop.RHS()->type()->kind() == TypeKind::Reference ? static_cast<ReferenceTy*>(binop.RHS()->type().get())->reference() : binop.RHS()->type();
       if (binop.op() == "=="sv || binop.op() == "!="sv || binop.op() == "<"sv || binop.op() == ">"sv || binop.op() == "<="sv || binop.op() == ">="sv) {
-         const bool lhsIsPointer = binop.LHS()->type()->kind() == TypeKind::Pointer;
-         const bool rhsIsPointer = binop.RHS()->type()->kind() == TypeKind::Pointer;
-         const bool lhsIsNullPtr = binop.LHS()->astType() == ASTType::NullPtr || binop.LHS()->type()->kind() == TypeKind::Null;
-         const bool rhsIsNullPtr = binop.RHS()->astType() == ASTType::NullPtr || binop.RHS()->type()->kind() == TypeKind::Null;
+         const bool lhsIsPointer = lhsType->kind() == TypeKind::Pointer;
+         const bool rhsIsPointer = rhsType->kind() == TypeKind::Pointer;
+         const bool lhsIsNullPtr = binop.LHS()->astType() == ASTType::NullPtr || lhsType->kind() == TypeKind::Null;
+         const bool rhsIsNullPtr = binop.RHS()->astType() == ASTType::NullPtr || rhsType->kind() == TypeKind::Null;
 
          if ((lhsIsPointer && rhsIsNullPtr) || (rhsIsPointer && lhsIsNullPtr)) {
             binop.setType(makeBool());
             return;
          }
 
-         if (!_isNumberType(fullTypeString(binop.LHS()->type())) || !_isNumberType(fullTypeString(binop.RHS()->type()))) {
-            if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type()))
-               return _logError(&binop, "type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
-            if (fullTypeString(binop.LHS()->type()) == "char*"sv)
+         if (!_isNumberType(fullTypeString(lhsType)) || !_isNumberType(fullTypeString(rhsType))) {
+            if (fullTypeString(lhsType) != fullTypeString(rhsType))
+               return _logError(&binop, "type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(lhsType), fullTypeString(rhsType), binop.op());
+            if (fullTypeString(lhsType) == "char*"sv)
                return _logError(&binop, "cannot do comparison between strings with operator '{}'", binop.op());
          }
          binop.setType(makeBool());
@@ -478,8 +482,8 @@ namespace tungsten {
       }
 
       if (binop.op() == "&&"sv || binop.op() == "||"sv) {
-         if (binop.LHS()->type()->kind() != TypeKind::Bool || binop.RHS()->type()->kind() != TypeKind::Bool)
-            return _logError(&binop, "type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
+         if (lhsType->kind() != TypeKind::Bool || rhsType->kind() != TypeKind::Bool)
+            return _logError(&binop, "type mismatch: cannot compare '{}' and '{}' with operator '{}'", fullTypeString(lhsType), fullTypeString(rhsType), binop.op());
          binop.setType(makeBool());
          return;
       }
@@ -492,42 +496,42 @@ namespace tungsten {
       }
 
       // addition, multiplication, division, ecc.
-      if (!_isNumberType(fullTypeString(binop.LHS()->type())) || !_isNumberType(fullTypeString(binop.RHS()->type()))) {
-         if (fullTypeString(binop.LHS()->type()) != fullTypeString(binop.RHS()->type())) {
+      if (!_isNumberType(fullTypeString(lhsType)) || !_isNumberType(fullTypeString(rhsType))) {
+         if (fullTypeString(lhsType) != fullTypeString(rhsType)) {
             if (binop.op() == "="sv) {
-               if (binop.LHS()->type()->kind() == TypeKind::Pointer &&
-                   binop.RHS()->type()->kind() == TypeKind::Pointer) {
-                  auto* lhsPtr = static_cast<PointerTy*>(binop.LHS()->type().get());
-                  auto* rhsPtr = static_cast<PointerTy*>(binop.RHS()->type().get());
+               if (lhsType->kind() == TypeKind::Pointer &&
+                   rhsType->kind() == TypeKind::Pointer) {
+                  auto* lhsPtr = static_cast<PointerTy*>(lhsType.get());
+                  auto* rhsPtr = static_cast<PointerTy*>(rhsType.get());
 
                   // Allow array-to-pointer decay for assignments like: char* p = new char[20];
                   if (rhsPtr->pointee()->kind() == TypeKind::Array) {
                      auto* rhsArr = static_cast<ArrayTy*>(rhsPtr->pointee().get());
                      if (fullTypeString(lhsPtr->pointee()) == fullTypeString(rhsArr->arrayType())) {
-                        binop.setType(binop.LHS()->type());
+                        binop.setType(lhsType);
                         return;
                      }
                   }
-               } else if (binop.LHS()->type()->kind() == TypeKind::Array &&
-                          binop.RHS()->type()->kind() == TypeKind::Pointer) {
-                  auto* lhsArr = static_cast<ArrayTy*>(binop.LHS()->type().get());
-                  auto* rhsPtr = static_cast<PointerTy*>(binop.RHS()->type().get());
-                  if (fullTypeString(rhsPtr->pointee()) == fullTypeString(binop.LHS()->type()) ||
+               } else if (lhsType->kind() == TypeKind::Array &&
+                          rhsType->kind() == TypeKind::Pointer) {
+                  auto* lhsArr = static_cast<ArrayTy*>(lhsType.get());
+                  auto* rhsPtr = static_cast<PointerTy*>(rhsType.get());
+                  if (fullTypeString(rhsPtr->pointee()) == fullTypeString(lhsType) ||
                       fullTypeString(rhsPtr->pointee()) == fullTypeString(lhsArr->arrayType())) {
-                     binop.setType(binop.LHS()->type());
+                     binop.setType(lhsType);
                      return;
                   }
-               }
+               } else if (binop.LHS()->type()->kind() == TypeKind::Reference && (rhsType->kind() == TypeKind::Reference || rhsType->kind() == TypeKind::Pointer))
+                  return _logError(binop.RHS().get(), "cannot reassign reference to '{}'", _fullExprLexeme(binop.RHS().get()));
             }
-
-            return _logError(&binop, "type mismatch: cannot operate '{}' and '{}' with operator '{}'", fullTypeString(binop.LHS()->type()), fullTypeString(binop.RHS()->type()), binop.op());
+            return _logError(&binop, "type mismatch: cannot operate '{}' and '{}' with operator '{}'", fullTypeString(lhsType), fullTypeString(rhsType), binop.op());
          }
 
-         if (fullTypeString(binop.LHS()->type()) == "char*"sv && binop.op() != "=")
+         if (fullTypeString(lhsType) == "char*"sv && binop.op() != "=")
             return _logError(&binop, "strings can only be assigned, not operated on with '{}'", binop.op());
       }
 
-      binop.setType(binop.LHS()->type());
+      binop.setType(lhsType);
    }
 
    void SemanticAnalyzer::visit(VariableExpressionAST& var) {
@@ -645,6 +649,9 @@ namespace tungsten {
       access.setType(pointerTy->pointee());
    }
 
+   void SemanticAnalyzer::visit(MemberAccessAST& access) {
+      return;
+   }
    void SemanticAnalyzer::visit(BlockStatementAST& block) {
       _scopes.push_back({});
       ++_currentScope;
@@ -1682,6 +1689,104 @@ namespace tungsten {
             return scope.at(var).second;
       }
       return nullptr;
+   }
+
+   std::string SemanticAnalyzer::_lexeme(const ExpressionAST* node) const {
+      if (!node || !node->hasSource())
+         return "";
+
+      const size_t start = node->sourcePosition();
+      const size_t end = start + node->sourceLength();
+      if (start >= _raw.size() || end > _raw.size() || start > end)
+         return "";
+
+      return _raw.substr(start, end - start);
+   }
+   std::string SemanticAnalyzer::_fullExprLexeme(const ExpressionAST* node) const {
+      if (!node || !node->hasSource()) return "";
+      size_t minStart = node->sourcePosition();
+      size_t maxEnd = minStart + node->sourceLength();
+      auto visit = [&](ExpressionAST* n, const auto& self) -> void {
+         if (!n || !n->hasSource()) return;
+         minStart = std::min(minStart, n->sourcePosition());
+         maxEnd = std::max(maxEnd, n->sourcePosition() + n->sourceLength());
+         switch (n->astType()) {
+            case ASTType::UnaryExpression: {
+               auto* u = static_cast<UnaryExpressionAST*>(n);
+               if (u && u->operand()) self(u->operand().get(), self);
+               break;
+            }
+            case ASTType::BinaryExpression: {
+               auto* b = static_cast<BinaryExpressionAST*>(n);
+               if (b) {
+                  if (b->LHS()) self(b->LHS().get(), self);
+                  if (b->RHS()) self(b->RHS().get(), self);
+               }
+               break;
+            }
+            case ASTType::VariableDeclaration: {
+               auto* v = static_cast<VariableDeclarationAST*>(n);
+               if (v && v->initializer()) self(v->initializer().get(), self);
+               break;
+            }
+            case ASTType::IndexAccessExpression: {
+               auto* idx = static_cast<IndexAccessAST*>(n);
+               if (idx) {
+                  if (idx->array()) self(idx->array().get(), self);
+                  if (idx->index()) self(idx->index().get(), self);
+               }
+               break;
+            }
+            case ASTType::MemberAccessExpression: {
+               auto* m = static_cast<MemberAccessAST*>(n);
+               if (m) {
+                  if (m->cls()) self(m->cls().get(), self);
+                  if (m->member()) self(m->member().get(), self);
+               }
+               break;
+            }
+            case ASTType::CallExpression: {
+               auto* c = static_cast<CallExpressionAST*>(n);
+               if (c) {
+                  for (auto& arg : c->args()) {
+                     if (arg) self(arg.get(), self);
+                  }
+               }
+               break;
+            }
+            case ASTType::TypeOfStatement: {
+               auto* t = static_cast<TypeOfStatementAST*>(n);
+               if (t && t->statement()) self(t->statement().get(), self);
+               break;
+            }
+            case ASTType::NameOfStatement: {
+               auto* t = static_cast<NameOfStatementAST*>(n);
+               if (t && t->statement()) self(t->statement().get(), self);
+               break;
+            }
+            case ASTType::SizeOfStatement: {
+               auto* t = static_cast<SizeOfStatementAST*>(n);
+               if (t && t->statement()) self(t->statement(), self);
+               break;
+            }
+            case ASTType::StaticCast: {
+               auto* s = static_cast<StaticCastAST*>(n);
+               if (s && s->value()) self(s->value().get(), self);
+               break;
+            }
+            case ASTType::ConstCast: {
+               auto* s = static_cast<ConstCastAST*>(n);
+               if (s && s->value()) self(s->value().get(), self);
+               break;
+            }
+            default:
+               break;
+         }
+      };
+      visit(const_cast<ExpressionAST*>(node), visit);
+      if (maxEnd > _raw.size()) maxEnd = _raw.size();
+      if (minStart >= maxEnd) return "";
+      return _raw.substr(minStart, maxEnd - minStart);
    }
 
    bool SemanticAnalyzer::_isConstexpr(const std::unique_ptr<ExpressionAST>& expr) {

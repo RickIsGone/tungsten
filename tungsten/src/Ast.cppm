@@ -2617,31 +2617,38 @@ export namespace tungsten {
          llvm::Type* expectedParamType = nullptr;
          if (callee && i < callee->arg_size())
             expectedParamType = callee->getFunctionType()->getParamType(static_cast<unsigned>(i));
-         if (arg->type()->kind() == TypeKind::Class && expectedParamType && !expectedParamType->isPointerTy()) {
-            llvm::Function* func = Builder->GetInsertBlock()->getParent();
-            llvm::IRBuilder<> tmpBuilder(&func->getEntryBlock(), func->getEntryBlock().begin());
-            llvm::AllocaInst* temp = tmpBuilder.CreateAlloca(arg->type()->llvmType(), nullptr, "copytmp");
-            std::string className = arg->type()->string();
-            std::string copyCtorName = className + "-constructor$" + className + "*$" + className + "&";
-            llvm::Function* copyCtor = TheModule->getFunction(copyCtorName);
-            if (!copyCtor)
-               return LogErrorV("copy constructor not found for class '" + className + "'");
-            Builder->CreateCall(copyCtor, {temp, argVal});
-            argVal = temp;
-         }
-
-         if (argVal->getType()->isPointerTy() && expectedParamType && !expectedParamType->isPointerTy() && !indexAccessAlreadyValue) {
-            argVal = Builder->CreateLoad(expressionValueTypeForCodegen(arg.get()), argVal, "arg.load");
-         } else if (argVal->getType()->isPointerTy() && !expectedParamType &&
-                    arg->type()->kind() != TypeKind::Pointer &&
-                    arg->type()->kind() != TypeKind::Reference &&
-                    arg->type()->kind() != TypeKind::Array &&
-                    !indexAccessAlreadyValue) {
-            argVal = Builder->CreateLoad(expressionValueTypeForCodegen(arg.get()), argVal, "arg.load");
-         }
-
-         if (expectedParamType && !expectedParamType->isPointerTy())
+         if (expectedParamType) {
+            if (expectedParamType->isStructTy() && !expectedParamType->isPointerTy()) {
+               llvm::Function* func = Builder->GetInsertBlock()->getParent();
+               llvm::IRBuilder<> tmpBuilder(&func->getEntryBlock(), func->getEntryBlock().begin());
+               llvm::AllocaInst* temp = tmpBuilder.CreateAlloca(expectedParamType, nullptr, "copytmp");
+               std::string className = arg->type()->string();
+               std::string copyCtorName = className + "-constructor$" + className + "*$" + className + "&";
+               llvm::Function* copyCtor = TheModule->getFunction(copyCtorName);
+               if (!copyCtor)
+                  return LogErrorV("copy constructor not found for class '" + className + "'");
+               llvm::Value* argValPtr = argVal;
+               if (!argVal->getType()->isPointerTy()) {
+                  argValPtr = Builder->CreateAlloca(argVal->getType());
+                  Builder->CreateStore(argVal, argValPtr);
+               }
+               Builder->CreateCall(copyCtor, {temp, argValPtr});
+               argVal = temp;
+            } else if (!expectedParamType->isPointerTy()) {
+               if (argVal->getType()->isPointerTy()) {
+                  argVal = Builder->CreateLoad(expectedParamType, argVal, "arg.load");
+               }
+            }
             argVal = castToCommonType(argVal, expectedParamType);
+         } else {
+            if (argVal->getType()->isPointerTy() &&
+                arg->type()->kind() != TypeKind::Pointer &&
+                arg->type()->kind() != TypeKind::Reference &&
+                arg->type()->kind() != TypeKind::Array &&
+                !indexAccessAlreadyValue) {
+               argVal = Builder->CreateLoad(expressionValueTypeForCodegen(arg.get()), argVal, "arg.load");
+            }
+         }
 
          args.push_back(argVal);
       }
