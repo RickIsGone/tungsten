@@ -722,7 +722,15 @@ namespace tungsten {
          hasError = true;
       } else
          _consume();
-      return _setSource(std::make_unique<ClassAST>(name, std::move(members), std::move(methods), std::move(constructors), hasDestructor ? std::move(destructor) : ClassAST::makeDefaultDestructor(), hasError), token);
+
+      if (!hasDestructor)
+         destructor = ClassAST::makeDefaultDestructor(name);
+      if (!ClassAST::hasDefaultConstructor(constructors, name))
+         constructors.push_back(ClassAST::makeDefaultConstructor(name));
+      if (!ClassAST::hasCopyConstructor(constructors, name))
+         constructors.push_back(ClassAST::makeDefaultCopyConstructor(name));
+
+      return _setSource(std::make_unique<ClassAST>(name, std::move(members), std::move(methods), std::move(constructors), std::move(destructor), hasError), token);
    }
 
    std::unique_ptr<ExpressionAST> Parser::_parseExpression() {

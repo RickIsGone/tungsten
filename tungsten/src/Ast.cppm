@@ -1543,10 +1543,58 @@ export namespace tungsten {
          _sourceColumn = column;
          _hasSource = true;
       }
-      static std::unique_ptr<ClassDestructorAST> makeDefaultDestructor() {
-         auto proto = std::make_unique<FunctionPrototypeAST>(makeVoid(), "destructor", std::vector<std::unique_ptr<ExpressionAST>>{});
+      static std::unique_ptr<ClassDestructorAST> makeDefaultDestructor(const std::string& classname) {
+         std::vector<std::unique_ptr<ExpressionAST>> args{};
+         args.push_back(std::make_unique<VariableDeclarationAST>(makePointer(makeClass(classname)), "this", nullptr, false));
+         auto proto = std::make_unique<FunctionPrototypeAST>(makeVoid(), "destructor", std::move(args));
          auto dtor = std::make_unique<FunctionAST>(std::move(proto), std::make_unique<BlockStatementAST>(std::vector<std::unique_ptr<ExpressionAST>>{}));
          return std::make_unique<ClassDestructorAST>(Visibility::Public, std::move(dtor));
+      }
+      static std::unique_ptr<ClassConstructorAST> makeDefaultConstructor(const std::string& classname) {
+         std::vector<std::unique_ptr<ExpressionAST>> args{};
+         args.push_back(std::make_unique<VariableDeclarationAST>(makePointer(makeClass(classname)), "this", nullptr, false));
+         auto proto = std::make_unique<FunctionPrototypeAST>(makeVoid(), "constructor", std::move(args));
+         auto ctor = std::make_unique<FunctionAST>(std::move(proto), std::make_unique<BlockStatementAST>(std::vector<std::unique_ptr<ExpressionAST>>{}));
+         return std::make_unique<ClassConstructorAST>(Visibility::Public, std::move(ctor));
+      }
+      static std::unique_ptr<ClassConstructorAST> makeDefaultCopyConstructor(const std::string& classname) {
+         std::vector<std::unique_ptr<ExpressionAST>> args{};
+         args.push_back(std::make_unique<VariableDeclarationAST>(makePointer(makeClass(classname)), "this", nullptr, false));
+         args.push_back(std::make_unique<VariableDeclarationAST>(makePointer(makeClass(classname)), "other", nullptr, false));
+         auto proto = std::make_unique<FunctionPrototypeAST>(makeVoid(), "copy_constructor", std::move(args));
+         auto var1 = std::make_unique<UnaryExpressionAST>("*", std::make_unique<VariableExpressionAST>("this"));
+         auto var2 = std::make_unique<VariableExpressionAST>("other");
+         auto assign = std::make_unique<BinaryExpressionAST>("=", std::move(var1), std::move(var2));
+         auto statements = std::vector<std::unique_ptr<ExpressionAST>>{};
+         statements.push_back(std::move(assign));
+         auto ctor = std::make_unique<FunctionAST>(std::move(proto), std::make_unique<BlockStatementAST>(std::move(statements)));
+         return std::make_unique<ClassConstructorAST>(Visibility::Public, std::move(ctor));
+      }
+      static bool hasDefaultConstructor(const std::vector<std::unique_ptr<ClassConstructorAST>>& ctors, const std::string& className) {
+         for (const auto& ctor : ctors) {
+            const auto& args = ctor->constructor()->args();
+            if (args.size() == 1) {
+               auto* varDecl = static_cast<VariableDeclarationAST*>(args[0].get());
+               if (varDecl && fullTypeString(varDecl->type()) == className + "*")
+                  return true;
+            }
+         }
+         return false;
+      }
+
+      static bool hasCopyConstructor(const std::vector<std::unique_ptr<ClassConstructorAST>>& ctors, const std::string& className) {
+         for (const auto& ctor : ctors) {
+            const auto& args = ctor->constructor()->args();
+            if (args.size() == 2) {
+               auto* varDecl1 = static_cast<VariableDeclarationAST*>(args[0].get());
+               auto* varDecl2 = static_cast<VariableDeclarationAST*>(args[1].get());
+               if (varDecl1 && varDecl2 &&
+                   fullTypeString(varDecl1->type()) == className + "*"  &&
+                   fullTypeString(varDecl2->type()) == className + "&")
+                  return true;
+            }
+         }
+         return false;
       }
 
    private:
@@ -1922,10 +1970,12 @@ export namespace tungsten {
             if (!it->storage)
                continue;
 
-            const std::string dtorName = it->className + "-destructor$";
+            const std::string dtorName = it->className + "-destructor$" + it->className + "*";
             llvm::Function* dtor = TheModule->getFunction(dtorName);
-            if (!dtor)
+            if (!dtor) {
+               utils::debugLog("no destructor found for class '{}' when looking for destructor with this signature: {}", it->className, dtorName);
                continue;
+            }
 
             Builder->CreateCall(dtor, {it->storage});
          }
@@ -2102,7 +2152,11 @@ export namespace tungsten {
 
       if (isAssignmentOp) {
          llvm::Value* targetAddr = LHS;
-         if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*"sv) {
+         if (_LHS->type()->kind() == TypeKind::Reference) {
+            auto* refTy = static_cast<ReferenceTy*>(_LHS->type().get());
+            targetAddr = LHS;
+            lhsValueType = refTy->reference()->llvmType();
+         } else if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*"sv) {
             auto& derefOperand = static_cast<UnaryExpressionAST*>(_LHS.get())->operand();
             if (!derefOperand)
                return LogErrorV("invalid dereference target");
@@ -2398,10 +2452,7 @@ export namespace tungsten {
          }
       } else if (_Type->kind() == TypeKind::Pointer) {
          Builder->CreateStore(llvm::ConstantPointerNull::get(Builder->getPtrTy()), allocInstance);
-      } else if (_Type->kind() == TypeKind::Class) {
-         const std::string className = _Type->string();
-         if (!ClassScopeCleanups.empty())
-            ClassScopeCleanups.back().push_back({className, allocInstance});
+
       } else if (_Type->kind() == TypeKind::Array) {
          auto arrTy = static_cast<ArrayTy*>(_Type.get());
          auto elemType = arrTy->arrayType();
@@ -2566,6 +2617,18 @@ export namespace tungsten {
          llvm::Type* expectedParamType = nullptr;
          if (callee && i < callee->arg_size())
             expectedParamType = callee->getFunctionType()->getParamType(static_cast<unsigned>(i));
+         if (arg->type()->kind() == TypeKind::Class && expectedParamType && !expectedParamType->isPointerTy()) {
+            llvm::Function* func = Builder->GetInsertBlock()->getParent();
+            llvm::IRBuilder<> tmpBuilder(&func->getEntryBlock(), func->getEntryBlock().begin());
+            llvm::AllocaInst* temp = tmpBuilder.CreateAlloca(arg->type()->llvmType(), nullptr, "copytmp");
+            std::string className = arg->type()->string();
+            std::string copyCtorName = className + "-constructor$" + className + "*$" + className + "&";
+            llvm::Function* copyCtor = TheModule->getFunction(copyCtorName);
+            if (!copyCtor)
+               return LogErrorV("copy constructor not found for class '" + className + "'");
+            Builder->CreateCall(copyCtor, {temp, argVal});
+            argVal = temp;
+         }
 
          if (argVal->getType()->isPointerTy() && expectedParamType && !expectedParamType->isPointerTy() && !indexAccessAlreadyValue) {
             argVal = Builder->CreateLoad(expressionValueTypeForCodegen(arg.get()), argVal, "arg.load");
@@ -2584,7 +2647,17 @@ export namespace tungsten {
       }
       setDebugLocationFor(this);
       utils::debugLog("calling function with arguments: {}\n", argsTypes);
-      return Builder->CreateCall(callee, args);
+      llvm::Value* callResult = Builder->CreateCall(callee, args);
+
+      // Register class instance for cleanup if this is a constructor call
+      if (!ClassScopeCleanups.empty() && _callee.find("-constructor") != std::string::npos) {
+         // first argument is 'this' so it's the storage pointer
+         if (!args.empty()) {
+            std::string className = _callee.substr(0, _callee.find("-"));
+            ClassScopeCleanups.back().push_back({className, args[0]});
+         }
+      }
+      return callResult;
    }
 
    llvm::Value* TypeOfStatementAST::codegen() {
@@ -3127,7 +3200,7 @@ export namespace tungsten {
       size_t idx = 0;
       bool addedThis{false};
       for (auto& arg : function->args()) {
-         if (!addedThis && function->getName().find("-") != std::string::npos) { // if class method/constructor/destructor
+         if (!addedThis && function->getName().find("-") != std::string::npos && function->getName().find("constructor") == std::string::npos && function->getName().find("destructor") == std::string::npos) { // if class method
             NamedValues["this"] = &function->args().begin()[0];
             VariableTypes["this"] = Builder->getPtrTy();
             addedThis = true;
