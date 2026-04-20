@@ -670,7 +670,7 @@ namespace tungsten {
                   return _logError<ClassAST>("expected '{' after '" + _lexeme(_peekBack()) + "'");
 
                auto body = _parseBlock();
-               auto proto = _setSource(std::make_unique<FunctionPrototypeAST>(makeClass(name), name, std::move(args)), tok);
+               auto proto = _setSource(std::make_unique<FunctionPrototypeAST>(makeVoid(), name, std::move(args)), tok);
                auto fun = std::make_unique<FunctionAST>(std::move(proto), std::move(body));
                if (kind == "constructor") {
                   constructors.push_back(std::make_unique<ClassConstructorAST>(visibility, std::move(fun)));

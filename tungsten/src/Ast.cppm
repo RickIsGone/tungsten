@@ -1560,8 +1560,8 @@ export namespace tungsten {
       static std::unique_ptr<ClassConstructorAST> makeDefaultCopyConstructor(const std::string& classname) {
          std::vector<std::unique_ptr<ExpressionAST>> args{};
          args.push_back(std::make_unique<VariableDeclarationAST>(makePointer(makeClass(classname)), "this", nullptr, false));
-         args.push_back(std::make_unique<VariableDeclarationAST>(makePointer(makeClass(classname)), "other", nullptr, false));
-         auto proto = std::make_unique<FunctionPrototypeAST>(makeVoid(), "copy_constructor", std::move(args));
+         args.push_back(std::make_unique<VariableDeclarationAST>(makeReference(makeClass(classname)), "other", nullptr, true));
+         auto proto = std::make_unique<FunctionPrototypeAST>(makeVoid(), "constructor", std::move(args));
          auto var1 = std::make_unique<UnaryExpressionAST>("*", std::make_unique<VariableExpressionAST>("this"));
          auto var2 = std::make_unique<VariableExpressionAST>("other");
          auto assign = std::make_unique<BinaryExpressionAST>("=", std::move(var1), std::move(var2));
@@ -2476,30 +2476,12 @@ export namespace tungsten {
                      ClassScopeCleanups.back().push_back({className, Builder->CreateGEP(elemType->llvmType(), allocInstance, Builder->getInt64(i))});
             }
          } else if (isNumberType(elemType->string())) {
-            llvm::Value* zero = nullptr;
-            if (isFloatingPointType(_Type->string())) {
-               if (_Type->string() == "float")
-                  zero = llvm::ConstantFP::get(Builder->getFloatTy(), .0f);
-               else
-                  zero = llvm::ConstantFP::get(Builder->getDoubleTy(), .0);
-            } else
-               zero = Builder->getIntN(type->getIntegerBitWidth(), 0);
-            llvm::Value* arrayPtr = Builder->CreateGEP(type, allocInstance, {Builder->getInt64(0), Builder->getInt64(0)}, "arrayinit.ptr");
-            llvm::Function* memsetFunc = llvm::Intrinsic::getOrInsertDeclaration(TheModule.get(), llvm::Intrinsic::memset);
-            Builder->CreateCall(memsetFunc, {arrayPtr, zero, Builder->getInt64(arrTy->size() * elemType->llvmType()->getPrimitiveSizeInBits() / 8), Builder->getInt32(0), Builder->getInt1(false)});
+            llvm::Constant* zero = llvm::ConstantAggregateZero::get(type);
+            Builder->CreateStore(zero, allocInstance);
          }
 
-      } else if (isNumberType(_Type->string()) && !_init) { // default initialize to 0 number types
-         llvm::Value* zero = nullptr;
-         if (isFloatingPointType(_Type->string())) {
-            if (_Type->string() == "float")
-               zero = llvm::ConstantFP::get(Builder->getFloatTy(), .0f);
-            else
-               zero = llvm::ConstantFP::get(Builder->getDoubleTy(), .0);
-         } else
-            zero = Builder->getIntN(type->getIntegerBitWidth(), 0);
-         Builder->CreateStore(zero, allocInstance);
-      }
+      } else if (isNumberType(_Type->string()) && !_init) // default initialize to 0 number types
+         Builder->CreateStore(llvm::Constant::getNullValue(type), allocInstance);
 
       NamedValues[_name] = allocInstance;
       VariableTypes[_name] = type;
@@ -2860,6 +2842,13 @@ export namespace tungsten {
          if (!returnValue)
             return LogErrorV("invalid dereference return value");
          returnValue = Builder->CreateLoad(valueTypeForCodegen(_value->type()), returnValue, "derefl");
+      }
+
+      if (!returnsReference && _Type->kind() == TypeKind::Array) {
+         llvm::Type* retType = valueTypeForCodegen(_Type);
+         if (returnValue->getType()->isPointerTy() && retType->isArrayTy()) {
+            returnValue = Builder->CreateLoad(retType, returnValue, "arrval");
+         }
       }
 
       if (returnsReference) {
@@ -3293,7 +3282,7 @@ export namespace tungsten {
             const bool isDestructor = funcName.find("-destructor") != std::string::npos;
 
             if (isConstructor || isDestructor) {
-               Builder->CreateRet(llvm::Constant::getNullValue(function->getReturnType()));
+               Builder->CreateRet(llvm::Constant::getNullValue(Builder->getVoidTy()));
             } else {
                KSDbgInfo.popVariableScope();
                return LogErrorF("missing return statement in function: '" + name() + "'");
