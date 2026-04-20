@@ -386,6 +386,7 @@ export namespace tungsten {
       virtual void visit(class NumberExpressionAST&) = 0;
       virtual void visit(class VariableExpressionAST&) = 0;
       virtual void visit(class IndexAccessAST&) = 0;
+      virtual void visit(class MemberAccessAST&) = 0;
       virtual void visit(class StringExpression&) = 0;
       virtual void visit(class UnaryExpressionAST&) = 0;
       virtual void visit(class BinaryExpressionAST&) = 0;
@@ -455,6 +456,7 @@ export namespace tungsten {
       NumberExpression,
       VariableExpression,
       IndexAccessExpression,
+      MemberAccessExpression,
       StringExpression,
       UnaryExpression,
       BinaryExpression,
@@ -1039,6 +1041,25 @@ export namespace tungsten {
       std::unique_ptr<ExpressionAST> _index;
    };
 
+   class MemberAccessAST : public ExpressionAST {
+   public:
+      MemberAccessAST(std::unique_ptr<ExpressionAST> base, std::unique_ptr<ExpressionAST> member, bool isArrow)
+          : _base{std::move(base)}, _member{std::move(member)}, _isArrow{isArrow} {}
+
+      llvm::Value* codegen() override;
+      void accept(ASTVisitor& v) override { v.visit(*this); }
+      void setType(std::shared_ptr<Type> type) { _Type = type; }
+      _NODISCARD ASTType astType() const noexcept override { return ASTType::MemberAccessExpression; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& base() { return _base; }
+      _NODISCARD std::unique_ptr<ExpressionAST>& member() { return _member; }
+      _NODISCARD bool isArrow() const { return _isArrow; }
+
+   private:
+      std::unique_ptr<ExpressionAST> _base;
+      std::unique_ptr<ExpressionAST> _member;
+      bool _isArrow;
+   };
+
    // expression for function calls
    class CallExpressionAST : public ExpressionAST {
    public:
@@ -1051,10 +1072,11 @@ export namespace tungsten {
       _NODISCARD const std::string& callee() const { return _callee; }
       _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& args() { return _args; }
       _NODISCARD ASTType astType() const noexcept override { return ASTType::CallExpression; }
+      void setCallee(const std::string& callee) { _callee = callee; }
 
    private:
       std::string _callee;
-      std::vector<std::unique_ptr<ExpressionAST>> _args;
+      std::vector<std::unique_ptr<ExpressionAST>> _args{};
    };
 
    class TypeOfStatementAST : public ExpressionAST {
@@ -2283,13 +2305,13 @@ export namespace tungsten {
       loadedR = castToCommonType(loadedR, lhsValueType);
 
       if (_op == "&&"sv) {
-         LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
-         RHS = Builder->CreateICmpNE(loadedR, Builder->getInt1(0), "rcond");
+         LHS = Builder->CreateICmpNE(loadedL, loadedR, "lcond");
+         RHS = Builder->CreateICmpNE(loadedR, loadedR, "rcond");
          return Builder->CreateAnd(LHS, RHS);
       }
       if (_op == "||"sv) {
-         LHS = Builder->CreateICmpNE(loadedL, Builder->getInt1(0), "lcond");
-         RHS = Builder->CreateICmpNE(loadedR, Builder->getInt1(0), "rcond");
+         LHS = Builder->CreateICmpNE(loadedL, loadedR, "lcond");
+         RHS = Builder->CreateICmpNE(loadedR, loadedR, "rcond");
          return Builder->CreateOr(LHS, RHS);
       }
 
@@ -2555,6 +2577,70 @@ export namespace tungsten {
 
       return LogErrorV("cannot index non-array, non-pointer value");
    }
+   llvm::Value* MemberAccessAST::codegen() {
+      return nullptr;
+   }
+   // llvm::Value* MemberAccessAST::codegen() {
+   //    setDebugLocationFor(this);
+   //    llvm::Value* baseValue = _base->codegen();
+   //    if (!baseValue)
+   //       return LogErrorV("invalid base expression for member access");
+   //
+   //    std::shared_ptr<Type> baseType = _base->type();
+   //    if (!baseType)
+   //       return LogErrorV("invalid type for member access");
+   //
+   //    // Gestione del puntatore se '->'
+   //    if (_isArrow) {
+   //       if (baseType->kind() != TypeKind::Pointer)
+   //          return LogErrorV("operator '->' requires a pointer type");
+   //       baseType = static_cast<PointerTy*>(baseType.get())->pointee();
+   //       baseValue = Builder->CreateLoad(baseValue->getType(), baseValue, "deref");
+   //    }
+   //
+   //    if (baseType->kind() != TypeKind::Class)
+   //       return LogErrorV("member access requires a class type");
+   //
+   //    // Ricava il nome del membro
+   //    auto* memberVar = dynamic_cast<VariableExpressionAST*>(_member.get());
+   //    if (!memberVar)
+   //       return LogErrorV("member expression is not a variable");
+   //    const std::string& memberName = memberVar->name();
+   //
+   //    // Cerca la definizione della classe
+   //    auto it = std::find_if(allClasses.begin(), allClasses.end(), [&](const auto& c) { return c->name() == baseType->string(); });
+   //    if (it == allClasses.end())
+   //       return LogErrorV("class '" + baseType->string() + "' not found for member access");
+   //
+   //    // Cerca membro variabile
+   //    const auto& members = (*it)->members();
+   //    for (size_t i = 0; i < members.size(); ++i) {
+   //       const auto& member = members[i];
+   //       if (member->variable()->astType() == ASTType::VariableDeclaration) {
+   //          auto* varDecl = static_cast<VariableDeclarationAST*>(member->variable().get());
+   //          if (varDecl->name() == memberName) {
+   //             llvm::Value* indices[] = {Builder->getInt32(0), Builder->getInt32(static_cast<uint32_t>(i))};
+   //             llvm::Value* ptr = Builder->CreateGEP(baseValue->getType(), baseValue, indices, "memberptr");
+   //             if (_Type->kind() == TypeKind::Reference)
+   //                return ptr;
+   //             return Builder->CreateLoad(expressionValueTypeForCodegen(this), ptr, memberName);
+   //          }
+   //       }
+   //    }
+   //    // Cerca metodo
+   //    const auto& methods = (*it)->methods();
+   //    for (const auto& method : methods) {
+   //       if (method && method->method() && method->method()->prototype() && method->method()->prototype()->name() == memberName) {
+   //          llvm::Function* fn = TheModule->getFunction(method->method()->prototype()->mangledName());
+   //          if (!fn)
+   //             return LogErrorV("method '" + memberName + "' not found in module");
+   //          std::vector<llvm::Value*> args;
+   //          args.push_back(baseValue);
+   //          return Builder->CreateCall(fn, args, memberName);
+   //       }
+   //    }
+   //    return LogErrorV("member '" + memberName + "' not found in class '" + baseType->string() + "'");
+   // }
 
    llvm::Value* CallExpressionAST::codegen() {
       setDebugLocationFor(this);

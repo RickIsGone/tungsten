@@ -47,11 +47,12 @@ namespace tungsten {
       SemanticAnalyzer(const SemanticAnalyzer&) = delete;
       SemanticAnalyzer& operator=(const SemanticAnalyzer&) = delete;
 
-      bool analyze();
+      _NODISCARD bool analyze();
 
       void visit(NumberExpressionAST&) override;
       void visit(VariableExpressionAST&) override;
       void visit(IndexAccessAST&) override;
+      void visit(MemberAccessAST&) override;
       void visit(StringExpression&) override {}
       void visit(UnaryExpressionAST&) override;
       void visit(BinaryExpressionAST&) override;
@@ -146,6 +147,7 @@ namespace tungsten {
       size_t _loopDepth{0};
       bool _hasErrors{false};
       bool _allowUninitializedReferenceDecl{false};
+      bool _isInsideClass{false};
    };
 
    //  ========================================== implementation ==========================================
@@ -733,7 +735,7 @@ namespace tungsten {
          }
 
          size_t minArgs = std::min(o.args.size(), over.args.size());
-         for (size_t i = 0; i < minArgs; i++) {
+         for (size_t i = 0; i < minArgs; ++i) {
             if (fullTypeString(o.args[i]) != fullTypeString(over.args[i])) return false;
          }
 
@@ -1321,6 +1323,7 @@ namespace tungsten {
       --_currentScope;
    }
    void SemanticAnalyzer::visit(ClassAST& cls) {
+      _isInsideClass = true;
       const std::string existingKind = _symbolKindForName(cls.name());
       if (!existingKind.empty() && existingKind != "class")
          _logError("{} with name '{}' already exists", existingKind, cls.name());
@@ -1405,7 +1408,7 @@ namespace tungsten {
             _hasErrors = true;
             continue;
          }
-         std::string methodName = cls.name() + "-" + fun->method()->prototype()->name() + "$";
+         std::string methodName = cls.name() + "-" + fun->method()->prototype()->name();
          Overload over;
          over.type = fun->method()->prototype()->type();
          _allowUninitializedReferenceDecl = true;
@@ -1473,6 +1476,7 @@ namespace tungsten {
          types += fullTypeString(ty->variable()->type()) + (ty == cls.members().back() ? "" : ", ");
       }
       utils::debugLog("declared class: class {}, with members of type: {{{}}}", cls.name(), types);
+      _isInsideClass = false;
    }
 
    bool SemanticAnalyzer::_isSignedType(const std::string& type) {
@@ -2109,6 +2113,53 @@ namespace tungsten {
          std::cerr << "\n";
       } else {
          std::cerr << "warning: " << message << "\n";
+      }
+   }
+
+   void SemanticAnalyzer::visit(MemberAccessAST& access) {
+      access.base()->accept(*this);
+      if (baseTypeKind(access.base()->type()) != TypeKind::Class) {
+         _logError(access.base().get(), "can only use operator '{}' on classes", access.isArrow() ? "->" : ".");
+         access.setType(makeNullType());
+         return;
+      }
+      if (access.isArrow() && access.base()->type()->kind() != TypeKind::Pointer)
+         _logError(&access, "operator '->' cannot be used on a class, use '.' instead");
+      else if (!access.isArrow() && access.base()->type()->kind() == TypeKind::Pointer)
+         _logError(&access, "operator '.' cannot be used on a pointer to a class, use '->' instead");
+
+      if (access.member()->astType() == ASTType::CallExpression) {
+         CallExpressionAST* call = static_cast<CallExpressionAST*>(access.member().get());
+         call->setCallee(baseType(access.base()->type()) + "-" + call->callee());
+         utils::debugLog("calling function method: {}\n", call->callee());
+         call->accept(*this);
+
+         // TODO: add visibility checks
+
+         access.setType(call->type());
+         return;
+      }
+
+      VariableExpressionAST* var = static_cast<VariableExpressionAST*>(access.member().get());
+      for (auto& cls : _classes) {
+         bool found{false};
+         if (cls->name() == baseType(access.base()->type())) {
+            for (auto& member : cls->members()) {
+               auto* varDecl = static_cast<VariableDeclarationAST*>(member->variable().get());
+               if (varDecl->name() == var->name()) {
+                  if (member->visibility() == Visibility::Private && !_isInsideClass)
+                     _logError(var, "cannot access private member '{}' from outside class '{}'", var->name(), _fullExprLexeme(access.base().get()));
+                  access.setType(varDecl->type());
+                  found = true;
+                  break;
+               }
+            }
+            if (!found) {
+               _logError(var, "class '{}' has no member named '{}'", baseType(access.base()->type()), var->name());
+               access.setType(makeNullType());
+            }
+            break;
+         }
       }
    }
 } // namespace tungsten

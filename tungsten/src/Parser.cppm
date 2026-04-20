@@ -63,8 +63,8 @@ namespace tungsten {
        {TokenType::PlusPlus, 2}, // ++
        {TokenType::MinusMinus, 2}, // --
 
-       // {TokenType::Dot, 1}, // class.member
-       // {TokenType::Arrow, 1} // class->member
+       {TokenType::Dot, 1}, // class.member
+       {TokenType::Arrow, 1} // class->member
    };
 
    export struct Externs {
@@ -673,8 +673,16 @@ namespace tungsten {
                auto proto = _setSource(std::make_unique<FunctionPrototypeAST>(makeVoid(), name, std::move(args)), tok);
                auto fun = std::make_unique<FunctionAST>(std::move(proto), std::move(body));
                if (kind == "constructor") {
+                  if (isStatic) {
+                     _logError<ClassAST>(tok, "static modifier not allowed for constructors");
+                     hasError = true;
+                  }
                   constructors.push_back(std::make_unique<ClassConstructorAST>(visibility, std::move(fun)));
                } else {
+                  if (isStatic) {
+                     _logError<ClassAST>(tok, "static modifier not allowed for destructor");
+                     hasError = true;
+                  }
                   if (hasDestructor) {
                      _logError<ClassAST>(tok, "multiple destructors defined for class '" + name + "'");
                      hasError = true;
@@ -749,6 +757,35 @@ namespace tungsten {
 
          Token opToken = _peek();
          _consume(); // consume operator
+         if (opToken.type == TokenType::Dot || opToken.type == TokenType::Arrow) {
+            if (_peek().type != TokenType::Identifier) {
+               _logError("expected identifier after '" + _lexeme(opToken) + "'");
+               return nullptr;
+            }
+            std::string memberName = _lexeme(_peek());
+            _consume(); // consume identifier
+            std::unique_ptr<ExpressionAST> memberExpr;
+            if (_peek().type == TokenType::OpenParen) {
+               _consume(); // consume '('
+               std::vector<std::unique_ptr<ExpressionAST>> args;
+               while (_peek().type != TokenType::CloseParen && _peek().type != TokenType::EndOFFile) {
+                  args.push_back(_parseExpression());
+                  if (!args.back())
+                     return nullptr;
+                  if (_peek().type == TokenType::Comma)
+                     _consume();
+               }
+               if (_peek().type == TokenType::EndOFFile)
+                  return _logError<ExpressionAST>("expected ')' after function call");
+               _consume(); // consume ')'
+               memberExpr = std::make_unique<CallExpressionAST>(memberName, std::move(args));
+            } else
+               memberExpr = std::make_unique<VariableExpressionAST>(memberName);
+
+            lhs = std::make_unique<MemberAccessAST>(std::move(lhs), std::move(memberExpr), opToken.type == TokenType::Arrow);
+            lhs->setSource(opToken.position, opToken.length, _line(opToken), _column(opToken));
+            continue;
+         }
 
          auto rhs = _parsePrimaryExpression();
          if (!rhs)
