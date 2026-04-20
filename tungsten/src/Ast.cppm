@@ -2475,7 +2475,30 @@ export namespace tungsten {
                   for (uint64_t i = 0; i < count; ++i)
                      ClassScopeCleanups.back().push_back({className, Builder->CreateGEP(elemType->llvmType(), allocInstance, Builder->getInt64(i))});
             }
+         } else if (isNumberType(elemType->string())) {
+            llvm::Value* zero = nullptr;
+            if (isFloatingPointType(_Type->string())) {
+               if (_Type->string() == "float")
+                  zero = llvm::ConstantFP::get(Builder->getFloatTy(), .0f);
+               else
+                  zero = llvm::ConstantFP::get(Builder->getDoubleTy(), .0);
+            } else
+               zero = Builder->getIntN(type->getIntegerBitWidth(), 0);
+            llvm::Value* arrayPtr = Builder->CreateGEP(type, allocInstance, {Builder->getInt64(0), Builder->getInt64(0)}, "arrayinit.ptr");
+            llvm::Function* memsetFunc = llvm::Intrinsic::getOrInsertDeclaration(TheModule.get(), llvm::Intrinsic::memset);
+            Builder->CreateCall(memsetFunc, {arrayPtr, zero, Builder->getInt64(arrTy->size() * elemType->llvmType()->getPrimitiveSizeInBits() / 8), Builder->getInt32(0), Builder->getInt1(false)});
          }
+
+      } else if (isNumberType(_Type->string()) && !_init) { // default initialize to 0 number types
+         llvm::Value* zero = nullptr;
+         if (isFloatingPointType(_Type->string())) {
+            if (_Type->string() == "float")
+               zero = llvm::ConstantFP::get(Builder->getFloatTy(), .0f);
+            else
+               zero = llvm::ConstantFP::get(Builder->getDoubleTy(), .0);
+         } else
+            zero = Builder->getIntN(type->getIntegerBitWidth(), 0);
+         Builder->CreateStore(zero, allocInstance);
       }
 
       NamedValues[_name] = allocInstance;
@@ -2499,10 +2522,10 @@ export namespace tungsten {
 
    llvm::Value* IndexAccessAST::codegen() {
       setDebugLocationFor(this);
-      llvm::Value* arrayPtr = _array->codegen();
+      llvm::Value* arrayVal = _array->codegen();
       llvm::Value* indexVal = _index->codegen();
 
-      if (!arrayPtr || !indexVal)
+      if (!arrayVal || !indexVal)
          return nullptr;
 
       if (indexVal->getType()->isPointerTy())
@@ -2519,19 +2542,28 @@ export namespace tungsten {
       if (!baseTy)
          return LogErrorV("cannot index expression with unknown LLVM type");
 
+      // allocating the array if passed by value instead of by pointer
+      if (baseTy->isArrayTy() && !arrayVal->getType()->isPointerTy()) {
+         llvm::Function* function = Builder->GetInsertBlock()->getParent();
+         llvm::IRBuilder<> tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
+         llvm::AllocaInst* allocInstance = tmpBuilder.CreateAlloca(baseTy, nullptr, "tmp.arrval");
+         Builder->CreateStore(arrayVal, allocInstance);
+         arrayVal = allocInstance;
+      }
+
       if (baseTy->isArrayTy()) {
          llvm::Value* zero = Builder->getInt64(0);
-         return Builder->CreateGEP(baseTy, arrayPtr, {zero, indexVal}, "elementptr");
+         return Builder->CreateGEP(baseTy, arrayVal, {zero, indexVal}, "elementptr");
       }
 
       if (_array->type()->kind() == TypeKind::Pointer) {
          auto* ptrTy = static_cast<PointerTy*>(_array->type().get());
 
-         if (_array->astType() == ASTType::VariableExpression && arrayPtr->getType()->isPointerTy() && !llvm::isa<llvm::Argument>(arrayPtr))
-            arrayPtr = Builder->CreateLoad(arrayPtr->getType(), arrayPtr, "arrptr.load");
+         if (_array->astType() == ASTType::VariableExpression && arrayVal->getType()->isPointerTy() && !llvm::isa<llvm::Argument>(arrayVal))
+            arrayVal = Builder->CreateLoad(arrayVal->getType(), arrayVal, "arrptr.load");
 
          llvm::Type* gepType = ptrTy->pointee()->llvmType();
-         llvm::Value* elementPtr = Builder->CreateGEP(gepType, arrayPtr, indexVal, "elementptr");
+         llvm::Value* elementPtr = Builder->CreateGEP(gepType, arrayVal, indexVal, "elementptr");
 
          if (ptrTy->pointee()->kind() == TypeKind::Pointer)
             elementPtr = Builder->CreateLoad(gepType, elementPtr, "element");
