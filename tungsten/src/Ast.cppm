@@ -1589,7 +1589,7 @@ export namespace tungsten {
                auto* varDecl1 = static_cast<VariableDeclarationAST*>(args[0].get());
                auto* varDecl2 = static_cast<VariableDeclarationAST*>(args[1].get());
                if (varDecl1 && varDecl2 &&
-                   fullTypeString(varDecl1->type()) == className + "*"  &&
+                   fullTypeString(varDecl1->type()) == className + "*" &&
                    fullTypeString(varDecl2->type()) == className + "&")
                   return true;
             }
@@ -2589,10 +2589,7 @@ export namespace tungsten {
             llvm::Type* pointerValueType = derefOperand->type()->llvmType();
             argVal = Builder->CreateLoad(pointerValueType, argVal, "arg.deref.addr");
          }
-
-         if (arg->astType() == ASTType::VariableExpression &&
-             argVal->getType()->isPointerTy() &&
-             arg->type()->kind() != TypeKind::Array) {
+         if (arg->astType() == ASTType::VariableExpression && argVal->getType()->isPointerTy() && arg->type()->kind() != TypeKind::Array) {
             llvm::Type* loadedType = expressionValueTypeForCodegen(arg.get());
             if (loadedType)
                argVal = Builder->CreateLoad(loadedType, argVal, "arg.varload");
@@ -2606,50 +2603,22 @@ export namespace tungsten {
 
             if (loadedType && loadedType->isPointerTy())
                indexAccessAlreadyValue = true;
-
-            if (loadedType && argVal->getType()->isPointerTy() &&
-                arg->type()->kind() != TypeKind::Pointer &&
-                arg->type()->kind() != TypeKind::Reference &&
-                !indexAccessAlreadyValue)
+            if (loadedType && argVal->getType()->isPointerTy() && arg->type()->kind() != TypeKind::Pointer && arg->type()->kind() != TypeKind::Reference && !indexAccessAlreadyValue)
                argVal = Builder->CreateLoad(loadedType, argVal, "arg.idxload");
          }
-
          llvm::Type* expectedParamType = nullptr;
          if (callee && i < callee->arg_size())
             expectedParamType = callee->getFunctionType()->getParamType(static_cast<unsigned>(i));
          if (expectedParamType) {
-            if (expectedParamType->isStructTy() && !expectedParamType->isPointerTy()) {
-               llvm::Function* func = Builder->GetInsertBlock()->getParent();
-               llvm::IRBuilder<> tmpBuilder(&func->getEntryBlock(), func->getEntryBlock().begin());
-               llvm::AllocaInst* temp = tmpBuilder.CreateAlloca(expectedParamType, nullptr, "copytmp");
-               std::string className = arg->type()->string();
-               std::string copyCtorName = className + "-constructor$" + className + "*$" + className + "&";
-               llvm::Function* copyCtor = TheModule->getFunction(copyCtorName);
-               if (!copyCtor)
-                  return LogErrorV("copy constructor not found for class '" + className + "'");
-               llvm::Value* argValPtr = argVal;
-               if (!argVal->getType()->isPointerTy()) {
-                  argValPtr = Builder->CreateAlloca(argVal->getType());
-                  Builder->CreateStore(argVal, argValPtr);
-               }
-               Builder->CreateCall(copyCtor, {temp, argValPtr});
-               argVal = temp;
-            } else if (!expectedParamType->isPointerTy()) {
-               if (argVal->getType()->isPointerTy()) {
-                  argVal = Builder->CreateLoad(expectedParamType, argVal, "arg.load");
-               }
+            if (!expectedParamType->isPointerTy() && argVal->getType()->isPointerTy()) {
+               argVal = Builder->CreateLoad(expectedParamType, argVal, "arg.load");
             }
             argVal = castToCommonType(argVal, expectedParamType);
          } else {
-            if (argVal->getType()->isPointerTy() &&
-                arg->type()->kind() != TypeKind::Pointer &&
-                arg->type()->kind() != TypeKind::Reference &&
-                arg->type()->kind() != TypeKind::Array &&
-                !indexAccessAlreadyValue) {
+            if (argVal->getType()->isPointerTy() && arg->type()->kind() != TypeKind::Pointer && arg->type()->kind() != TypeKind::Reference && arg->type()->kind() != TypeKind::Array && !indexAccessAlreadyValue) {
                argVal = Builder->CreateLoad(expressionValueTypeForCodegen(arg.get()), argVal, "arg.load");
             }
          }
-
          args.push_back(argVal);
       }
       setDebugLocationFor(this);
@@ -3217,12 +3186,41 @@ export namespace tungsten {
          if (varDecl->type()->kind() == TypeKind::Reference) {
             NamedValues[varDecl->name()] = &arg;
             VariableTypes[varDecl->name()] = static_cast<ReferenceTy*>(varDecl->type().get())->reference()->llvmType();
+         } else if (varDecl->type()->kind() == TypeKind::Class) {
+            llvm::AllocaInst* paramAddr = tmpBuilder.CreateAlloca(arg.getType(), nullptr, varDecl->name());
+            std::string className = varDecl->type()->string();
+            std::string copyCtorName = className + "-constructor$" + className + "*$" + className + "&";
+            llvm::Function* copyCtor = TheModule->getFunction(copyCtorName);
+            if (!copyCtor)
+               return LogErrorF("copy constructor not found for class '" + className + "'");
+            llvm::AllocaInst* incomingPtr = tmpBuilder.CreateAlloca(arg.getType());
+            tmpBuilder.CreateStore(&arg, incomingPtr);
+            Builder->CreateCall(copyCtor, {paramAddr, incomingPtr});
+            NamedValues[varDecl->name()] = paramAddr;
+            VariableTypes[varDecl->name()] = arg.getType();
+            if (DBuilder && KSDbgInfo.CurrentSubprogram && KSDbgInfo.TheFile) {
+               const uint32_t paramLine = debugLineFor(varDecl);
+               const uint32_t paramColumn = debugColumnFor(varDecl);
+               auto* paramVar = DBuilder->createParameterVariable(
+                   KSDbgInfo.CurrentSubprogram,
+                   varDecl->name(),
+                   static_cast<unsigned>(idx + 1),
+                   KSDbgInfo.TheFile,
+                   paramLine,
+                   debugTypeFor(varDecl->type()),
+                   true);
+               KSDbgInfo.registerLocalVariable(varDecl->name(), paramVar);
+               DBuilder->insertDeclare(paramAddr,
+                                       paramVar,
+                                       DBuilder->createExpression(),
+                                       llvm::DILocation::get(*TheContext, paramLine, paramColumn, KSDbgInfo.CurrentSubprogram),
+                                       BB);
+            }
          } else {
             llvm::AllocaInst* paramAddr = tmpBuilder.CreateAlloca(arg.getType(), nullptr, varDecl->name());
             tmpBuilder.CreateStore(&arg, paramAddr);
             NamedValues[varDecl->name()] = paramAddr;
             VariableTypes[varDecl->name()] = arg.getType();
-
             if (DBuilder && KSDbgInfo.CurrentSubprogram && KSDbgInfo.TheFile) {
                const uint32_t paramLine = debugLineFor(varDecl);
                const uint32_t paramColumn = debugColumnFor(varDecl);

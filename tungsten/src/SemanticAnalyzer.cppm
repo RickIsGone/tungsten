@@ -649,9 +649,6 @@ namespace tungsten {
       access.setType(pointerTy->pointee());
    }
 
-   void SemanticAnalyzer::visit(MemberAccessAST& access) {
-      return;
-   }
    void SemanticAnalyzer::visit(BlockStatementAST& block) {
       _scopes.push_back({});
       ++_currentScope;
@@ -1734,14 +1731,6 @@ namespace tungsten {
                if (idx) {
                   if (idx->array()) self(idx->array().get(), self);
                   if (idx->index()) self(idx->index().get(), self);
-               }
-               break;
-            }
-            case ASTType::MemberAccessExpression: {
-               auto* m = static_cast<MemberAccessAST*>(n);
-               if (m) {
-                  if (m->cls()) self(m->cls().get(), self);
-                  if (m->member()) self(m->member().get(), self);
                }
                break;
             }
