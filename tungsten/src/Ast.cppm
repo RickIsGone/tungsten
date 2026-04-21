@@ -1479,20 +1479,25 @@ export namespace tungsten {
       Destructor
    };
 
+   class ClassAST;
+
    class ClassMethodAST {
    public:
       ClassMethodAST(Visibility visibility, bool isStatic, std::unique_ptr<FunctionAST> method)
-          : _visibility{visibility}, _isStatic{isStatic}, _method{std::move(method)} {}
+          : _visibility{visibility}, _isStatic{isStatic}, _method{std::move(method)}, _parent(nullptr) {}
       llvm::Value* codegen();
       void accept(ASTVisitor& v) { v.visit(*this); }
       _NODISCARD Visibility visibility() const { return _visibility; }
       _NODISCARD bool isStatic() const { return _isStatic; }
       _NODISCARD std::unique_ptr<FunctionAST>& method() { return _method; }
+      void setParent(ClassAST* parent) { _parent = parent; }
+      ClassAST* parent() const { return _parent; }
 
    private:
       Visibility _visibility;
       bool _isStatic;
       std::unique_ptr<FunctionAST> _method;
+      ClassAST* _parent;
    };
 
    class ClassVariableAST {
@@ -1514,28 +1519,34 @@ export namespace tungsten {
    class ClassConstructorAST {
    public:
       ClassConstructorAST(Visibility visibility, std::unique_ptr<FunctionAST> constructor)
-          : _visibility{visibility}, _constructor{std::move(constructor)} {}
+          : _visibility{visibility}, _constructor{std::move(constructor)}, _parent(nullptr) {}
       llvm::Value* codegen();
       void accept(ASTVisitor& v) { v.visit(*this); }
       _NODISCARD Visibility visibility() const { return _visibility; }
       _NODISCARD std::unique_ptr<FunctionAST>& constructor() { return _constructor; }
+      void setParent(ClassAST* parent) { _parent = parent; }
+      ClassAST* parent() const { return _parent; }
 
    private:
       Visibility _visibility;
       std::unique_ptr<FunctionAST> _constructor;
+      ClassAST* _parent;
    };
    class ClassDestructorAST {
    public:
       ClassDestructorAST(Visibility visibility, std::unique_ptr<FunctionAST> destructor)
-          : _visibility{visibility}, _destructor{std::move(destructor)} {}
+          : _visibility{visibility}, _destructor{std::move(destructor)}, _parent{nullptr} {}
       llvm::Value* codegen();
       void accept(ASTVisitor& v) { v.visit(*this); }
       _NODISCARD Visibility visibility() const { return _visibility; }
       _NODISCARD std::unique_ptr<FunctionAST>& destructor() { return _destructor; }
+      void setParent(ClassAST* parent) { _parent = parent; }
+      ClassAST* parent() const { return _parent; }
 
    private:
       Visibility _visibility;
       std::unique_ptr<FunctionAST> _destructor;
+      ClassAST* _parent;
    };
 
    class ClassAST {
@@ -2502,7 +2513,7 @@ export namespace tungsten {
             Builder->CreateStore(zero, allocInstance);
          }
 
-      } else if (isNumberType(_Type->string()) && !_init) // default initialize to 0 number types
+      } else if (isNumberType(_Type->string()) && !_init)
          Builder->CreateStore(llvm::Constant::getNullValue(type), allocInstance);
 
       NamedValues[_name] = allocInstance;
@@ -3226,7 +3237,7 @@ export namespace tungsten {
    }
 
    llvm::Function* FunctionPrototypeAST::codegen() {
-      std::string name;
+      std::string name{};
       if (_name == "main"sv || _isExternC)
          name = _name;
       else
@@ -3235,7 +3246,7 @@ export namespace tungsten {
       if (auto* existing = TheModule->getFunction(name))
          return existing;
 
-      std::vector<llvm::Type*> paramTypes;
+      std::vector<llvm::Type*> paramTypes{};
       bool isVarArgs = false;
       for (const auto& arg : _args) {
          if (arg->type()->kind() == TypeKind::ArgPack)

@@ -109,6 +109,15 @@ namespace tungsten {
       _NODISCARD size_t _line(size_t position) const;
       _NODISCARD size_t _column(size_t position) const;
 
+      void _pushScope() {
+         _scopes.push_back({});
+         ++_currentScope;
+      }
+      void _popScope() {
+         --_currentScope;
+         _scopes.pop_back();
+      }
+
       bool _isSignedType(const std::string& type);
       bool _isUnsignedType(const std::string& type);
       bool _isFloatingPointType(const std::string& type);
@@ -124,6 +133,8 @@ namespace tungsten {
       bool _checkNumericConversionLoss(const std::string& fromType, const std::string& toType);
       bool _doesVariableExist(const std::string& var);
       bool _isConstVariable(const std::string& var) const;
+      bool _hasSameSignature(const Overload& fun, const Overload& over);
+      bool _hasSameParams(const Overload& fun, const Overload& over);
       std::optional<std::string> _constWriteTargetName(ExpressionAST* expr) const;
       bool _isConstexpr(const std::unique_ptr<ExpressionAST>& expr);
       _NODISCARD bool _statementTerminates(ExpressionAST* expr) const;
@@ -163,14 +174,12 @@ namespace tungsten {
             _hasErrors = true;
       }
       for (auto& fun : _externs->functions) {
-         _scopes.push_back({}); // creating a new scope for the argument declarations
-         ++_currentScope;
+         _pushScope();
          if (fun)
             fun->accept(*this);
          else
             _hasErrors = true;
-         _scopes.pop_back();
-         --_currentScope;
+         _popScope();
       }
       for (auto& var : _globalVariables) {
          if (var)
@@ -651,9 +660,55 @@ namespace tungsten {
       access.setType(pointerTy->pointee());
    }
 
+   void SemanticAnalyzer::visit(MemberAccessAST& access) {
+      access.base()->accept(*this);
+      if (baseTypeKind(access.base()->type()) != TypeKind::Class) {
+         _logError(access.base().get(), "can only use operator '{}' on classes", access.isArrow() ? "->" : ".");
+         access.setType(makeNullType());
+         return;
+      }
+      if (access.isArrow() && access.base()->type()->kind() != TypeKind::Pointer)
+         _logError(&access, "operator '->' cannot be used on a class, use '.' instead");
+      else if (!access.isArrow() && access.base()->type()->kind() == TypeKind::Pointer)
+         _logError(&access, "operator '.' cannot be used on a pointer to a class, use '->' instead");
+
+      if (access.member()->astType() == ASTType::CallExpression) {
+         CallExpressionAST* call = static_cast<CallExpressionAST*>(access.member().get());
+         call->setCallee(baseType(access.base()->type()) + "-" + call->callee());
+         utils::debugLog("calling function method: {}\n", call->callee());
+         call->accept(*this);
+
+         // TODO: add visibility checks
+
+         access.setType(call->type());
+         return;
+      }
+
+      VariableExpressionAST* var = static_cast<VariableExpressionAST*>(access.member().get());
+      for (auto& cls : _classes) {
+         bool found{false};
+         if (cls->name() == baseType(access.base()->type())) {
+            for (auto& member : cls->members()) {
+               auto* varDecl = static_cast<VariableDeclarationAST*>(member->variable().get());
+               if (varDecl->name() == var->name()) {
+                  if (member->visibility() == Visibility::Private && !_isInsideClass)
+                     _logError(var, "cannot access private member '{}' from outside class '{}'", var->name(), _fullExprLexeme(access.base().get()));
+                  access.setType(varDecl->type());
+                  found = true;
+                  break;
+               }
+            }
+            if (!found) {
+               _logError(var, "class '{}' has no member named '{}'", baseType(access.base()->type()), var->name());
+               access.setType(makeNullType());
+            }
+            break;
+         }
+      }
+   }
+
    void SemanticAnalyzer::visit(BlockStatementAST& block) {
-      _scopes.push_back({});
-      ++_currentScope;
+      _pushScope();
       bool reachedTerminator = false;
       for (auto& expr : block.statements()) {
          if (!expr) {
@@ -675,8 +730,7 @@ namespace tungsten {
          if (_statementTerminates(expr.get()))
             reachedTerminator = true;
       }
-      _scopes.pop_back();
-      --_currentScope;
+      _popScope();
    }
 
    // void SemanticAnalyzer::visit(ExternVariableStatementAST& fun) {
@@ -722,39 +776,11 @@ namespace tungsten {
       }
       signature += ")";
 
-      auto sameSignature = [&](const Overload& o) {
-         bool oVariadic = !o.args.empty() && o.args.back()->kind() == TypeKind::ArgPack;
-         bool overVariadic = !over.args.empty() && over.args.back()->kind() == TypeKind::ArgPack;
-
-         if (!oVariadic && !overVariadic && o.args.size() != over.args.size()) return false;
-         if (oVariadic && overVariadic) {
-            if (o.args.size() != over.args.size()) return false;
-         }
-         if ((oVariadic && !overVariadic) || (!oVariadic && overVariadic)) {
-            if (o.args.size() - 1 > over.args.size() - 1) return false;
-         }
-
-         size_t minArgs = std::min(o.args.size(), over.args.size());
-         for (size_t i = 0; i < minArgs; ++i) {
-            if (fullTypeString(o.args[i]) != fullTypeString(over.args[i])) return false;
-         }
-
-         return true;
-      };
-      auto sameParams = [&](const Overload& o) {
-         if (o.args.size() != over.args.size()) return false;
-         for (size_t i = 0; i < o.args.size(); i++) {
-            if (fullTypeString(o.args[i]) != fullTypeString(over.args[i]))
-               return false;
-         }
-         return true;
-      };
-
       for (auto& existing : overloads) {
-         if (sameSignature(existing)) {
+         if (_hasSameSignature(over, existing)) {
             return _logError(&proto, "function '{}' with the same signature already exists", proto.name());
          }
-         if (sameParams(existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
+         if (_hasSameParams(over, existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
             return _logError(&proto, "function '{}' with same parameters but different return type already exists", proto.name());
          }
       }
@@ -773,8 +799,7 @@ namespace tungsten {
    }
 
    void SemanticAnalyzer::visit(FunctionAST& fun) {
-      _scopes.push_back({}); // scope already created inside visit(BlockStatementAST&) but I need to make one for the function arguments
-      ++_currentScope;
+      _pushScope(); // scope already created inside visit(BlockStatementAST&) but I need to make one for the function arguments
       fun.prototype()->accept(*this);
       // Main has a fixed ABI-like signature: int/i32 main([int/i32 argc, String*|char** argv])
       if (fun.name() == "main"sv) {
@@ -804,8 +829,7 @@ namespace tungsten {
          fun.body()->accept(*this);
       else
          _hasErrors = true;
-      _scopes.pop_back();
-      --_currentScope;
+      _popScope();
    }
 
    void SemanticAnalyzer::visit(CallExpressionAST& call) {
@@ -1038,26 +1062,23 @@ namespace tungsten {
             return _logError(&ifStmnt, "if statement condition must be a numeric or boolean expression");
       }
       if (ifStmnt.thenBranch()->astType() != ASTType::BlockStatement) {
-         _scopes.push_back({});
-         ++_currentScope;
+         _pushScope();
          ifStmnt.thenBranch()->accept(*this);
-         _scopes.pop_back();
-         --_currentScope;
+         _popScope();
       } else
          ifStmnt.thenBranch()->accept(*this);
 
       if (ifStmnt.elseBranch()) {
          if (ifStmnt.elseBranch()->astType() != ASTType::BlockStatement) {
-            _scopes.push_back({});
-            ++_currentScope;
+            _pushScope();
             ifStmnt.elseBranch()->accept(*this);
-            _scopes.pop_back();
-            --_currentScope;
+            _popScope();
          } else
             ifStmnt.elseBranch()->accept(*this);
       }
    }
    void SemanticAnalyzer::visit(WhileStatementAST& whileStmnt) {
+      _pushScope(); // pushing a new scope so that if in the condition there's a variable declaration, its lifespan only expands for the loop
       whileStmnt.condition()->accept(*this);
       switch (whileStmnt.condition()->astType()) {
          case ASTType::NumberExpression:
@@ -1075,8 +1096,10 @@ namespace tungsten {
       ++_loopDepth;
       whileStmnt.body()->accept(*this);
       --_loopDepth;
+      _popScope();
    }
    void SemanticAnalyzer::visit(DoWhileStatementAST& doWhile) {
+      _pushScope(); // pushing a new scope so that if in the condition there's a variable declaration, its lifespan only expands for the loop
       doWhile.condition()->accept(*this);
       switch (doWhile.condition()->astType()) {
          case ASTType::NumberExpression:
@@ -1094,10 +1117,10 @@ namespace tungsten {
       ++_loopDepth;
       doWhile.body()->accept(*this);
       --_loopDepth;
+      _popScope();
    }
    void SemanticAnalyzer::visit(ForStatementAST& forStmnt) {
-      _scopes.push_back({});
-      ++_currentScope;
+      _pushScope();
       forStmnt.init()->accept(*this);
       switch (forStmnt.init()->astType()) {
          case ASTType::VariableDeclaration:
@@ -1131,8 +1154,7 @@ namespace tungsten {
       ++_loopDepth;
       forStmnt.body()->accept(*this);
       --_loopDepth;
-      _scopes.pop_back();
-      --_currentScope;
+      _popScope();
    }
 
    void SemanticAnalyzer::visit(BreakStatementAST& brk) {
@@ -1237,28 +1259,18 @@ namespace tungsten {
          _hasErrors = true;
          return;
       }
-
-      _scopes.push_back({});
-      ++_currentScope;
-
-      _allowUninitializedReferenceDecl = true;
-      for (auto& arg : method.method()->args()) {
-         if (!arg) {
-            _hasErrors = true;
-            continue;
-         }
-         auto* cast = static_cast<VariableDeclarationAST*>(arg.get());
-         cast->accept(*this);
-      }
-      _allowUninitializedReferenceDecl = false;
+      _pushScope(); // pushing a new scope for the args declaration
+      if (method.method()->prototype())
+         method.method()->prototype()->accept(*this);
+      else
+         _hasErrors = true;
 
       if (method.method()->body())
          method.method()->body()->accept(*this);
       else
          _hasErrors = true;
 
-      _scopes.pop_back();
-      --_currentScope;
+      _popScope();
    }
    void SemanticAnalyzer::visit(ClassVariableAST& var) {
       if (!var.variable()) {
@@ -1276,28 +1288,20 @@ namespace tungsten {
          _hasErrors = true;
          return;
       }
+      _pushScope();
 
-      _scopes.push_back({});
-      ++_currentScope;
-
-      _allowUninitializedReferenceDecl = true;
-      for (auto& arg : ctor.constructor()->args()) {
-         if (!arg) {
-            _hasErrors = true;
-            continue;
-         }
-         auto* cast = static_cast<VariableDeclarationAST*>(arg.get());
-         cast->accept(*this);
-      }
-      _allowUninitializedReferenceDecl = false;
+      if (ctor.constructor()->prototype()) {
+         utils::debugLog(ctor.constructor()->prototype()->name());
+         ctor.constructor()->prototype()->accept(*this);
+      } else
+         _hasErrors = true;
 
       if (ctor.constructor()->body())
          ctor.constructor()->body()->accept(*this);
       else
          _hasErrors = true;
 
-      _scopes.pop_back();
-      --_currentScope;
+      _popScope();
    }
    void SemanticAnalyzer::visit(ClassDestructorAST& dtor) {
       if (!dtor.destructor()) {
@@ -1308,8 +1312,7 @@ namespace tungsten {
       if (dtor.destructor()->args().size() > 1)
          _logError(dtor.destructor()->args().at(0).get(), "destructors cannot have arguments");
 
-      _scopes.push_back({});
-      ++_currentScope;
+      _pushScope();
 
       if (dtor.destructor()->body())
          dtor.destructor()->body()->accept(*this);
@@ -1319,8 +1322,7 @@ namespace tungsten {
       if (dtor.visibility() != Visibility::Public)
          _logError(dtor.destructor()->prototype().get(), "destructor must be public");
 
-      _scopes.pop_back();
-      --_currentScope;
+      _popScope();
    }
    void SemanticAnalyzer::visit(ClassAST& cls) {
       _isInsideClass = true;
@@ -1330,8 +1332,7 @@ namespace tungsten {
       else if (_declaredClasses.contains(cls.name()))
          if (cls.hasErrors())
             _hasErrors = true;
-      _scopes.push_back({});
-      ++_currentScope;
+      _pushScope(); // pushing a new scope for the local variables
 
       for (auto& var : cls.members()) {
          if (var)
@@ -1353,39 +1354,16 @@ namespace tungsten {
          }
          // check for duplicate and overloads
          auto& overloads = _declaredFunctions[ctorName];
-         auto sameSignature = [&](const Overload& o) {
-            bool oVariadic = !o.args.empty() && o.args.back()->kind() == TypeKind::ArgPack;
-            bool overVariadic = !over.args.empty() && over.args.back()->kind() == TypeKind::ArgPack;
-            if (!oVariadic && !overVariadic && o.args.size() != over.args.size()) return false;
-            if (oVariadic && overVariadic) {
-               if (o.args.size() != over.args.size()) return false;
-            }
-            if ((oVariadic && !overVariadic) || (!oVariadic && overVariadic)) {
-               if (o.args.size() - 1 > over.args.size() - 1) return false;
-            }
-            size_t minArgs = std::min(o.args.size(), over.args.size());
-            for (size_t i = 0; i < minArgs; i++) {
-               if (fullTypeString(o.args[i]) != fullTypeString(over.args[i])) return false;
-            }
-            return true;
-         };
-         auto sameParams = [&](const Overload& o) {
-            if (o.args.size() != over.args.size()) return false;
-            for (size_t i = 0; i < o.args.size(); i++) {
-               if (fullTypeString(o.args[i]) != fullTypeString(over.args[i]))
-                  return false;
-            }
-            return true;
-         };
+
          bool duplicate = false;
          for (auto& existing : overloads) {
-            if (sameSignature(existing)) {
+            if (_hasSameSignature(over, existing)) {
                _logError(ctor->constructor()->prototype().get(), "constructor with signature already exists in class '{}'", cls.name());
                _hasErrors = true;
                duplicate = true;
                break;
             }
-            if (sameParams(existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
+            if (_hasSameParams(over, existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
                _logError(ctor->constructor()->prototype().get(), "constructor with same parameters but different return type already exists in class '{}'", cls.name());
                _hasErrors = true;
                duplicate = true;
@@ -1408,6 +1386,7 @@ namespace tungsten {
             _hasErrors = true;
             continue;
          }
+         _pushScope();
          std::string methodName = cls.name() + "-" + fun->method()->prototype()->name();
          Overload over;
          over.type = fun->method()->prototype()->type();
@@ -1423,39 +1402,16 @@ namespace tungsten {
          }
          _allowUninitializedReferenceDecl = false;
          auto& overloads = _declaredFunctions[methodName];
-         auto sameSignature = [&](const Overload& o) {
-            bool oVariadic = !o.args.empty() && o.args.back()->kind() == TypeKind::ArgPack;
-            bool overVariadic = !over.args.empty() && over.args.back()->kind() == TypeKind::ArgPack;
-            if (!oVariadic && !overVariadic && o.args.size() != over.args.size()) return false;
-            if (oVariadic && overVariadic) {
-               if (o.args.size() != over.args.size()) return false;
-            }
-            if ((oVariadic && !overVariadic) || (!oVariadic && overVariadic)) {
-               if (o.args.size() - 1 > over.args.size() - 1) return false;
-            }
-            size_t minArgs = std::min(o.args.size(), over.args.size());
-            for (size_t i = 0; i < minArgs; i++) {
-               if (fullTypeString(o.args[i]) != fullTypeString(over.args[i])) return false;
-            }
-            return true;
-         };
-         auto sameParams = [&](const Overload& o) {
-            if (o.args.size() != over.args.size()) return false;
-            for (size_t i = 0; i < o.args.size(); i++) {
-               if (fullTypeString(o.args[i]) != fullTypeString(over.args[i]))
-                  return false;
-            }
-            return true;
-         };
+
          bool duplicate = false;
          for (auto& existing : overloads) {
-            if (sameSignature(existing)) {
+            if (_hasSameSignature(over, existing)) {
                _logError(fun->method()->prototype().get(), "method '{}' with the same signature already exists", fun->method()->prototype()->name());
                _hasErrors = true;
                duplicate = true;
                break;
             }
-            if (sameParams(existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
+            if (_hasSameParams(over, existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
                _logError(fun->method()->prototype().get(), "method '{}' with same parameters but different return type already exists", fun->method()->prototype()->name());
                _hasErrors = true;
                duplicate = true;
@@ -1466,10 +1422,10 @@ namespace tungsten {
             continue;
          overloads.push_back(over);
          fun->accept(*this);
+         _popScope();
       }
 
-      _scopes.pop_back();
-      --_currentScope;
+      _popScope(); // pop of class scope for local variables
 
       std::string types{};
       for (const auto& ty : cls.members()) {
@@ -2116,50 +2072,28 @@ namespace tungsten {
       }
    }
 
-   void SemanticAnalyzer::visit(MemberAccessAST& access) {
-      access.base()->accept(*this);
-      if (baseTypeKind(access.base()->type()) != TypeKind::Class) {
-         _logError(access.base().get(), "can only use operator '{}' on classes", access.isArrow() ? "->" : ".");
-         access.setType(makeNullType());
-         return;
+   bool SemanticAnalyzer::_hasSameParams(const Overload& fun, const Overload& over) {
+      if (over.args.size() != fun.args.size()) return false;
+      for (size_t i = 0; i < over.args.size(); i++) {
+         if (fullTypeString(over.args[i]) != fullTypeString(fun.args[i]))
+            return false;
       }
-      if (access.isArrow() && access.base()->type()->kind() != TypeKind::Pointer)
-         _logError(&access, "operator '->' cannot be used on a class, use '.' instead");
-      else if (!access.isArrow() && access.base()->type()->kind() == TypeKind::Pointer)
-         _logError(&access, "operator '.' cannot be used on a pointer to a class, use '->' instead");
-
-      if (access.member()->astType() == ASTType::CallExpression) {
-         CallExpressionAST* call = static_cast<CallExpressionAST*>(access.member().get());
-         call->setCallee(baseType(access.base()->type()) + "-" + call->callee());
-         utils::debugLog("calling function method: {}\n", call->callee());
-         call->accept(*this);
-
-         // TODO: add visibility checks
-
-         access.setType(call->type());
-         return;
+      return true;
+   }
+   bool SemanticAnalyzer::_hasSameSignature(const Overload& fun, const Overload& over) {
+      bool oVariadic = !over.args.empty() && over.args.back()->kind() == TypeKind::ArgPack;
+      bool overVariadic = !fun.args.empty() && fun.args.back()->kind() == TypeKind::ArgPack;
+      if (!oVariadic && !overVariadic && over.args.size() != fun.args.size()) return false;
+      if (oVariadic && overVariadic) {
+         if (over.args.size() != fun.args.size()) return false;
       }
-
-      VariableExpressionAST* var = static_cast<VariableExpressionAST*>(access.member().get());
-      for (auto& cls : _classes) {
-         bool found{false};
-         if (cls->name() == baseType(access.base()->type())) {
-            for (auto& member : cls->members()) {
-               auto* varDecl = static_cast<VariableDeclarationAST*>(member->variable().get());
-               if (varDecl->name() == var->name()) {
-                  if (member->visibility() == Visibility::Private && !_isInsideClass)
-                     _logError(var, "cannot access private member '{}' from outside class '{}'", var->name(), _fullExprLexeme(access.base().get()));
-                  access.setType(varDecl->type());
-                  found = true;
-                  break;
-               }
-            }
-            if (!found) {
-               _logError(var, "class '{}' has no member named '{}'", baseType(access.base()->type()), var->name());
-               access.setType(makeNullType());
-            }
-            break;
-         }
+      if ((oVariadic && !overVariadic) || (!oVariadic && overVariadic)) {
+         if (over.args.size() - 1 > fun.args.size() - 1) return false;
       }
+      size_t minArgs = std::min(over.args.size(), fun.args.size());
+      for (size_t i = 0; i < minArgs; i++) {
+         if (fullTypeString(over.args[i]) != fullTypeString(fun.args[i])) return false;
+      }
+      return true;
    }
 } // namespace tungsten
