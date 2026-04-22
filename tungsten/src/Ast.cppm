@@ -1382,6 +1382,7 @@ export namespace tungsten {
       _NODISCARD const std::string& name() const { return _name; }
       _NODISCARD std::shared_ptr<Type>& type() { return _type; }
       void setType(std::shared_ptr<Type> ty) { _type = ty; }
+      _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& args() { return _args; }
       _NODISCARD const std::vector<std::unique_ptr<ExpressionAST>>& args() const { return _args; }
       void accept(ASTVisitor& v) { v.visit(*this); }
       _NODISCARD ASTType astType() const noexcept { return ASTType::FunctionPrototype; }
@@ -1456,6 +1457,7 @@ export namespace tungsten {
       _NODISCARD const std::string& name() const { return _prototype->name(); }
       _NODISCARD std::shared_ptr<Type>& type() const { return _prototype->type(); }
       _NODISCARD const std::vector<std::unique_ptr<ExpressionAST>>& args() const { return _prototype->args(); }
+      _NODISCARD std::vector<std::unique_ptr<ExpressionAST>>& args() { return _prototype->args(); }
       _NODISCARD std::unique_ptr<FunctionPrototypeAST>& prototype() { return _prototype; }
       _NODISCARD std::unique_ptr<ExpressionAST>& body() { return _body; }
       _NODISCARD ASTType astType() const noexcept { return ASTType::Function; }
@@ -2589,70 +2591,116 @@ export namespace tungsten {
 
       return LogErrorV("cannot index non-array, non-pointer value");
    }
+
    llvm::Value* MemberAccessAST::codegen() {
-      return nullptr;
+      setDebugLocationFor(this);
+      llvm::Value* base = _base->codegen();
+      if (!base)
+         return nullptr;
+
+      switch (_member->astType()) {
+         case ASTType::VariableExpression: {
+            auto* varExpr = static_cast<VariableExpressionAST*>(_member.get());
+            const std::string memberName = varExpr->name();
+
+         } break;
+
+         case ASTType::CallExpression: {
+            auto* callExpr = static_cast<CallExpressionAST*>(_member.get());
+            std::string funName = callExpr->callee() + "$" + baseType(_base->type()) + "*";
+            std::string staticFunName = callExpr->callee() + "$";
+            for (auto& arg : callExpr->args()) {
+               if (!funName.ends_with("$"))
+                  funName += "$";
+               if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "&"sv) {
+                  if (arg->type()->kind() == TypeKind::Reference) {
+                     funName += fullTypeString(static_cast<UnaryExpressionAST*>(arg.get())->operand()->type()) + "&";
+                     staticFunName += fullTypeString(static_cast<UnaryExpressionAST*>(arg.get())->operand()->type()) + "&";
+                  } else {
+                     funName += fullTypeString(static_cast<UnaryExpressionAST*>(arg.get())->operand()->type()) + "*";
+                     staticFunName += fullTypeString(static_cast<UnaryExpressionAST*>(arg.get())->operand()->type()) + "*";
+                  }
+               } else {
+                  funName += fullTypeString(arg->type());
+                  staticFunName += fullTypeString(arg->type());
+               }
+            }
+            utils::debugLog("looking for function with mangled name: {}", funName);
+            llvm::Function* function = TheModule->getFunction(funName);
+            if (!function) {
+               utils::debugLog("{} not found: looking for {}", funName, staticFunName);
+               function = TheModule->getFunction(staticFunName);
+               if (!function)
+                  return LogErrorV("function '" + funName + "' not found");
+               utils::debugLog("found function: {}", funName);
+            }
+            utils::debugLog("llvm function arguments size: {}", function->arg_size());
+
+            std::vector<llvm::Value*> args;
+            std::string argsTypes;
+            utils::debugLog("arguments size: {}", callExpr->args().size());
+            if (function->getName() != staticFunName) {
+               NamedValues["this"] = base;
+               VariableTypes["this"] = Builder->getPtrTy();
+               args.push_back(base);
+            }
+            for (size_t i = 0; i < callExpr->args().size(); ++i) {
+               auto& arg = callExpr->args()[i];
+               argsTypes += fullTypeString(arg->type());
+               llvm::Value* argVal = arg->codegen();
+               if (!argVal) {
+                  utils::debugLog("arg[{}] codegen returned nullptr\n", i);
+                  return nullptr;
+               }
+
+               if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "*"sv) {
+                  auto& derefOperand = static_cast<UnaryExpressionAST*>(arg.get())->operand();
+                  if (!derefOperand)
+                     return LogErrorV("invalid dereference argument");
+
+                  llvm::Type* pointerValueType = derefOperand->type()->llvmType();
+                  argVal = Builder->CreateLoad(pointerValueType, argVal, "arg.deref.addr");
+               }
+               if (arg->astType() == ASTType::VariableExpression && argVal->getType()->isPointerTy() && arg->type()->kind() != TypeKind::Array) {
+                  llvm::Type* loadedType = expressionValueTypeForCodegen(arg.get());
+                  if (loadedType)
+                     argVal = Builder->CreateLoad(loadedType, argVal, "arg.varload");
+               }
+
+               bool indexAccessAlreadyValue = false;
+               if (arg->astType() == ASTType::IndexAccessExpression) {
+                  llvm::Type* loadedType = expressionValueTypeForCodegen(arg.get());
+                  if (!loadedType && arg->type())
+                     loadedType = arg->type()->llvmType();
+
+                  if (loadedType && loadedType->isPointerTy())
+                     indexAccessAlreadyValue = true;
+                  if (loadedType && argVal->getType()->isPointerTy() && arg->type()->kind() != TypeKind::Pointer && arg->type()->kind() != TypeKind::Reference && !indexAccessAlreadyValue)
+                     argVal = Builder->CreateLoad(loadedType, argVal, "arg.idxload");
+               }
+               llvm::Type* expectedParamType = nullptr;
+               if (function && i < function->arg_size())
+                  expectedParamType = function->getFunctionType()->getParamType(static_cast<unsigned>(i));
+               if (expectedParamType) {
+                  if (!expectedParamType->isPointerTy() && argVal->getType()->isPointerTy()) {
+                     argVal = Builder->CreateLoad(expectedParamType, argVal, "arg.load");
+                  }
+                  argVal = castToCommonType(argVal, expectedParamType);
+               } else {
+                  if (argVal->getType()->isPointerTy() && arg->type()->kind() != TypeKind::Pointer && arg->type()->kind() != TypeKind::Reference && arg->type()->kind() != TypeKind::Array && !indexAccessAlreadyValue) {
+                     argVal = Builder->CreateLoad(expressionValueTypeForCodegen(arg.get()), argVal, "arg.load");
+                  }
+               }
+               args.push_back(argVal);
+            }
+            setDebugLocationFor(this);
+            utils::debugLog("calling function with arguments: {}\n", argsTypes);
+            return Builder->CreateCall(function, args);
+         } break;
+         default:
+            return LogErrorV("unsupported member access type");
+      }
    }
-   // llvm::Value* MemberAccessAST::codegen() {
-   //    setDebugLocationFor(this);
-   //    llvm::Value* baseValue = _base->codegen();
-   //    if (!baseValue)
-   //       return LogErrorV("invalid base expression for member access");
-   //
-   //    std::shared_ptr<Type> baseType = _base->type();
-   //    if (!baseType)
-   //       return LogErrorV("invalid type for member access");
-   //
-   //    // Gestione del puntatore se '->'
-   //    if (_isArrow) {
-   //       if (baseType->kind() != TypeKind::Pointer)
-   //          return LogErrorV("operator '->' requires a pointer type");
-   //       baseType = static_cast<PointerTy*>(baseType.get())->pointee();
-   //       baseValue = Builder->CreateLoad(baseValue->getType(), baseValue, "deref");
-   //    }
-   //
-   //    if (baseType->kind() != TypeKind::Class)
-   //       return LogErrorV("member access requires a class type");
-   //
-   //    // Ricava il nome del membro
-   //    auto* memberVar = dynamic_cast<VariableExpressionAST*>(_member.get());
-   //    if (!memberVar)
-   //       return LogErrorV("member expression is not a variable");
-   //    const std::string& memberName = memberVar->name();
-   //
-   //    // Cerca la definizione della classe
-   //    auto it = std::find_if(allClasses.begin(), allClasses.end(), [&](const auto& c) { return c->name() == baseType->string(); });
-   //    if (it == allClasses.end())
-   //       return LogErrorV("class '" + baseType->string() + "' not found for member access");
-   //
-   //    // Cerca membro variabile
-   //    const auto& members = (*it)->members();
-   //    for (size_t i = 0; i < members.size(); ++i) {
-   //       const auto& member = members[i];
-   //       if (member->variable()->astType() == ASTType::VariableDeclaration) {
-   //          auto* varDecl = static_cast<VariableDeclarationAST*>(member->variable().get());
-   //          if (varDecl->name() == memberName) {
-   //             llvm::Value* indices[] = {Builder->getInt32(0), Builder->getInt32(static_cast<uint32_t>(i))};
-   //             llvm::Value* ptr = Builder->CreateGEP(baseValue->getType(), baseValue, indices, "memberptr");
-   //             if (_Type->kind() == TypeKind::Reference)
-   //                return ptr;
-   //             return Builder->CreateLoad(expressionValueTypeForCodegen(this), ptr, memberName);
-   //          }
-   //       }
-   //    }
-   //    // Cerca metodo
-   //    const auto& methods = (*it)->methods();
-   //    for (const auto& method : methods) {
-   //       if (method && method->method() && method->method()->prototype() && method->method()->prototype()->name() == memberName) {
-   //          llvm::Function* fn = TheModule->getFunction(method->method()->prototype()->mangledName());
-   //          if (!fn)
-   //             return LogErrorV("method '" + memberName + "' not found in module");
-   //          std::vector<llvm::Value*> args;
-   //          args.push_back(baseValue);
-   //          return Builder->CreateCall(fn, args, memberName);
-   //       }
-   //    }
-   //    return LogErrorV("member '" + memberName + "' not found in class '" + baseType->string() + "'");
-   // }
 
    llvm::Value* CallExpressionAST::codegen() {
       setDebugLocationFor(this);
@@ -2689,7 +2737,7 @@ export namespace tungsten {
          argsTypes += fullTypeString(arg->type());
          llvm::Value* argVal = arg->codegen();
          if (!argVal) {
-            utils::debugLog("arg[{}] codegen returned nullptr", i);
+            utils::debugLog("arg[{}] codegen returned nullptr\n", i);
             return nullptr;
          }
 

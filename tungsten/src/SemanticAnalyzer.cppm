@@ -159,6 +159,7 @@ namespace tungsten {
       bool _hasErrors{false};
       bool _allowUninitializedReferenceDecl{false};
       bool _isInsideClass{false};
+      std::string _currentClassName{};
    };
 
    //  ========================================== implementation ==========================================
@@ -574,6 +575,8 @@ namespace tungsten {
 
             return _logError(&var, "no variable '{}' found in {} '{}'", leaf, prefixKind.empty() ? "scope" : prefixKind, prefix);
          }
+         if (var.name() == "this"sv && _isInsideClass)
+            return var.setType(makePointer(makeClass(_currentClassName)));
 
          return _logError(&var, "unknown variable '{}'", var.name());
       }
@@ -676,10 +679,25 @@ namespace tungsten {
          CallExpressionAST* call = static_cast<CallExpressionAST*>(access.member().get());
          call->setCallee(baseType(access.base()->type()) + "-" + call->callee());
          utils::debugLog("calling function method: {}\n", call->callee());
+         for (auto& cls : _classes) {
+            if (cls->name() == baseType(access.base()->type())) {
+               bool found = false;
+               for (auto& method : cls->methods()) {
+                  if (method->method() && method->method()->prototype() && method->method()->prototype()->name() == call->callee()) {
+                     if (method->visibility() == Visibility::Private && (!_isInsideClass || _currentClassName != cls->name()))
+                        _logError(call, "cannot access private method '{}' from outside class '{}'", call->callee(), cls->name());
+                     found = true;
+                     break;
+                  }
+               }
+               if (!found) {
+                  _logError(call, "class '{}' has no method named '{}'", cls->name(), call->callee());
+               }
+               break;
+            }
+         }
+         // call->args().insert(call->args().begin(), access.base());
          call->accept(*this);
-
-         // TODO: add visibility checks
-
          access.setType(call->type());
          return;
       }
@@ -691,15 +709,15 @@ namespace tungsten {
             for (auto& member : cls->members()) {
                auto* varDecl = static_cast<VariableDeclarationAST*>(member->variable().get());
                if (varDecl->name() == var->name()) {
-                  if (member->visibility() == Visibility::Private && !_isInsideClass)
-                     _logError(var, "cannot access private member '{}' from outside class '{}'", var->name(), _fullExprLexeme(access.base().get()));
-                  access.setType(varDecl->type());
+                  if (member->visibility() == Visibility::Private && (!_isInsideClass || _currentClassName != cls->name()))
+                     _logError(var, "cannot access private member '{}' from outside class '{}'", var->name(), cls->name());
                   found = true;
+                  access.setType(varDecl->type());
                   break;
                }
             }
             if (!found) {
-               _logError(var, "class '{}' has no member named '{}'", baseType(access.base()->type()), var->name());
+               _logError(var, "class '{}' has no member named '{}'", cls->name(), var->name());
                access.setType(makeNullType());
             }
             break;
@@ -833,9 +851,17 @@ namespace tungsten {
             }
          }
       }
-      if (fun.name().find("-") != std::string::npos) {
-         _scopes.at(_currentScope)["this"] = {false, makeClass(fun.name().substr(0, fun.name().find("-")))}; // add implicit 'this' variable to class methods
+      bool hasReturn = false;
+      for (auto& stmnt : static_cast<BlockStatementAST*>(fun.body().get())->statements()) {
+         if (stmnt && stmnt->astType() == ASTType::ReturnStatement) {
+            hasReturn = true;
+            break;
+         }
       }
+      if (!hasReturn && fun.prototype() && fun.prototype()->type()->kind() != TypeKind::Void) {
+         _logError(fun.prototype().get(), "function '{}' is defined as '{}' but does not return anything", fun.name(), fullTypeString(fun.prototype()->type()));
+      }
+
       if (fun.body())
          fun.body()->accept(*this);
       else
@@ -863,6 +889,28 @@ namespace tungsten {
             overloads.push_back(over);
          }
       }
+      if (overloads.empty()) {
+         if (call.callee().find("-") != std::string::npos) {
+            auto name = call.callee().substr(0, call.callee().find("-"));
+            auto method = call.callee().substr(call.callee().find("-") + 1);
+            for (auto& cls : _classes) {
+               if (cls->name() == name) {
+                  for (auto& fun : cls->methods()) {
+                     if (fun->method() && fun->method()->prototype() && fun->method()->prototype()->name() == call.callee()) {
+                        Overload over;
+                        over.type = fun->method()->prototype()->type();
+                        for (auto& arg : fun->method()->prototype()->args()) {
+                           auto cast = static_cast<VariableDeclarationAST*>(arg.get());
+                           over.args.push_back(cast->type());
+                        }
+                        overloads.push_back(over);
+                     }
+                  }
+               }
+            }
+         }
+      }
+
 
       auto sameOverload = [](const Overload& lhs, const Overload& rhs) {
          if (fullTypeString(lhs.type) != fullTypeString(rhs.type))
@@ -1270,17 +1318,25 @@ namespace tungsten {
          _hasErrors = true;
          return;
       }
-      method.method()->prototype()->setName(method.parent()->name() + "-" + method.method()->prototype()->name());
-
       _pushScope(); // pushing a new scope for the args declaration
       if (method.method()->prototype())
          method.method()->prototype()->accept(*this);
       else
          _hasErrors = true;
 
-      if (method.method()->body())
+      if (method.method()->body()) {
          method.method()->body()->accept(*this);
-      else
+         bool hasReturn = false;
+         for (auto& stmnt : static_cast<BlockStatementAST*>(method.method()->body().get())->statements()) {
+            if (stmnt && stmnt->astType() == ASTType::ReturnStatement) {
+               hasReturn = true;
+               break;
+            }
+         }
+         if (!hasReturn && method.method()->prototype() && method.method()->prototype()->type()->kind() != TypeKind::Void) {
+            _logError(method.method()->prototype().get(), "method '{}' is defined as '{}' but does not return anything in class {}", method.method()->name(), fullTypeString(method.method()->type()), method.parent()->name());
+         }
+      } else
          _hasErrors = true;
 
       _popScope();
@@ -1301,7 +1357,6 @@ namespace tungsten {
          _hasErrors = true;
          return;
       }
-      ctor.constructor()->prototype()->setName(ctor.parent()->name() + "-constructor");
       _pushScope();
 
       if (ctor.constructor()->prototype())
@@ -1325,7 +1380,6 @@ namespace tungsten {
       if (dtor.destructor()->args().size() > 1)
          _logError(dtor.destructor()->args().at(0).get(), "destructors cannot have arguments");
 
-      dtor.destructor()->prototype()->setName(dtor.parent()->name() + "-" + dtor.destructor()->prototype()->name());
       _pushScope();
 
       if (dtor.destructor()->prototype())
@@ -1345,6 +1399,8 @@ namespace tungsten {
    }
    void SemanticAnalyzer::visit(ClassAST& cls) {
       _isInsideClass = true;
+      std::string oldClass = _currentClassName;
+      _currentClassName = cls.name();
       const std::string existingKind = _symbolKindForName(cls.name());
       if (!existingKind.empty() && existingKind != "class")
          _logError("{} with name '{}' already exists", existingKind, cls.name());
@@ -1352,13 +1408,17 @@ namespace tungsten {
          if (cls.hasErrors())
             _hasErrors = true;
       _pushScope(); // pushing a new scope for the local variables
+
       for (auto& ctor : cls.constructors()) {
          ctor->setParent(&cls);
+         ctor->constructor()->prototype()->setName(cls.name() + "-" + ctor->constructor()->name());
       }
       for (auto& method : cls.methods()) {
          method->setParent(&cls);
+         method->method()->prototype()->setName(cls.name() + "-" + method->method()->name());
       }
       cls.destructor()->setParent(&cls);
+      cls.destructor()->destructor()->prototype()->setName(cls.name() + "-" + cls.destructor()->destructor()->name());
 
       for (auto& var : cls.members()) {
          if (var)
@@ -1368,40 +1428,7 @@ namespace tungsten {
       }
 
       for (auto& ctor : cls.constructors()) {
-         // _pushScope();
-         // if (!ctor || !ctor->constructor() || !ctor->constructor()->prototype()) {
-         //    _hasErrors = true;
-         //    continue;
-         // }
-         // std::string ctorName = cls.name() + "-constructor";
-         // Overload over;
-         // over.type = makeVoid();
-         // for (const auto& arg : ctor->constructor()->args()) {
-         //    over.args.push_back(arg->type());
-         // }
-         // // check for duplicate and overloads
-         // auto& overloads = _declaredFunctions[ctorName];
-         //
-         // bool duplicate = false;
-         // for (auto& existing : overloads) {
-         //    if (_hasSameSignature(over, existing)) {
-         //       _logError(ctor->constructor()->prototype().get(), "constructor with signature already exists in class '{}'", cls.name());
-         //       _hasErrors = true;
-         //       duplicate = true;
-         //       break;
-         //    }
-         //    if (_hasSameParams(over, existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
-         //       _logError(ctor->constructor()->prototype().get(), "constructor with same parameters but different return type already exists in class '{}'", cls.name());
-         //       _hasErrors = true;
-         //       duplicate = true;
-         //       break;
-         //    }
-         // }
-         // if (duplicate)
-         //    continue;
-         // overloads.push_back(over);
          ctor->accept(*this);
-         // _popScope();
       }
 
       if (cls.destructor())
@@ -1410,47 +1437,9 @@ namespace tungsten {
          _hasErrors = true;
 
       for (auto& fun : cls.methods()) {
-         // if (!fun || !fun->method() || !fun->method()->prototype()) {
-         //    _hasErrors = true;
-         //    continue;
-         // }
-         // _pushScope();
-         // std::string methodName = cls.name() + "-" + fun->method()->prototype()->name();
-         // Overload over;
-         // over.type = fun->method()->prototype()->type();
-         // _allowUninitializedReferenceDecl = true;
-         // for (auto& arg : fun->method()->prototype()->args()) {
-         //    if (!arg) {
-         //       _hasErrors = true;
-         //       continue;
-         //    }
-         //    auto* cast = static_cast<VariableDeclarationAST*>(arg.get());
-         //    cast->accept(*this);
-         //    over.args.push_back(cast->type());
-         // }
-         // _allowUninitializedReferenceDecl = false;
-         // auto& overloads = _declaredFunctions[methodName];
-         //
-         // bool duplicate = false;
-         // for (auto& existing : overloads) {
-         //    if (_hasSameSignature(over, existing)) {
-         //       _logError(fun->method()->prototype().get(), "method '{}' with the same signature already exists", fun->method()->prototype()->name());
-         //       _hasErrors = true;
-         //       duplicate = true;
-         //       break;
-         //    }
-         //    if (_hasSameParams(over, existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
-         //       _logError(fun->method()->prototype().get(), "method '{}' with same parameters but different return type already exists", fun->method()->prototype()->name());
-         //       _hasErrors = true;
-         //       duplicate = true;
-         //       break;
-         //    }
-         // }
-         // if (duplicate)
-         //    continue;
-         // overloads.push_back(over);
          fun->accept(*this);
-         // _popScope();
+         if (!fun->isStatic())
+            fun->method()->args().insert(fun->method()->args().begin(), std::make_unique<VariableDeclarationAST>(makePointer(makeClass(cls.name())), "this", nullptr, false));
       }
 
       _popScope(); // pop of class scope for local variables
@@ -1461,6 +1450,7 @@ namespace tungsten {
       }
       utils::debugLog("declared class: class {}, with members of type: {{{}}}", cls.name(), types);
       _isInsideClass = false;
+      _currentClassName = oldClass;
    }
 
    bool SemanticAnalyzer::_isSignedType(const std::string& type) {

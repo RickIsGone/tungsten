@@ -762,7 +762,8 @@ namespace tungsten {
                _logError("expected identifier after '" + _lexeme(opToken) + "'");
                return nullptr;
             }
-            std::string memberName = _lexeme(_peek());
+            const Token identTok = _peek();
+            std::string memberName = _lexeme(identTok);
             _consume(); // consume identifier
             std::unique_ptr<ExpressionAST> memberExpr;
             if (_peek().type == TokenType::OpenParen) {
@@ -778,9 +779,9 @@ namespace tungsten {
                if (_peek().type == TokenType::EndOFFile)
                   return _logError<ExpressionAST>("expected ')' after function call");
                _consume(); // consume ')'
-               memberExpr = std::make_unique<CallExpressionAST>(memberName, std::move(args));
+               memberExpr = _setSource(std::make_unique<CallExpressionAST>(memberName, std::move(args)), identTok);
             } else
-               memberExpr = std::make_unique<VariableExpressionAST>(memberName);
+               memberExpr = _setSource(std::make_unique<VariableExpressionAST>(memberName), identTok);
 
             lhs = std::make_unique<MemberAccessAST>(std::move(lhs), std::move(memberExpr), opToken.type == TokenType::Arrow);
             lhs->setSource(opToken.position, opToken.length, _line(opToken), _column(opToken));
