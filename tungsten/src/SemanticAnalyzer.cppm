@@ -778,9 +778,20 @@ namespace tungsten {
 
       for (auto& existing : overloads) {
          if (_hasSameSignature(over, existing)) {
+            if (proto.name().find("-") != std::string::npos) {
+               auto cls = proto.name().substr(0, proto.name().find("-"));
+               auto method = proto.name().substr(proto.name().find("-") + 1);
+               bool isConstructorOrDestructor = method == "constructor"sv || method == "destructor"sv;
+               return _logError(&proto, "redefinition of {} {} in class '{}'", isConstructorOrDestructor ? method : "method", isConstructorOrDestructor ? "" : "'" + method + "'", cls);
+            }
             return _logError(&proto, "function '{}' with the same signature already exists", proto.name());
          }
          if (_hasSameParams(over, existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
+            if (proto.name().find("-") != std::string::npos) {
+               auto cls = proto.name().substr(0, proto.name().find("-"));
+               auto method = proto.name().substr(proto.name().find("-") + 1);
+               return _logError(&proto, "method '{}' with same parameters but different return type already exists in class '{}'", method, cls);
+            }
             return _logError(&proto, "function '{}' with same parameters but different return type already exists", proto.name());
          }
       }
@@ -1259,6 +1270,8 @@ namespace tungsten {
          _hasErrors = true;
          return;
       }
+      method.method()->prototype()->setName(method.parent()->name() + "-" + method.method()->prototype()->name());
+
       _pushScope(); // pushing a new scope for the args declaration
       if (method.method()->prototype())
          method.method()->prototype()->accept(*this);
@@ -1288,12 +1301,12 @@ namespace tungsten {
          _hasErrors = true;
          return;
       }
+      ctor.constructor()->prototype()->setName(ctor.parent()->name() + "-constructor");
       _pushScope();
 
-      if (ctor.constructor()->prototype()) {
-         utils::debugLog(ctor.constructor()->prototype()->name());
+      if (ctor.constructor()->prototype())
          ctor.constructor()->prototype()->accept(*this);
-      } else
+      else
          _hasErrors = true;
 
       if (ctor.constructor()->body())
@@ -1312,7 +1325,13 @@ namespace tungsten {
       if (dtor.destructor()->args().size() > 1)
          _logError(dtor.destructor()->args().at(0).get(), "destructors cannot have arguments");
 
+      dtor.destructor()->prototype()->setName(dtor.parent()->name() + "-" + dtor.destructor()->prototype()->name());
       _pushScope();
+
+      if (dtor.destructor()->prototype())
+         dtor.destructor()->prototype()->accept(*this);
+      else
+         _hasErrors = true;
 
       if (dtor.destructor()->body())
          dtor.destructor()->body()->accept(*this);
@@ -1333,6 +1352,13 @@ namespace tungsten {
          if (cls.hasErrors())
             _hasErrors = true;
       _pushScope(); // pushing a new scope for the local variables
+      for (auto& ctor : cls.constructors()) {
+         ctor->setParent(&cls);
+      }
+      for (auto& method : cls.methods()) {
+         method->setParent(&cls);
+      }
+      cls.destructor()->setParent(&cls);
 
       for (auto& var : cls.members()) {
          if (var)
@@ -1342,38 +1368,40 @@ namespace tungsten {
       }
 
       for (auto& ctor : cls.constructors()) {
-         if (!ctor || !ctor->constructor() || !ctor->constructor()->prototype()) {
-            _hasErrors = true;
-            continue;
-         }
-         std::string ctorName = cls.name() + "-constructor";
-         Overload over;
-         over.type = makeVoid();
-         for (const auto& arg : ctor->constructor()->args()) {
-            over.args.push_back(arg->type());
-         }
-         // check for duplicate and overloads
-         auto& overloads = _declaredFunctions[ctorName];
-
-         bool duplicate = false;
-         for (auto& existing : overloads) {
-            if (_hasSameSignature(over, existing)) {
-               _logError(ctor->constructor()->prototype().get(), "constructor with signature already exists in class '{}'", cls.name());
-               _hasErrors = true;
-               duplicate = true;
-               break;
-            }
-            if (_hasSameParams(over, existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
-               _logError(ctor->constructor()->prototype().get(), "constructor with same parameters but different return type already exists in class '{}'", cls.name());
-               _hasErrors = true;
-               duplicate = true;
-               break;
-            }
-         }
-         if (duplicate)
-            continue;
-         overloads.push_back(over);
+         // _pushScope();
+         // if (!ctor || !ctor->constructor() || !ctor->constructor()->prototype()) {
+         //    _hasErrors = true;
+         //    continue;
+         // }
+         // std::string ctorName = cls.name() + "-constructor";
+         // Overload over;
+         // over.type = makeVoid();
+         // for (const auto& arg : ctor->constructor()->args()) {
+         //    over.args.push_back(arg->type());
+         // }
+         // // check for duplicate and overloads
+         // auto& overloads = _declaredFunctions[ctorName];
+         //
+         // bool duplicate = false;
+         // for (auto& existing : overloads) {
+         //    if (_hasSameSignature(over, existing)) {
+         //       _logError(ctor->constructor()->prototype().get(), "constructor with signature already exists in class '{}'", cls.name());
+         //       _hasErrors = true;
+         //       duplicate = true;
+         //       break;
+         //    }
+         //    if (_hasSameParams(over, existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
+         //       _logError(ctor->constructor()->prototype().get(), "constructor with same parameters but different return type already exists in class '{}'", cls.name());
+         //       _hasErrors = true;
+         //       duplicate = true;
+         //       break;
+         //    }
+         // }
+         // if (duplicate)
+         //    continue;
+         // overloads.push_back(over);
          ctor->accept(*this);
+         // _popScope();
       }
 
       if (cls.destructor())
@@ -1382,47 +1410,47 @@ namespace tungsten {
          _hasErrors = true;
 
       for (auto& fun : cls.methods()) {
-         if (!fun || !fun->method() || !fun->method()->prototype()) {
-            _hasErrors = true;
-            continue;
-         }
-         _pushScope();
-         std::string methodName = cls.name() + "-" + fun->method()->prototype()->name();
-         Overload over;
-         over.type = fun->method()->prototype()->type();
-         _allowUninitializedReferenceDecl = true;
-         for (auto& arg : fun->method()->prototype()->args()) {
-            if (!arg) {
-               _hasErrors = true;
-               continue;
-            }
-            auto* cast = static_cast<VariableDeclarationAST*>(arg.get());
-            cast->accept(*this);
-            over.args.push_back(cast->type());
-         }
-         _allowUninitializedReferenceDecl = false;
-         auto& overloads = _declaredFunctions[methodName];
-
-         bool duplicate = false;
-         for (auto& existing : overloads) {
-            if (_hasSameSignature(over, existing)) {
-               _logError(fun->method()->prototype().get(), "method '{}' with the same signature already exists", fun->method()->prototype()->name());
-               _hasErrors = true;
-               duplicate = true;
-               break;
-            }
-            if (_hasSameParams(over, existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
-               _logError(fun->method()->prototype().get(), "method '{}' with same parameters but different return type already exists", fun->method()->prototype()->name());
-               _hasErrors = true;
-               duplicate = true;
-               break;
-            }
-         }
-         if (duplicate)
-            continue;
-         overloads.push_back(over);
+         // if (!fun || !fun->method() || !fun->method()->prototype()) {
+         //    _hasErrors = true;
+         //    continue;
+         // }
+         // _pushScope();
+         // std::string methodName = cls.name() + "-" + fun->method()->prototype()->name();
+         // Overload over;
+         // over.type = fun->method()->prototype()->type();
+         // _allowUninitializedReferenceDecl = true;
+         // for (auto& arg : fun->method()->prototype()->args()) {
+         //    if (!arg) {
+         //       _hasErrors = true;
+         //       continue;
+         //    }
+         //    auto* cast = static_cast<VariableDeclarationAST*>(arg.get());
+         //    cast->accept(*this);
+         //    over.args.push_back(cast->type());
+         // }
+         // _allowUninitializedReferenceDecl = false;
+         // auto& overloads = _declaredFunctions[methodName];
+         //
+         // bool duplicate = false;
+         // for (auto& existing : overloads) {
+         //    if (_hasSameSignature(over, existing)) {
+         //       _logError(fun->method()->prototype().get(), "method '{}' with the same signature already exists", fun->method()->prototype()->name());
+         //       _hasErrors = true;
+         //       duplicate = true;
+         //       break;
+         //    }
+         //    if (_hasSameParams(over, existing) && fullTypeString(existing.type) != fullTypeString(over.type)) {
+         //       _logError(fun->method()->prototype().get(), "method '{}' with same parameters but different return type already exists", fun->method()->prototype()->name());
+         //       _hasErrors = true;
+         //       duplicate = true;
+         //       break;
+         //    }
+         // }
+         // if (duplicate)
+         //    continue;
+         // overloads.push_back(over);
          fun->accept(*this);
-         _popScope();
+         // _popScope();
       }
 
       _popScope(); // pop of class scope for local variables
@@ -2081,6 +2109,8 @@ namespace tungsten {
       return true;
    }
    bool SemanticAnalyzer::_hasSameSignature(const Overload& fun, const Overload& over) {
+      if (fullTypeString(over.type) != fullTypeString(fun.type))
+         return false;
       bool oVariadic = !over.args.empty() && over.args.back()->kind() == TypeKind::ArgPack;
       bool overVariadic = !fun.args.empty() && fun.args.back()->kind() == TypeKind::ArgPack;
       if (!oVariadic && !overVariadic && over.args.size() != fun.args.size()) return false;

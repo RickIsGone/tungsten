@@ -670,7 +670,7 @@ namespace tungsten {
                   return _logError<ClassAST>("expected '{' after '" + _lexeme(_peekBack()) + "'");
 
                auto body = _parseBlock();
-               auto proto = _setSource(std::make_unique<FunctionPrototypeAST>(makeVoid(), name, std::move(args)), tok);
+               auto proto = _setSource(std::make_unique<FunctionPrototypeAST>(makeVoid(), kind, std::move(args)), tok);
                auto fun = std::make_unique<FunctionAST>(std::move(proto), std::move(body));
                if (kind == "constructor") {
                   if (isStatic) {
@@ -1765,7 +1765,6 @@ namespace tungsten {
             continue;
          }
          args.push_back(std::move(arg));
-         // utils::debugLog("argument {}: {}", args.size(), _lexeme(tok));
          if (_peek().type == TokenType::Comma)
             _consume(); // consume ,
          else if (_peek().type != TokenType::CloseParen)

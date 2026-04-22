@@ -1898,8 +1898,9 @@ export namespace tungsten {
    }
 
    llvm::Value* VariableExpressionAST::codegen() {
-      if (!NamedValues.contains(_name) || !NamedValues[_name])
+      if (!NamedValues.contains(_name) || !NamedValues[_name]) {
          return LogErrorV("unknown variable: '" + _name + "'");
+      }
 
       return NamedValues[_name];
    }
@@ -3294,11 +3295,11 @@ export namespace tungsten {
       size_t idx = 0;
       bool addedThis{false};
       for (auto& arg : function->args()) {
-         if (!addedThis && function->getName().find("-") != std::string::npos && function->getName().find("constructor") == std::string::npos && function->getName().find("destructor") == std::string::npos) { // if class method
+         if (!addedThis && function->getName().find("-") != std::string::npos && !function->getName().ends_with("-constructor") && !function->getName().ends_with("-destructor")) { // if class method
             NamedValues["this"] = &function->args().begin()[0];
             VariableTypes["this"] = Builder->getPtrTy();
             addedThis = true;
-            continue;
+            // continue;
          }
          auto* varDecl = static_cast<VariableDeclarationAST*>(_prototype->args()[idx].get());
          if (varDecl->type()->kind() == TypeKind::Reference) {
@@ -3375,8 +3376,8 @@ export namespace tungsten {
             Builder->CreateRet(Builder->getInt32(0)); // returning 0 by default in main function
          else {
             const std::string funcName = name();
-            const bool isConstructor = funcName.find("-constructor") != std::string::npos;
-            const bool isDestructor = funcName.find("-destructor") != std::string::npos;
+            const bool isConstructor = funcName.ends_with("-constructor");
+            const bool isDestructor = funcName.ends_with("-destructor");
 
             if (isConstructor || isDestructor) {
                Builder->CreateRet(llvm::Constant::getNullValue(Builder->getVoidTy()));
