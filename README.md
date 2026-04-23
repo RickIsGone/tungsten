@@ -173,6 +173,9 @@ are written in **PascalCase**
 
 Tungsten has also a variadic type called `argPack` which is just like `...` in C
 
+> [!NOTE]
+> all variables are initialized to 0 by default and pointers are initialized to nullptr
+
 ### Stack allocation
 
 ```rust
@@ -191,6 +194,8 @@ To free the pointer:
 ```c++
 free myPointer;
 ```
+
+free also sets the address pointed by the pointer to `nullptr`
 
 > [!WARNING]
 > Tungsten doesn't have a garbage collector so you have to manually free the pointers
@@ -216,7 +221,6 @@ free myArray;
 ```
 
 this works for both normal and multidimensional arrays.
-free also sets the address pointed by the pointer to `nullptr`
 
 ## References
 
@@ -392,6 +396,59 @@ namespace std {
 }
 fun std::b() -> void {}
 ```
+
+## Classes
+
+Tungsten also has classes and they are declared like this:
+
+```cpp
+class Foo {
+   constructor() {}
+   constructor(int init) {this->_member = init}
+   constructor(const Foo& other) {}
+
+   destructor() {}
+   
+   fun member() -> int { ret this->_member; }
+
+private:
+   int _member;
+}
+```
+
+### Member access  
+
+```cpp
+fun member() -> int { ret this->_member; }
+```
+
+As shown here, to access members of the class you need to use the `this` pointer
+
+### Default visibility  
+
+Rather than being private by default like in C++, Tungsten classes are public
+
+### Constructors and destructor
+
+```cpp
+constructor() {}
+constructor(int init) {this->_member = init}
+constructor(const Foo& other) {}
+destructor() {}
+```
+
+Constructors are automatically invoked when creating an object, even if no explicit initialization braces are provided:
+
+```cpp
+Foo foo;
+Foo foo{};
+```
+
+Both forms will call the default constructor.
+
+#### Default constructors and destructor
+
+If no default constructor, copy constructor, or destructor is explicitly defined, the compiler will automatically generate them.
 
 ## Building a project
 
