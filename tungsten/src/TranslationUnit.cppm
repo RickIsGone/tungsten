@@ -2,6 +2,7 @@ module;
 
 #include <algorithm>
 #include <filesystem>
+#include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -68,6 +69,11 @@ namespace tungsten {
       if (analyzer.analyze()) {
          for (auto& cls : parser.classes()) {
             forwardDeclareClass(cls);
+            std::vector<std::string> methods{};
+            for (auto& member : cls->members()) {
+               methods.push_back(static_cast<VariableDeclarationAST*>(member->variable().get())->name());
+            }
+            populateClassMembers(cls->name(), methods);
          }
          for (auto& var : parser.externs()->variables) {
             var->codegen();

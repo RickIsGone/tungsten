@@ -51,6 +51,7 @@ namespace tungsten {
 
    std::unordered_map<std::string, llvm::Value*> NamedValues{};
    std::unordered_map<std::string, llvm::Type*> VariableTypes{};
+   std::unordered_map<std::string, std::vector<std::string>> ClassMemberNames;
    struct ClassScopeCleanupEntry {
       std::string className;
       llvm::Value* storage;
@@ -296,6 +297,9 @@ namespace tungsten {
 } // namespace tungsten
 
 export namespace tungsten {
+   void populateClassMembers(std::string cls, std::vector<std::string>& members) {
+      ClassMemberNames[cls] = members;
+   }
    void addCoreLibFunctions();
    void initLLVM(const std::string& moduleName, const std::string& fileName, const CompileOptions& CO) {
       TheContext = std::make_unique<llvm::LLVMContext>();
@@ -2603,6 +2607,36 @@ export namespace tungsten {
             auto* varExpr = static_cast<VariableExpressionAST*>(_member.get());
             const std::string memberName = varExpr->name();
 
+            auto baseTy = _base->type();
+            if (!baseTy || baseTy->kind() != TypeKind::Pointer) {
+               return LogErrorV("member access base is not a pointer type");
+            }
+            auto* ptrTy = static_cast<PointerTy*>(baseTy.get());
+            auto classTy = ptrTy->pointee();
+            if (!classTy || classTy->kind() != TypeKind::Class) {
+               return LogErrorV("member access base is not a class type");
+            }
+            std::string structName = classTy->string();
+            llvm::StructType* structTy = llvm::StructType::getTypeByName(*TheContext, structName);
+            if (!structTy) {
+               return LogErrorV("LLVM struct type '" + structName + "' not found");
+            }
+            if (!ClassMemberNames.contains(structName)) {
+               return LogErrorV("no member info for class '" + structName + "'");
+            }
+            const auto& memberList = ClassMemberNames.at(structName);
+            int memberIndex = -1;
+            for (size_t i = 0; i < memberList.size(); ++i) {
+               if (memberList[i] == memberName) {
+                  memberIndex = static_cast<int>(i);
+                  break;
+               }
+            }
+            if (memberIndex == -1) {
+               return LogErrorV("member '" + memberName + "' not found in class '" + structName + "'");
+            }
+            llvm::Value* memberPtr = Builder->CreateStructGEP(structTy, base, memberIndex);
+            return Builder->CreateLoad(structTy->getElementType(memberIndex), memberPtr, memberName);
          } break;
 
          case ASTType::CallExpression: {
