@@ -1277,7 +1277,7 @@ namespace tungsten {
       std::string op = _lexeme(_peek());
       _consume(); // consume operator
 
-      std::unique_ptr<ExpressionAST> operand = _parsePrimaryExpression();
+      std::unique_ptr<ExpressionAST> operand = _parseExpression();
       if (!operand)
          return nullptr;
 
