@@ -1918,101 +1918,75 @@ export namespace tungsten {
 
    llvm::Value* UnaryExpressionAST::codegen() {
       setDebugLocationFor(this);
-      llvm::Value* operandValue = _operand->codegen();
-      if (!operandValue)
+      llvm::Value* operandAddr = _operand->codegen();
+      if (!operandAddr)
          return nullptr;
 
-      llvm::Value* result;
-
-      if (_op == "++"sv || _op == "--"sv) {
-         llvm::Value* targetAddr = operandValue;
-
-         llvm::Type* loadType = _operand->type()->llvmType();
-         if (_operand->type()->kind() == TypeKind::Reference)
-            loadType = static_cast<ReferenceTy*>(_operand->type().get())->reference()->llvmType();
-         else if (_operand->astType() == ASTType::VariableExpression)
-            loadType = VariableTypes[static_cast<VariableExpressionAST*>(_operand.get())->name()];
-
-         if (_operand->astType() == ASTType::UnaryExpression &&
-             static_cast<UnaryExpressionAST*>(_operand.get())->op() == "*"sv) {
-            auto& derefOperand = static_cast<UnaryExpressionAST*>(_operand.get())->operand();
-            if (derefOperand &&
-                (derefOperand->astType() == ASTType::VariableExpression ||
-                 derefOperand->type()->kind() == TypeKind::Reference)) {
-               llvm::Type* pointerValueType = derefOperand->type()->llvmType();
-               targetAddr = Builder->CreateLoad(pointerValueType, targetAddr, targetAddr->getName() + ".deref");
-            }
-         }
-
-         llvm::Value* loadedOperand = Builder->CreateLoad(loadType, targetAddr, targetAddr->getName() + ".load");
-         llvm::Type* operandType = loadedOperand->getType();
-
-         if (_op == "++"sv) {
-            if (operandType->isIntegerTy())
-               result = Builder->CreateAdd(loadedOperand, llvm::ConstantInt::get(operandType, 1), "increment");
-            else if (operandType->isFloatingPointTy())
-               result = Builder->CreateFAdd(loadedOperand, llvm::ConstantFP::get(operandType, 1.0), "increment");
-            else
-               return LogErrorV("unsupported type for increment operation");
-
-            Builder->CreateStore(result, targetAddr);
-
-            if (_operand->astType() == ASTType::VariableExpression)
-               emitDbgValueForVariableName(static_cast<VariableExpressionAST*>(_operand.get())->name(), result, this);
-
-            return result;
-         }
-
-         if (operandType->isIntegerTy())
-            result = Builder->CreateSub(loadedOperand, llvm::ConstantInt::get(operandType, 1), "decrement");
-         else if (operandType->isFloatingPointTy())
-            result = Builder->CreateFSub(loadedOperand, llvm::ConstantFP::get(operandType, 1.0), "decrement");
-         else
-            return LogErrorV("unsupported type for decrement operation");
-
-         Builder->CreateStore(result, targetAddr);
-
-         if (_operand->astType() == ASTType::VariableExpression)
-            emitDbgValueForVariableName(static_cast<VariableExpressionAST*>(_operand.get())->name(), result, this);
-
-         return result;
-      }
-
-      llvm::Type* operandType = operandValue->getType();
-
-      if (_op == "!"sv) {
-         if (operandType->isIntegerTy())
-            return Builder->CreateICmpEQ(operandValue, llvm::ConstantInt::get(operandType, 0), "nottmp");
-
-         if (operandType->isFloatingPointTy())
-            return Builder->CreateFCmpOEQ(operandValue, llvm::ConstantFP::get(operandType, 0.0), "nottmp");
-
-         if (operandType->isPointerTy())
-            return Builder->CreateICmpEQ(operandValue, llvm::Constant::getNullValue(operandType), "nottmp");
-
-         return LogErrorV("unsupported type for logical not operation");
-      }
-
       if (_op == "&"sv) {
-         if (_operand->astType() == ASTType::VariableExpression)
-            return NamedValues[static_cast<VariableExpressionAST*>(_operand.get())->name()];
+         if (_operand->isLValue())
+            return operandAddr;
          return LogErrorV("cannot take address of rvalue");
       }
 
       if (_op == "*"sv) {
-         if (!operandValue->getType()->isPointerTy())
+         if (!operandAddr->getType()->isPointerTy())
             return LogErrorV("cannot dereference non-pointer");
-
-         return Builder->CreateLoad(static_cast<PointerTy*>(_operand->type().get())->pointee()->llvmType(), operandValue, operandValue->getName() + ".deref");
+         auto* ptrTy = static_cast<PointerTy*>(_operand->type().get());
+         return Builder->CreateLoad(ptrTy->pointee()->llvmType(), operandAddr, operandAddr->getName() + ".deref");
       }
 
-      // _op == '-'
-      if (operandType->isIntegerTy())
-         return Builder->CreateNeg(operandValue, "negtmp");
-      if (operandType->isFloatingPointTy())
-         return Builder->CreateFNeg(operandValue, "negtmp");
+      if (_op == "++"sv || _op == "--"sv) {
+         llvm::Value* targetAddr = operandAddr;
+         llvm::Type* valueType = _operand->type()->llvmType();
+         if (_operand->type()->kind() == TypeKind::Reference)
+            valueType = static_cast<ReferenceTy*>(_operand->type().get())->reference()->llvmType();
 
-      return LogErrorV("unsupported type for unary operation");
+         llvm::Value* loadedValue = targetAddr;
+         if (targetAddr->getType()->isPointerTy() && _operand->type()->kind() != TypeKind::Pointer)
+            loadedValue = Builder->CreateLoad(valueType, targetAddr, targetAddr->getName() + ".load");
+
+         llvm::Value* result = nullptr;
+         if (_op == "++"sv) {
+            if (loadedValue->getType()->isIntegerTy())
+               result = Builder->CreateAdd(loadedValue, llvm::ConstantInt::get(loadedValue->getType(), 1), loadedValue->getName() + ".inc");
+            else if (loadedValue->getType()->isFloatingPointTy())
+               result = Builder->CreateFAdd(loadedValue, llvm::ConstantFP::get(loadedValue->getType(), 1.0), loadedValue->getName() + ".inc");
+            else
+               return LogErrorV("unsupported type for increment operation");
+         } else {
+            if (loadedValue->getType()->isIntegerTy())
+               result = Builder->CreateSub(loadedValue, llvm::ConstantInt::get(loadedValue->getType(), 1), "decrement");
+            else if (loadedValue->getType()->isFloatingPointTy())
+               result = Builder->CreateFSub(loadedValue, llvm::ConstantFP::get(loadedValue->getType(), 1.0), "decrement");
+            else
+               return LogErrorV("unsupported type for decrement operation");
+         }
+         Builder->CreateStore(result, targetAddr);
+         if (_operand->astType() == ASTType::VariableExpression)
+            emitDbgValueForVariableName(static_cast<VariableExpressionAST*>(_operand.get())->name(), result, this);
+         return result;
+      }
+
+      llvm::Type* operandType = operandAddr->getType();
+      if (_op == "!"sv) {
+         if (operandType->isIntegerTy())
+            return Builder->CreateICmpEQ(operandAddr, llvm::ConstantInt::get(operandType, 0), "nottmp");
+         if (operandType->isFloatingPointTy())
+            return Builder->CreateFCmpOEQ(operandAddr, llvm::ConstantFP::get(operandType, 0.0), "nottmp");
+         if (operandType->isPointerTy())
+            return Builder->CreateICmpEQ(operandAddr, llvm::Constant::getNullValue(operandType), "nottmp");
+         return LogErrorV("unsupported type for logical not operation");
+      }
+
+      if (_op == "-"sv) {
+         if (operandType->isIntegerTy())
+            return Builder->CreateNeg(operandAddr, "negtmp");
+         if (operandType->isFloatingPointTy())
+            return Builder->CreateFNeg(operandAddr, "negtmp");
+         return LogErrorV("unsupported type for unary minus operation");
+      }
+
+      return LogErrorV("unsupported unary operator: '" + std::string(_op) + "'");
    }
 
    llvm::Value* loadIfPointer(llvm::Value* val, llvm::Type* ty, const std::string& name) {
@@ -2231,13 +2205,6 @@ export namespace tungsten {
             auto* refTy = static_cast<ReferenceTy*>(_LHS->type().get());
             targetAddr = LHS;
             lhsValueType = refTy->reference()->llvmType();
-         } else if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*"sv) {
-            // auto& derefOperand = static_cast<UnaryExpressionAST*>(_LHS.get())->operand();
-            // if (!derefOperand)
-            //    return LogErrorV("invalid dereference target");
-
-            // llvm::Type* pointerValueType = derefOperand->type()->llvmType();
-            // targetAddr = Builder->CreateLoad(pointerValueType, LHS, LHS->getName() + ".deref");
          }
 
          if (_LHS->type()->kind() == TypeKind::Pointer && _LHS->astType() != ASTType::UnaryExpression) {
@@ -2288,6 +2255,13 @@ export namespace tungsten {
          llvm::Value* loadedL = nullptr;
          llvm::Value* loadedR = nullptr;
 
+
+         if (!targetAddr->getType()->isPointerTy()) {
+            llvm::AllocaInst* tmp = Builder->CreateAlloca(lhsValueType);
+            Builder->CreateStore(targetAddr, tmp);
+            targetAddr = tmp;
+         }
+
          if (_op == "="sv) {
             loadedR = RHS;
             if (_RHS->astType() != ASTType::IndexAccessExpression && loadedR->getType()->isPointerTy())
@@ -2330,30 +2304,22 @@ export namespace tungsten {
          if (!result)
             return LogErrorV("unsupported types for compound assignment operator '" + _op + "'");
 
-         if (!targetAddr->getType()->isPointerTy())
-            utils::debugLog("LHS of assignment is a value instead of a pointer");
          Builder->CreateStore(result, targetAddr);
          if (_LHS->astType() == ASTType::VariableExpression)
             emitDbgValueForVariableName(static_cast<VariableExpressionAST*>(_LHS.get())->name(), result, this);
          return result;
       }
 
-      llvm::Value* loadedL = loadIfPointer(LHS, lhsValueType, "lval");
-      llvm::Value* loadedR = loadIfPointer(RHS, rhsValueType, "rval");
+      llvm::Value* loadedL = nullptr;
+      llvm::Value* loadedR = nullptr;
 
-      if (_LHS->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(_LHS.get())->op() == "*"sv) {
-         llvm::Value* derefAddr = loadDereferenceAddressIfUnaryStar(_LHS.get(), LHS, "lval.deref.addr");
-         if (!derefAddr)
-            return LogErrorV("invalid dereference operand");
-         loadedL = Builder->CreateLoad(lhsValueType, derefAddr, derefAddr->getName() + ".deref");
-      }
+      loadedL = Builder->CreateLoad(lhsValueType, LHS, LHS->getName() + ".load");
 
+      loadedR = loadIfPointer(RHS, rhsValueType);
       if (_RHS->astType() == ASTType::IndexAccessExpression &&
           _RHS->type()->kind() == TypeKind::Pointer)
          loadedR = RHS;
 
-      if (_LHS->astType() == ASTType::NullPtr)
-         loadedL = LHS;
       if (_RHS->astType() == ASTType::NullPtr)
          loadedR = RHS;
 
@@ -2593,11 +2559,11 @@ export namespace tungsten {
          indexVal = Builder->CreateLoad(_index->type()->llvmType(), indexVal, indexVal->getName() + ".idx.load");
 
       if (indexVal->getType()->isFloatingPointTy())
-         indexVal = Builder->CreateFPToUI(indexVal, Builder->getInt64Ty(), "idx.fptoui");
+         indexVal = Builder->CreateFPToUI(indexVal, Builder->getInt64Ty(), indexVal->getName() + ".fptoui");
       else if (!indexVal->getType()->isIntegerTy())
          return LogErrorV("array index must be an integer value");
       else if (!indexVal->getType()->isIntegerTy(64))
-         indexVal = Builder->CreateIntCast(indexVal, Builder->getInt64Ty(), false, "idx.cast");
+         indexVal = Builder->CreateIntCast(indexVal, Builder->getInt64Ty(), false, indexVal->getName() + ".cast");
 
       llvm::Type* baseTy = _array->type()->llvmType();
       if (!baseTy)
@@ -2740,19 +2706,6 @@ export namespace tungsten {
                      llvm::AllocaInst* tmp = Builder->CreateAlloca(arg->type()->llvmType());
                      Builder->CreateStore(argVal, tmp);
                      argVal = tmp;
-                  }
-
-                  if (!expectedParamType || !expectedParamType->isPointerTy()) {
-                     std::string className = arg->type()->string();
-                     std::string copyCtorName = className + "-constructor$" + className + "*$" + className + "&";
-
-                     llvm::Function* copyCtor = TheModule->getFunction(copyCtorName);
-                     if (!copyCtor)
-                        return LogErrorV("copy constructor not found for class '" + className + "'");
-
-                     llvm::AllocaInst* copyInst = Builder->CreateAlloca(arg->type()->llvmType());
-                     Builder->CreateCall(copyCtor, {copyInst, argVal});
-                     argVal = Builder->CreateLoad(arg->type()->llvmType(), copyInst);
                   }
                } else if (expectedParamType) {
                   if (!expectedParamType->isPointerTy() && argVal->getType()->isPointerTy())
