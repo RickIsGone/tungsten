@@ -1921,7 +1921,31 @@ namespace tungsten {
       if (!type)
          return _logError("expected a type after 'new'");
 
-      return _setSource(std::make_unique<NewStatementAST>(type), token);
+      std::vector<std::unique_ptr<ExpressionAST>> args{};
+
+      if (_peek().type == TokenType::OpenBrace || _peek().type == TokenType::OpenParen) {
+         const TokenType openToken = _peek().type;
+         const TokenType closeToken = openToken == TokenType::OpenBrace ? TokenType::CloseBrace : TokenType::CloseParen;
+         _consume(); // consume '{' / '('
+
+         while (_peek().type != closeToken && _peek().type != TokenType::EndOFFile) {
+            args.push_back(_parseExpression());
+            if (!args.back())
+               return nullptr;
+
+            if (_peek().type == TokenType::Comma)
+               _consume(); // consume ','
+            else
+               break;
+         }
+
+         if (_peek().type != closeToken)
+            return _logError(openToken == TokenType::OpenBrace ? "expected '}' after new initializer" : "expected ')' after new initializer");
+
+         _consume(); // consume '}' / ')'
+      }
+
+      return _setSource(std::make_unique<NewStatementAST>(type, std::move(args)), token);
    }
    std::unique_ptr<ExpressionAST> Parser::_parseFree() {
       const Token token = _peek();

@@ -1301,6 +1301,16 @@ namespace tungsten {
       if (var.type()->kind() == TypeKind::Reference)
          return _logError(&var, "cannot use 'new' with reference type '{}'", fullTypeString(var.type()));
 
+      for (auto& arg : var.args()) {
+         if (!arg) {
+            _hasErrors = true;
+            continue;
+         }
+         arg->accept(*this);
+      }
+      if (var.args().size() > 1 && baseTypeKind(var.type()) != TypeKind::Class)
+         _logError(&var, "initializer lists are only allowed for classes");
+      
       // keep `new` on pointer types stable (avoid creating an extra pointer layer).
       if (var.type()->kind() == TypeKind::Pointer)
          return;
