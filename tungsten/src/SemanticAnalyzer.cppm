@@ -505,6 +505,7 @@ namespace tungsten {
             return _logError(&binop, "left side of assignment must be a variable");
          if (auto constName = _constWriteTargetName(binop.LHS().get()); constName.has_value())
             return _logError(&binop, "cannot modify const variable '{}'", *constName);
+         binop.LHS()->setNeedsLoad(false);
       }
 
       // addition, multiplication, division, ecc.
@@ -1310,7 +1311,7 @@ namespace tungsten {
       }
       if (var.args().size() > 1 && baseTypeKind(var.type()) != TypeKind::Class)
          _logError(&var, "initializer lists are only allowed for classes");
-      
+
       // keep `new` on pointer types stable (avoid creating an extra pointer layer).
       if (var.type()->kind() == TypeKind::Pointer)
          return;
