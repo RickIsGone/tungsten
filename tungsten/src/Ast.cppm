@@ -2281,7 +2281,10 @@ export namespace tungsten {
                loadedR = Builder->CreateLoad(rhsValueType, loadedR, loadedR->getName() + ".load");
             loadedR = castToCommonType(loadedR, lhsValueType);
          } else {
-            loadedL = Builder->CreateLoad(lhsValueType, targetAddr, targetAddr->getName() + ".load");
+            if (LHS->getType()->isPointerTy())
+               loadedL = Builder->CreateLoad(lhsValueType, LHS);
+            else
+               loadedL = LHS;
 
             loadedR = loadIfPointer(RHS, rhsValueType);
             if (_RHS->astType() == ASTType::IndexAccessExpression &&
@@ -2660,7 +2663,7 @@ export namespace tungsten {
             if (memberIndex == -1)
                return LogErrorV("member '" + memberName + "' not found in class '" + structName + "'");
 
-            if (!base->getType()->isPointerTy()) {
+            if (_base->type()->kind() != TypeKind::Pointer && _base->type()->kind() != TypeKind::Reference && !base->getType()->isPointerTy()) {
                llvm::AllocaInst* tmp = Builder->CreateAlloca(type->llvmType(), nullptr, base->getName() + ".ptr");
                Builder->CreateStore(base, tmp);
                base = tmp;
@@ -2696,7 +2699,7 @@ export namespace tungsten {
             std::vector<llvm::Value*> args;
 
             if (function->getName() != staticFunName) {
-               if (!base->getType()->isPointerTy()) {
+               if (_base->type()->kind() != TypeKind::Pointer && _base->type()->kind() != TypeKind::Reference && !base->getType()->isPointerTy()) {
                   llvm::AllocaInst* tmp = Builder->CreateAlloca(_base->type()->llvmType(), nullptr, base->getName() + ".ptr");
                   Builder->CreateStore(base, tmp);
                   base = tmp;
@@ -2778,7 +2781,7 @@ export namespace tungsten {
          if (arg->astType() == ASTType::UnaryExpression && static_cast<UnaryExpressionAST*>(arg.get())->op() == "*"sv) {
             auto& derefOperand = static_cast<UnaryExpressionAST*>(arg.get())->operand();
             llvm::Type* pointerValueType = derefOperand->type()->llvmType();
-            if (argVal->getType()->isPointerTy())
+            if (argVal->getType()->isPointerTy() && static_cast<PointerTy*>(arg->type().get())->pointee()->kind() == TypeKind::Pointer)
                argVal = Builder->CreateLoad(pointerValueType, argVal);
          }
 
@@ -2787,20 +2790,29 @@ export namespace tungsten {
             expectedParamType = callee->getFunctionType()->getParamType(static_cast<unsigned>(i));
 
          if (arg->type()->kind() == TypeKind::Class) {
-            std::string className = arg->type()->string();
-            llvm::AllocaInst* tmp = Builder->CreateAlloca(arg->type()->llvmType(), nullptr, argVal->getName() + ".byval");
-            llvm::Value* refArg = argVal;
-            if (!argVal->getType()->isPointerTy()) {
-               llvm::AllocaInst* refTmp = Builder->CreateAlloca(arg->type()->llvmType());
-               Builder->CreateStore(argVal, refTmp);
-               refArg = refTmp;
+            if (expectedParamType && expectedParamType->isPointerTy()) {
+               if (!argVal->getType()->isPointerTy()) {
+                  auto tmp = Builder->CreateAlloca(arg->type()->llvmType(), nullptr, argVal->getName() + ".tmp");
+                  Builder->CreateStore(argVal, tmp);
+                  argVal = tmp;
+               }
+            } else {
+               std::string className = arg->type()->string();
+               llvm::AllocaInst* tmp = Builder->CreateAlloca(arg->type()->llvmType(), nullptr, argVal->getName() + ".byval");
+
+               llvm::Value* refArg = argVal;
+               if (!argVal->getType()->isPointerTy()) {
+                  auto refTmp = Builder->CreateAlloca(arg->type()->llvmType());
+                  Builder->CreateStore(argVal, refTmp);
+                  refArg = refTmp;
+               }
+               std::string copyCtorName = className + "-constructor$" + className + "*$" + className + "&";
+               llvm::Function* copyCtor = TheModule->getFunction(copyCtorName);
+               if (!copyCtor)
+                  return LogErrorV("copy constructor not found for class '" + className + "'");
+               Builder->CreateCall(copyCtor, {tmp, refArg});
+               argVal = tmp;
             }
-            std::string copyCtorName = className + "-constructor$" + className + "*$" + className + "&";
-            llvm::Function* copyCtor = TheModule->getFunction(copyCtorName);
-            if (!copyCtor)
-               return LogErrorV("copy constructor not found for class '" + className + "'");
-            Builder->CreateCall(copyCtor, {tmp, refArg});
-            argVal = tmp;
          } else if (expectedParamType) {
             if (!expectedParamType->isPointerTy() && argVal->getType()->isPointerTy())
                argVal = Builder->CreateLoad(expectedParamType, argVal);
@@ -3461,103 +3473,127 @@ export namespace tungsten {
          mallocFun = llvm::Function::Create(mallocType, llvm::Function::ExternalLinkage, "malloc", TheModule.get());
       }
 
-      // determine if it's an array or a single class instance
       auto allocType = static_cast<PointerTy*>(_Type.get())->pointee();
       bool isArray = allocType->kind() == TypeKind::Array;
       llvm::Value* ptr = nullptr;
-      uint64_t count = 1;
+
+      auto emitCtorCall = [&](llvm::Value* objPtr, const std::string& className) -> llvm::Value* {
+         std::string ctorName = className + "-constructor$" + className + "*";
+         for (auto& arg : _args)
+            ctorName += "$" + fullTypeString(arg->type());
+
+         llvm::Function* ctor = TheModule->getFunction(ctorName);
+         if (!ctor)
+            return LogErrorV(ctorName + " not found");
+
+         if (objPtr->getType()->isPointerTy() &&
+             allocType->kind() == TypeKind::Pointer) {
+            objPtr = Builder->CreateLoad(Builder->getPtrTy(), objPtr, "obj.load");
+         }
+         std::vector<llvm::Value*> ctorArgs;
+         ctorArgs.push_back(objPtr);
+
+         for (auto& arg : _args) {
+            llvm::Value* v = arg->codegen();
+            if (!v) return nullptr;
+
+            // deref pointer temporaries if needed
+            if (v->getType()->isPointerTy() &&
+                arg->type()->kind() != TypeKind::Pointer &&
+                arg->type()->kind() != TypeKind::Reference) {
+               v = Builder->CreateLoad(
+                   valueTypeForCodegen(arg->type()),
+                   v,
+                   v->getName() + ".load");
+            }
+
+            ctorArgs.push_back(v);
+         }
+
+         Builder->CreateCall(ctor, ctorArgs);
+         return objPtr;
+      };
+
       if (isArray) {
          auto arrTy = static_cast<ArrayTy*>(allocType.get());
-         if (arrTy->sizeExpr() && arrTy->sizeExpr()->astType() == ASTType::NumberExpression) {
+         auto elemTy = arrTy->arrayType();
+
+         uint64_t count = 1;
+
+         if (arrTy->sizeExpr() &&
+             arrTy->sizeExpr()->astType() == ASTType::NumberExpression) {
             auto* num = static_cast<NumberExpressionAST*>(arrTy->sizeExpr().get());
-            const Number rawSize = num->value();
-            count = std::holds_alternative<double>(rawSize)
-                ? static_cast<uint64_t>(std::get<double>(rawSize))
-                : std::get<uint64_t>(rawSize);
+            const Number raw = num->value();
+
+            count = std::holds_alternative<double>(raw)
+                ? static_cast<uint64_t>(std::get<double>(raw))
+                : std::get<uint64_t>(raw);
          }
-         auto elemSize = arrTy->arrayType()->size();
-         auto size = Builder->getInt64(elemSize * count);
+
+         uint64_t elemSize = elemTy->size();
+         llvm::Value* totalSize =
+             Builder->getInt64(elemSize * count);
+
          setDebugLocationFor(this);
-         ptr = Builder->CreateCall(mallocFun, {size}, arrTy->arrayType()->string() + ".new.arr");
 
-         if (arrTy->arrayType()->kind() == TypeKind::Class) {
-            const std::string className = arrTy->arrayType()->string();
-            std::string ctorName = className + "-constructor$" + className + "*";
-            for (auto& arg : _args)
-               ctorName += "$" + fullTypeString(arg->type());
+         ptr = Builder->CreateCall(mallocFun, {totalSize}, elemTy->string() + ".new.arr");
+         // element type must be pointer element type for GEP
+         llvm::Type* llvmElemTy = elemTy->llvmType();
 
-            llvm::Function* ctor = TheModule->getFunction(ctorName);
-            if (!ctor)
-               return LogErrorV("constructor not found for class '" + className + "'");
+         if (elemTy->kind() == TypeKind::Class) {
+            auto className = elemTy->string();
 
             for (uint64_t i = 0; i < count; ++i) {
-               llvm::Value* elemPtr = Builder->CreateGEP(arrTy->arrayType()->llvmType(), ptr, Builder->getInt64(i), className + ".new.elem");
-               std::vector<llvm::Value*> ctorArgs{elemPtr};
+               llvm::Value* idx = Builder->getInt64(i);
 
-               for (auto& arg : _args) {
-                  llvm::Value* argVal = arg->codegen();
-                  if (!argVal)
-                     return nullptr;
+               llvm::Value* elemPtr = Builder->CreateGEP(llvmElemTy, ptr, idx, className + ".new.elem");
 
-                  if (argVal->getType()->isPointerTy() && arg->type()->kind() != TypeKind::Pointer && arg->type()->kind() != TypeKind::Reference)
-                     argVal = Builder->CreateLoad(valueTypeForCodegen(arg->type()), argVal, argVal->getName() + ".load");
-
-                  ctorArgs.push_back(argVal);
-               }
-
-               Builder->CreateCall(ctor, ctorArgs);
+               if (!emitCtorCall(elemPtr, className))
+                  return LogErrorV("constructor not found for class '" + className + "'");
             }
          }
+
+         return ptr;
+      }
+      setDebugLocationFor(this);
+
+      uint64_t size = allocType->size();
+
+      ptr = Builder->CreateCall(mallocFun, {Builder->getInt64(size)}, allocType->string() + ".new");
+
+      if (allocType->kind() == TypeKind::Class) {
+         auto className = allocType->string();
+
+         if (!emitCtorCall(ptr, className))
+            return LogErrorV("constructor not found for class '" + className + "'");
       } else {
-         auto size = Builder->getInt64(allocType->size());
-         setDebugLocationFor(this);
-         ptr = Builder->CreateCall(mallocFun, {size}, allocType->string() + ".new");
+         if (_args.size() > 1)
+            return LogErrorV("too many initializers for new expression");
 
-         if (allocType->kind() == TypeKind::Class) {
-            const std::string className = allocType->string();
-            std::string ctorName = className + "-constructor$" + className + "*";
-            for (auto& arg : _args)
-               ctorName += "$" + fullTypeString(arg->type());
+         if (!_args.empty()) {
+            llvm::Value* init = _args.front()->codegen();
+            if (!init) return nullptr;
 
-            llvm::Function* ctor = TheModule->getFunction(ctorName);
-            if (!ctor)
-               return LogErrorV("constructor not found for class '" + className + "'");
-
-            std::vector<llvm::Value*> ctorArgs{ptr};
-
-            for (auto& arg : _args) {
-               llvm::Value* argVal = arg->codegen();
-               if (!argVal)
-                  return nullptr;
-
-               if (argVal->getType()->isPointerTy() && arg->type()->kind() != TypeKind::Pointer && arg->type()->kind() != TypeKind::Reference)
-                  argVal = Builder->CreateLoad(valueTypeForCodegen(arg->type()), argVal, argVal->getName() + ".load");
-
-               ctorArgs.push_back(argVal);
+            if (init->getType()->isPointerTy() &&
+                _args.front()->type()->kind() != TypeKind::Pointer &&
+                _args.front()->type()->kind() != TypeKind::Reference) {
+               init = Builder->CreateLoad(
+                   valueTypeForCodegen(_args.front()->type()),
+                   init,
+                   init->getName() + ".load");
             }
 
-            Builder->CreateCall(ctor, ctorArgs);
-         } else {
-            if (_args.size() > 1)
-               return LogErrorV("too many initializers for new expression");
+            llvm::Type* llvmTy = allocType->llvmType();
 
-            if (!_args.empty()) {
-               llvm::Value* initVal = _args.front()->codegen();
-               if (!initVal)
-                  return nullptr;
+            init = castValueToType(init, llvmTy);
 
-               if (initVal->getType()->isPointerTy() && _args.front()->type()->kind() != TypeKind::Pointer && _args.front()->type()->kind() != TypeKind::Reference)
-                  initVal = Builder->CreateLoad(valueTypeForCodegen(_args.front()->type()), initVal, initVal->getName() + ".load");
+            if (init->getType() != llvmTy)
+               return LogErrorV("new initializer type mismatch");
 
-               llvm::Type* allocLlvmType = allocType->llvmType();
-               initVal = castValueToType(initVal, allocLlvmType);
-               if (initVal->getType() != allocLlvmType)
-                  return LogErrorV("new initializer type does not match allocated type");
-
-               Builder->CreateStore(initVal, ptr);
-            }
+            Builder->CreateStore(init, ptr);
          }
       }
+
       return ptr;
    }
    llvm::Value* FreeStatementAST::codegen() {
