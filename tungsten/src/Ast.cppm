@@ -543,9 +543,6 @@ export namespace tungsten {
          _sourceColumn = column;
          _hasSource = true;
       }
-      void setNeedsLoad(bool v) { _NeedsLoad = v; }
-
-      _NODISCARD bool needsLoad() const noexcept { return _NeedsLoad; }
       _NODISCARD bool hasSource() const noexcept { return _hasSource; }
       _NODISCARD size_t sourcePosition() const noexcept { return _sourcePosition; }
       _NODISCARD size_t sourceLength() const noexcept { return _sourceLength; }
@@ -559,7 +556,6 @@ export namespace tungsten {
       size_t _sourceLine{1};
       size_t _sourceColumn{1};
       bool _hasSource{false};
-      bool _NeedsLoad{true};
    };
 
    // types declaration
@@ -1918,10 +1914,7 @@ export namespace tungsten {
          return LogErrorV("unknown variable: '" + _name + "'");
       }
 
-      llvm::Value* addr = NamedValues[_name];
-      if (needsLoad() && addr->getType()->isPointerTy())
-         return Builder->CreateLoad(type()->llvmType(), addr, _name + ".load");
-      return addr;
+      return NamedValues[_name];
    }
 
    llvm::Value* StringExpression::codegen() {
@@ -2594,24 +2587,27 @@ export namespace tungsten {
          arrayVal = allocInstance;
       }
 
-      llvm::Value* gep = nullptr;
       if (baseTy->isArrayTy()) {
          llvm::Value* zero = Builder->getInt64(0);
-         gep = Builder->CreateGEP(baseTy, arrayVal, {zero, indexVal}, "elementptr");
-      } else if (_array->type()->kind() == TypeKind::Pointer) {
+         return Builder->CreateGEP(baseTy, arrayVal, {zero, indexVal}, "elementptr");
+      }
+
+      if (_array->type()->kind() == TypeKind::Pointer) {
          auto* ptrTy = static_cast<PointerTy*>(_array->type().get());
+
          if (_array->astType() == ASTType::VariableExpression && arrayVal->getType()->isPointerTy() && !llvm::isa<llvm::Argument>(arrayVal))
             arrayVal = Builder->CreateLoad(arrayVal->getType(), arrayVal, arrayVal->getName() + ".arrptr.load");
+
          llvm::Type* gepType = ptrTy->pointee()->llvmType();
-         gep = Builder->CreateGEP(gepType, arrayVal, indexVal, arrayVal->getName() + ".elementptr");
+         llvm::Value* elementPtr = Builder->CreateGEP(gepType, arrayVal, indexVal, arrayVal->getName() + ".elementptr");
+
          if (ptrTy->pointee()->kind() == TypeKind::Pointer)
-            gep = Builder->CreateLoad(gepType, gep, gep->getName() + ".element");
-      } else {
-         return LogErrorV("cannot index non-array, non-pointer value");
+            elementPtr = Builder->CreateLoad(gepType, elementPtr, elementPtr->getName() + ".element");
+
+         return elementPtr;
       }
-      if (needsLoad() && gep && gep->getType()->isPointerTy())
-         return Builder->CreateLoad(type()->llvmType(), gep, gep->getName() + ".load");
-      return gep;
+
+      return LogErrorV("cannot index non-array, non-pointer value");
    }
 
    llvm::Value* MemberAccessAST::codegen() {
@@ -2669,10 +2665,7 @@ export namespace tungsten {
                base = tmp;
             }
 
-            llvm::Value* gep = Builder->CreateStructGEP(structTy, base, memberIndex, base->getName() + "." + memberName);
-            if (needsLoad() && gep->getType()->isPointerTy())
-               return Builder->CreateLoad(type->llvmType(), gep, gep->getName() + ".load");
-            return gep;
+            return Builder->CreateStructGEP(structTy, base, memberIndex, base->getName() + "." + memberName);
          }
 
          case ASTType::CallExpression: {

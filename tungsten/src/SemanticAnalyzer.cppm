@@ -505,7 +505,6 @@ namespace tungsten {
             return _logError(&binop, "left side of assignment must be a variable");
          if (auto constName = _constWriteTargetName(binop.LHS().get()); constName.has_value())
             return _logError(&binop, "cannot modify const variable '{}'", *constName);
-         binop.LHS()->setNeedsLoad(false);
       }
 
       // addition, multiplication, division, ecc.
