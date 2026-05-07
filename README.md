@@ -82,8 +82,7 @@ Global
 
 Compiler
 
-- LLVM 18 or newer
-- ZLIB (windows only)
+- LLVM 18 or newer and its dependencies
 
 Package Manager
 
