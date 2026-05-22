@@ -3,6 +3,7 @@
 <p align="center">
   <img src="tungsten logo.png" alt="the tungsten logo" width="300" />
 </p>
+<img src="https://hackatime.hackclub.com/api/v1/badge/U091U38C2CA/RickIsGone/tungsten" />
 
 ## introduction
 
